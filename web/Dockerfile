@@ -1,0 +1,44 @@
+# syntax=docker/dockerfile:1.7
+
+# ---------- Builder ----------
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+# Install OS deps required by some npm packages.
+RUN apk add --no-cache libc6-compat
+
+# Install deps with deterministic lockfile.
+COPY package.json package-lock.json* ./
+RUN npm ci --no-audit --no-fund
+
+# Copy source.
+COPY . .
+
+# Build Next.js in standalone mode (next.config.mjs sets output: 'standalone').
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build
+
+# ---------- Runtime ----------
+# Distroless Node 20 — minimal attack surface, no shell.
+FROM gcr.io/distroless/nodejs20-debian12 AS runtime
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Copy the standalone server (Next.js trace-pruned node_modules) + static assets + public dir.
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+
+EXPOSE 3000
+
+# Container Apps probes /api/health (see app/api/health/route.ts).
+# Distroless has no shell or wget, so the platform probe (Kubernetes/Container Apps HTTP probe)
+# is the real liveness check. The HEALTHCHECK directive below is documentation for non-K8s runners.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD ["/nodejs/bin/node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
+CMD ["server.js"]

@@ -1,0 +1,19 @@
+# =============================================================================
+# CODEOWNERS — required reviewers for sensitive contract / infra paths.
+# Each line: <path-pattern>  <owner1> [<owner2> ...]
+# The last matching line wins, so order matters.
+# See CODEOWNERS.md for how to update once a real GitHub team exists.
+# =============================================================================
+
+# Default: no required owner. Most PRs go through normal review.
+*
+
+# Public contracts — schema changes here require an architect's sign-off.
+/src/VrBook.Contracts/    @architects
+/contracts/               @architects
+
+# Infrastructure-as-code — same gating.
+/infra/                   @architects
+
+# CI/CD pipelines themselves — guarded so a single PR cannot bypass other gates.
+/.github/                 @architects

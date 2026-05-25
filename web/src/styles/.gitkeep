@@ -1,0 +1,2 @@
+# Reserved for shared CSS modules / additional Tailwind layers.
+# Globals live in src/app/globals.css.

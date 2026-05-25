@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# build output
+.next/
+out/
+build/
+dist/
+
+# test artifacts
+coverage/
+playwright-report/
+test-results/
+
+# generated API client (regenerate via npm run gen:api)
+src/lib/api/generated/*
+!src/lib/api/generated/.gitkeep
+
+# env
+.env
+.env.local
+.env.*.local
+
+# misc
+.DS_Store
+*.log
+.vscode/
+.idea/

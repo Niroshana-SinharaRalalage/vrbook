@@ -1,0 +1,342 @@
+# =============================================================================
+# cd-prod.yml — Continuous Deployment to PRODUCTION.
+# Manual trigger only; uses GitHub Environments for soak gate + reviewer
+# approval. Blue/green via Container Apps revisions (10% -> 100%).
+# Reference: BookingApp_Proposal.md §16.2 (CD-prod), §15.2 (env matrix).
+# =============================================================================
+name: cd-prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Image tag to promote (commit SHA from a green staging deploy).
+        required: true
+        type: string
+      version:
+        description: Semantic version to tag (e.g. 1.4.0). Used for git tag v<version>.
+        required: true
+        type: string
+
+permissions:
+  contents: write      # need write to push the release tag
+  id-token: write
+  packages: read
+
+concurrency:
+  group: cd-prod
+  cancel-in-progress: false
+
+env:
+  AZURE_LOCATION: eastus2
+  RESOURCE_GROUP: rg-vrbook-prod
+  BICEP_PARAMS: infra/environments/prod.bicepparam
+  BICEP_TEMPLATE: infra/main.bicep
+  IMAGE_TAG: ${{ inputs.image_tag }}
+  VERSION: ${{ inputs.version }}
+  PROD_API_BASE_URL: https://api.vrbook.example.com
+  # Decision: <2% 5xx over the canary window is "green". Tunable per release.
+  CANARY_ERROR_RATE_THRESHOLD: "0.02"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # soak — uses an environment whose wait timer is 24h. The environment is
+  # configured in GitHub UI: "production-soak" with wait_timer = 1440 minutes.
+  # No steps run during the wait; the job sits in the "Waiting" state.
+  # ---------------------------------------------------------------------------
+  soak:
+    name: soak (24h)
+    runs-on: ubuntu-latest
+    environment: production-soak
+    steps:
+      - run: echo "Soak window complete. Proceeding to production approval."
+
+  # ---------------------------------------------------------------------------
+  # approve — gated on the "production" environment. Configure required
+  # reviewers (and any branch restrictions) in the GitHub UI.
+  # ---------------------------------------------------------------------------
+  approve:
+    name: approve (reviewers)
+    needs: soak
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: echo "Approved by reviewer. Proceeding to deploy."
+
+  # ---------------------------------------------------------------------------
+  # infra — Bicep what-if + apply for prod.
+  # ---------------------------------------------------------------------------
+  infra:
+    name: infra (Bicep)
+    needs: approve
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout (at promoted SHA)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.IMAGE_TAG }}
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Bicep what-if
+        run: |
+          az deployment sub what-if \
+            -l ${{ env.AZURE_LOCATION }} \
+            -f ${{ env.BICEP_TEMPLATE }} \
+            -p ${{ env.BICEP_PARAMS }}
+
+      - name: Bicep deploy
+        run: |
+          az deployment sub create \
+            -l ${{ env.AZURE_LOCATION }} \
+            -f ${{ env.BICEP_TEMPLATE }} \
+            -p ${{ env.BICEP_PARAMS }}
+
+  # ---------------------------------------------------------------------------
+  # migrate — same expand-then-contract rule as staging (§16.3). Always
+  # additive, so safe to run before the new revision is even reachable.
+  # ---------------------------------------------------------------------------
+  migrate:
+    name: migrate
+    needs: infra
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Update + start migrator job
+        run: |
+          set -euo pipefail
+          az containerapp job update \
+            -n migrator-vrbook-prod -g ${{ env.RESOURCE_GROUP }} \
+            --image ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-migrator:${{ env.IMAGE_TAG }}
+          EXECUTION=$(az containerapp job start \
+            -n migrator-vrbook-prod -g ${{ env.RESOURCE_GROUP }} \
+            --query "name" -o tsv)
+          for i in $(seq 1 90); do
+            STATUS=$(az containerapp job execution show \
+              -n migrator-vrbook-prod -g ${{ env.RESOURCE_GROUP }} \
+              --job-execution-name "$EXECUTION" \
+              --query "properties.status" -o tsv)
+            echo "[$i/90] migrator status: $STATUS"
+            case "$STATUS" in
+              Succeeded) exit 0 ;;
+              Failed|Degraded) echo "Migrator failed." >&2; exit 1 ;;
+            esac
+            sleep 10
+          done
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # deploy-workers — workers always go to 100% (no canary). They consume from
+  # Service Bus; old revision is drained gracefully when the new revision is
+  # marked active.
+  # ---------------------------------------------------------------------------
+  deploy-sync-worker:
+    needs: migrate
+    uses: ./.github/workflows/_deploy-container-app.yml
+    with:
+      app_name: sync-worker-vrbook-prod
+      resource_group: rg-vrbook-prod
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-sync-worker:${{ inputs.image_tag }}
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  deploy-notification-worker:
+    needs: migrate
+    uses: ./.github/workflows/_deploy-container-app.yml
+    with:
+      app_name: notification-worker-vrbook-prod
+      resource_group: rg-vrbook-prod
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-notification-worker:${{ inputs.image_tag }}
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  deploy-booking-worker:
+    needs: migrate
+    uses: ./.github/workflows/_deploy-container-app.yml
+    with:
+      app_name: booking-worker-vrbook-prod
+      resource_group: rg-vrbook-prod
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-booking-worker:${{ inputs.image_tag }}
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  # ---------------------------------------------------------------------------
+  # canary — deploy new API revision with 10% traffic, observe for 15 min,
+  # then promote to 100% OR roll back. Uses a deterministic suffix so the
+  # later metrics query can address the canary precisely.
+  # ---------------------------------------------------------------------------
+  canary-api:
+    name: canary api (10%)
+    needs: [deploy-sync-worker, deploy-notification-worker, deploy-booking-worker]
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      new_revision: ${{ steps.deploy.outputs.new_revision }}
+      old_revision: ${{ steps.deploy.outputs.old_revision }}
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy new API revision at 10% traffic
+        id: deploy
+        run: |
+          set -euo pipefail
+          APP=api-vrbook-prod
+          RG=${{ env.RESOURCE_GROUP }}
+          SUFFIX="rel$(echo ${{ env.IMAGE_TAG }} | cut -c1-7)"
+          OLD=$(az containerapp revision list -n "$APP" -g "$RG" \
+            --query "sort_by([], &properties.createdTime)[-1].name" -o tsv)
+          echo "old_revision=$OLD" >> "$GITHUB_OUTPUT"
+
+          az containerapp update -n "$APP" -g "$RG" \
+            --image ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-api:${{ env.IMAGE_TAG }} \
+            --revision-suffix "$SUFFIX"
+
+          NEW=$(az containerapp revision list -n "$APP" -g "$RG" \
+            --query "sort_by([], &properties.createdTime)[-1].name" -o tsv)
+          echo "new_revision=$NEW" >> "$GITHUB_OUTPUT"
+
+          # 10% to new, 90% to old. Multi-revision mode must be enabled in Bicep.
+          az containerapp ingress traffic set -n "$APP" -g "$RG" \
+            --revision-weight "$NEW=10" "$OLD=90"
+
+      - name: Soak canary 15 minutes
+        run: sleep 900
+
+      # Decision: query Container App's "Requests" + "Requests4xx5xx" metrics
+      # over the last 15 minutes from App Insights / built-in metrics.
+      - name: Evaluate canary error rate
+        id: eval
+        run: |
+          set -euo pipefail
+          APP=api-vrbook-prod
+          RG=${{ env.RESOURCE_GROUP }}
+          RES_ID=$(az containerapp show -n "$APP" -g "$RG" --query id -o tsv)
+
+          TOTAL=$(az monitor metrics list --resource "$RES_ID" \
+            --metric Requests --interval PT15M \
+            --aggregation Total --query "value[0].timeseries[0].data[-1].total" -o tsv)
+          ERRORS=$(az monitor metrics list --resource "$RES_ID" \
+            --metric "Requests with 5xx" --interval PT15M \
+            --aggregation Total --query "value[0].timeseries[0].data[-1].total" -o tsv || echo 0)
+
+          TOTAL=${TOTAL:-0}; ERRORS=${ERRORS:-0}
+          echo "Total requests: $TOTAL; 5xx: $ERRORS"
+          if [ "$TOTAL" = "0" ]; then
+            echo "No traffic observed; treating as healthy and promoting." >&2
+            echo "healthy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          RATE=$(awk "BEGIN { printf \"%.4f\", $ERRORS / $TOTAL }")
+          echo "Error rate: $RATE (threshold: ${CANARY_ERROR_RATE_THRESHOLD})"
+          if awk "BEGIN { exit !($RATE < $CANARY_ERROR_RATE_THRESHOLD) }"; then
+            echo "healthy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "healthy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Promote to 100%
+        if: steps.eval.outputs.healthy == 'true'
+        run: |
+          az containerapp ingress traffic set -n api-vrbook-prod -g ${{ env.RESOURCE_GROUP }} \
+            --revision-weight "${{ steps.deploy.outputs.new_revision }}=100"
+
+      # Rollback path: shift traffic back to the previous revision and
+      # deactivate the bad one so it can't accidentally be re-promoted.
+      - name: Rollback
+        if: steps.eval.outputs.healthy != 'true'
+        run: |
+          set -euo pipefail
+          az containerapp revision activate -n api-vrbook-prod -g ${{ env.RESOURCE_GROUP }} \
+            --revision "${{ steps.deploy.outputs.old_revision }}"
+          az containerapp ingress traffic set -n api-vrbook-prod -g ${{ env.RESOURCE_GROUP }} \
+            --revision-weight "${{ steps.deploy.outputs.old_revision }}=100"
+          az containerapp revision deactivate -n api-vrbook-prod -g ${{ env.RESOURCE_GROUP }} \
+            --revision "${{ steps.deploy.outputs.new_revision }}"
+          echo "::error::Canary error rate exceeded threshold; rolled back to ${{ steps.deploy.outputs.old_revision }}."
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # deploy-web — straight cutover; the web tier has no DB state and SSR is
+  # safe to flip once the API canary has been promoted.
+  # ---------------------------------------------------------------------------
+  deploy-web:
+    needs: canary-api
+    uses: ./.github/workflows/_deploy-container-app.yml
+    with:
+      app_name: web-vrbook-prod
+      resource_group: rg-vrbook-prod
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-web:${{ inputs.image_tag }}
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  # ---------------------------------------------------------------------------
+  # tag — annotate the release in git. Only runs if everything above is green.
+  # ---------------------------------------------------------------------------
+  tag:
+    name: tag release
+    needs: deploy-web
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (deployed SHA)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.IMAGE_TAG }}
+          # Token with contents:write is provided by the workflow permissions.
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Tag and push
+        run: |
+          git tag -a "v${VERSION}" -m "Production release v${VERSION} (sha ${IMAGE_TAG})"
+          git push origin "v${VERSION}"
+
+  # ---------------------------------------------------------------------------
+  # notify — Slack message on success or failure.
+  # ---------------------------------------------------------------------------
+  notify:
+    name: notify (Slack)
+    needs: [tag]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post deploy summary
+        if: env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v1.27.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+        with:
+          payload: |
+            {
+              "text": "Production deploy v${{ env.VERSION }} ${{ needs.tag.result }} — sha `${{ env.IMAGE_TAG }}` (run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            }

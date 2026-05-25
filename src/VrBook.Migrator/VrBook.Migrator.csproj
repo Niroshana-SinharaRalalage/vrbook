@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>VrBook.Migrator</RootNamespace>
+    <UserSecretsId>vrbook-migrator-local-secrets</UserSecretsId>
+    <Description>
+      Standalone console app that runs EF Core migrations against every per-context DbContext.
+      Deployed as a one-shot Container App Job invoked before the API revision update.
+      Holds the only credentials with DDL privileges on the Postgres role.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VrBook.Infrastructure\VrBook.Infrastructure.csproj" />
+    <ProjectReference Include="..\VrBook.Application\VrBook.Application.csproj" />
+
+    <!-- Each module owns its DbContext; the migrator references all of them so a single
+         invocation can apply every schema's pending migrations. -->
+    <ProjectReference Include="..\Modules\VrBook.Modules.Identity\VrBook.Modules.Identity.csproj" />
+    <ProjectReference Include="..\Modules\VrBook.Modules.Catalog\VrBook.Modules.Catalog.csproj" />
+    <ProjectReference Include="..\Modules\VrBook.Modules.Pricing\VrBook.Modules.Pricing.csproj" />
+    <ProjectReference Include="..\Modules\VrBook.Modules.Booking\VrBook.Modules.Booking.csproj" />
+    <ProjectReference Include="..\Modules\VrBook.Modules.Payment\VrBook.Modules.Payment.csproj" />
+    <ProjectReference Include="..\Modules\VrBook.Modules.Sync\VrBook.Modules.Sync.csproj" />
+    <ProjectReference Include="..\Modules\VrBook.Modules.Messaging\VrBook.Modules.Messaging.csproj" />
+    <ProjectReference Include="..\Modules\VrBook.Modules.Reviews\VrBook.Modules.Reviews.csproj" />
+    <ProjectReference Include="..\Modules\VrBook.Modules.Loyalty\VrBook.Modules.Loyalty.csproj" />
+    <ProjectReference Include="..\Modules\VrBook.Modules.Notifications\VrBook.Modules.Notifications.csproj" />
+    <ProjectReference Include="..\Modules\VrBook.Modules.Admin\VrBook.Modules.Admin.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="Serilog.Settings.Configuration" />
+  </ItemGroup>
+
+</Project>

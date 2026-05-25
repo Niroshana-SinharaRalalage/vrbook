@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>VrBook.Contracts</RootNamespace>
+    <Description>
+      Shared cross-context contracts: DTOs, domain event records, enums, and abstractions
+      consumed by modules and external clients (Frontend via generated API client).
+      MUST NOT depend on any other VrBook.* project. Changes are governed by /contracts/CHANGELOG.md.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Contracts is leaf-level: NO project references allowed. -->
+    <PackageReference Include="MediatR" />
+  </ItemGroup>
+
+</Project>

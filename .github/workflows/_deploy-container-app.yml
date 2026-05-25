@@ -1,0 +1,87 @@
+# =============================================================================
+# _deploy-container-app.yml — reusable workflow that updates a single
+# Container App revision and (optionally) waits for it to become healthy.
+# Called once per workload (API + each worker + web) from cd-staging / cd-prod.
+# =============================================================================
+name: deploy-container-app
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        description: Container App resource name (e.g. api-vrbook-staging).
+        required: true
+        type: string
+      resource_group:
+        description: Azure resource group containing the Container App.
+        required: true
+        type: string
+      image:
+        description: Fully qualified container image reference (ACR/repo:tag).
+        required: true
+        type: string
+      revision_suffix:
+        description: Optional revision suffix (used for blue/green in prod).
+        required: false
+        type: string
+        default: ""
+      traffic_weight:
+        description: Initial traffic weight for the new revision (0-100).
+        required: false
+        type: number
+        default: 100
+    secrets:
+      AZURE_CLIENT_ID:
+        required: true
+      AZURE_TENANT_ID:
+        required: true
+      AZURE_SUBSCRIPTION_ID:
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: deploy ${{ inputs.app_name }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # az containerapp update creates a new revision when the image changes.
+      # The revision suffix lets prod pin a recognisable name for traffic split.
+      - name: Update Container App revision
+        run: |
+          set -euo pipefail
+          ARGS=(
+            --name "${{ inputs.app_name }}"
+            --resource-group "${{ inputs.resource_group }}"
+            --image "${{ inputs.image }}"
+          )
+          if [ -n "${{ inputs.revision_suffix }}" ]; then
+            ARGS+=( --revision-suffix "${{ inputs.revision_suffix }}" )
+          fi
+          az containerapp update "${ARGS[@]}"
+
+      - name: Wait for revision to be healthy
+        run: |
+          set -euo pipefail
+          NAME="${{ inputs.app_name }}"
+          RG="${{ inputs.resource_group }}"
+          for i in $(seq 1 30); do
+            STATE=$(az containerapp revision list -n "$NAME" -g "$RG" \
+              --query "[?properties.active].properties.healthState" -o tsv | head -n1)
+            echo "[$i/30] revision health: ${STATE:-unknown}"
+            if [ "$STATE" = "Healthy" ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Revision did not reach Healthy state in 5 minutes." >&2
+          exit 1

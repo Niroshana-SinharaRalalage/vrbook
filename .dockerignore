@@ -1,0 +1,35 @@
+# Source control + IDE
+.git/
+.github/
+.vs/
+.vscode/
+.idea/
+
+# Build output
+**/bin/
+**/obj/
+**/out/
+**/TestResults/
+
+# Node modules (frontend builds use its own Dockerfile)
+**/node_modules/
+**/.next/
+
+# Local infra data
+docker-volumes/
+postgres-data/
+redis-data/
+azurite-data/
+
+# Env files
+.env
+.env.local
+*.env.local
+
+# Docs / proposal (not needed in image)
+*.md
+docs/
+
+# OS junk
+**/.DS_Store
+**/Thumbs.db

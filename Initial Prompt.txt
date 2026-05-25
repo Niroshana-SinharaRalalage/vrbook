@@ -1,0 +1,303 @@
+## ROLE
+
+You are a **Senior Solutions Architect** with deep, hands-on expertise in:
+
+- .NET 8 / ASP.NET Core, EF Core, MediatR
+- Clean Architecture, Domain-Driven Design, CQRS, event-driven patterns
+- Azure platform services (Container Apps, Service Bus, Storage, Key Vault, AD B2C, App Insights)
+- PostgreSQL (Azure Database for PostgreSQL — Flexible Server)
+- Stripe Connect / Payments integration
+- iCalendar (RFC 5545) interop and channel-manager patterns used by AirBnB / VRBO / Booking.com
+- Multi-tenant SaaS marketplace platforms
+- Parallelized agentic development workflows (multiple Claude Code agents working concurrently against a shared design)
+
+Your job is to produce a **comprehensive, implementation-ready project proposal** for a USA-based short-term vacation rental booking platform. The output must be detailed enough that multiple Claude Code agents can be launched in parallel, each with a self-contained brief, and converge on a working system within 8 weeks.
+
+---
+
+## PROJECT BACKGROUND
+
+The client owns and operates several short-term rental properties in the **United States**, currently listed exclusively on AirBnB. AirBnB's host commission (typically ~3% host fee plus the guest service fee that suppresses headline price competitiveness) is eroding margin. The client will **continue listing on AirBnB** but wants a **direct-booking website** so repeat guests and word-of-mouth referrals can book without paying AirBnB's markup.
+
+Critical constraint: **the direct site must never double-book a property that is already booked on AirBnB** (or vice versa).
+
+---
+
+## BUSINESS GOALS (in priority order)
+
+1. **Eliminate commission leakage** on direct/repeat bookings.
+2. **Zero double-bookings** between AirBnB and the direct site.
+3. **Launch Phase 1 (web) within 8 weeks.**
+4. Build a foundation that supports **future channels** (native mobile apps, additional OTA channels like VRBO/Booking.com) without re-architecting.
+5. Provide the owner with a **single operational dashboard** to manage properties, bookings, pricing, reviews, and messaging.
+
+---
+
+## PHASE 1 SCOPE — FUNCTIONAL REQUIREMENTS
+
+All of the following must be in Phase 1, live within 8 weeks.
+
+### 1. Property Catalog
+- Property listings with: title, description, address (geocoded), property type, capacity (guests/bedrooms/bathrooms/beds), amenities (checklist), house rules, check-in/check-out times, photo gallery (multiple images, primary image, reordering), location map.
+- Owner-side CRUD with image upload to Azure Blob Storage; image processing (resize, WebP conversion, thumbnails).
+
+### 2. Search & Discovery
+- Public search by destination, check-in/check-out dates, guest count.
+- Filters: price range, amenities, property type, minimum rating.
+- Map view with pins.
+- Sort: relevance, price asc/desc, rating, newest.
+- Availability-aware search (only show properties available for the selected dates).
+
+### 3. Booking Flow (the heart of the system)
+- **Hybrid availability strategy**:
+  - **Primary**: Two-way iCal sync with AirBnB (poll AirBnB's exported `.ics` feed for each property on a configurable schedule; expose this platform's own `.ics` feed back to AirBnB for import). Default poll interval: 30 minutes; configurable per property.
+  - **Safety belt**: Every direct booking is created in a `Tentative` state, NOT `Confirmed`. A reconciliation worker re-checks the AirBnB iCal feed before transitioning `Tentative → Confirmed`. The owner also receives a notification and can manually confirm/reject within a configurable SLA window (default 24h). If the SLA expires without manual action AND iCal reconciliation shows no conflict, auto-confirm.
+- **Booking state machine** (must be explicitly designed): `Draft → Tentative → Confirmed → CheckedIn → CheckedOut → Completed`, with side-branches `Rejected`, `Cancelled`, `Refunded`, `Disputed`.
+- Hold/lock dates during checkout (e.g., 15-minute reservation lock) to prevent race conditions on simultaneous bookings.
+- Booking detail page with cancellation policy display.
+- Cancellation flow with policy-driven refund calculation.
+
+### 4. Payments (Stripe end-to-end)
+- Stripe Payment Intents for full payment at booking, OR deposit + balance (configurable per property by admin).
+- Stripe Customer object per registered guest; saved payment methods (PCI handled by Stripe).
+- Refund handling (full, partial, policy-driven).
+- Webhook handler for `payment_intent.succeeded`, `charge.refunded`, `charge.dispute.created`, etc.
+- Idempotency keys on all Stripe calls.
+- Owner payout configuration (Stripe Connect Standard or Express — propose with trade-offs).
+- Tax handling: research and propose approach for US state/local lodging taxes (Stripe Tax vs. manual configuration per property/jurisdiction).
+
+### 5. Guest Accounts
+- Open registration: email/password + social (Google at minimum).
+- Use **Azure AD B2C** for identity. Email verification required.
+- Profile: contact info, saved payment methods (via Stripe), booking history, messages.
+- Password reset, account deletion (GDPR/CCPA-friendly even though out of strict scope).
+
+### 6. Owner Admin Dashboard
+- Property management (CRUD + photo management).
+- Calendar view per property showing AirBnB + direct bookings color-coded.
+- Booking queue: pending tentative bookings requiring manual confirmation.
+- Manual booking creation (for walk-ins / phone bookings).
+- Pricing management:
+  - Base nightly rate, weekend rate, cleaning fee, additional guest fee, security deposit, taxes.
+  - **Dynamic/seasonal pricing rules** (date-range overrides, day-of-week multipliers, length-of-stay discounts).
+- **Feature toggles per property and globally**: enable/disable reviews, enable/disable dynamic pricing, enable/disable in-app messaging.
+- Reports: occupancy, revenue, average daily rate (ADR), booking source (direct vs. AirBnB).
+- Review moderation queue.
+- Guest list with booking history and loyalty tier.
+- iCal feed URLs (in/out) per property with copy-to-clipboard.
+
+### 7. Reviews & Ratings
+- Post-stay review (1–5 stars + written) from guest, with owner response capability.
+- Aggregate rating per property.
+- Admin toggle to enable/disable reviews globally or per property.
+- Moderation flow (auto-publish vs. admin-approval, configurable).
+
+### 8. Dynamic / Seasonal Pricing
+- Rule engine: priority-ordered rules (date range overrides, day-of-week multipliers, last-minute discounts, length-of-stay tiers, minimum stay enforcement).
+- Preview tool: show calculated price for any sample date range.
+- Admin toggle (per property, global default).
+
+### 9. In-App Messaging
+- Thread per booking between guest and owner.
+- Real-time delivery via **Azure SignalR Service** (Serverless mode or default — propose).
+- Read receipts, typing indicators (nice-to-have).
+- Push (in-app + email fallback if recipient offline > N minutes).
+- Admin can view all threads (moderation/support).
+- Attachments (images) via Blob Storage.
+
+### 10. Loyalty / Repeat Customer Logic
+- Auto-tracked tier based on number of completed stays (e.g., Bronze 1–2, Silver 3–5, Gold 6+).
+- Tier benefit: configurable % discount applied at checkout (admin sets % per tier).
+- Loyalty enabled/disabled via admin toggle.
+- Display tier in guest profile + at checkout.
+
+### 11. Transactional Emails
+Comprehensive catalog (all via SendGrid or Azure Communication Services — propose):
+- Email verification
+- Password reset
+- Booking received (tentative)
+- Booking confirmed
+- Booking rejected
+- Cancellation confirmation + refund notice
+- Pre-arrival reminder (T-3 days, T-1 day)
+- Check-in instructions (T-0)
+- Post-stay review request (T+1 day after checkout)
+- Owner: new tentative booking alert
+- Owner: booking auto-confirmed (SLA elapsed, no conflict)
+- Owner: cancellation alert
+- Owner: dispute/refund alert
+- Admin: iCal sync failure alert
+
+Use a templating system (Mustache or Razor) with a shared layout, consistent brand styling, Outlook-safe MSO conditional comments.
+
+### 12. iCal Sync Engine
+- **Inbound**: Background worker (Azure Container App Job or hosted service) polls each property's AirBnB `.ics` URL on a schedule, parses with `Ical.Net`, reconciles into an `ExternalReservation` table, and flags conflicts.
+- **Outbound**: HTTP endpoint that emits a valid `.ics` feed per property containing all `Confirmed` (and optionally `Tentative`) direct bookings, for AirBnB to import.
+- Conflict detection: any overlap between an external reservation and a tentative/confirmed direct booking → flag for owner review.
+- Health monitoring: track last-success time per property; alert if stale beyond threshold.
+
+---
+
+## NON-FUNCTIONAL REQUIREMENTS
+
+- **API-first / headless-friendly**: every feature exposed via versioned REST API (`/api/v1/...`), with OpenAPI/Swagger. The web frontend is just one consumer. Mobile apps in Phase 2 must consume the same API without changes.
+- **Frontend-agnostic backend**: no server-rendered HTML coupling; SPA + API split.
+- **Performance**: search response P95 < 500ms; booking creation P95 < 1s; iCal poll worker concurrent across properties.
+- **Availability target**: 99.5% for Phase 1.
+- **Security**: OWASP Top 10 compliance, HTTPS everywhere, secrets in Key Vault, no PII in logs, Stripe handles PCI scope.
+- **Observability**: structured logging (Serilog → App Insights), distributed tracing, metrics on booking funnel, alerts on critical failures (payment, sync, auth).
+- **Scalability**: stateless app tier, horizontal scale via Container Apps; background workers as separate Container App Jobs.
+- **Testability**: unit test coverage ≥ 70% on Application + Domain layers; integration tests for critical flows (booking, payment, sync).
+
+---
+
+## TECHNICAL STACK (PRE-DECIDED — DO NOT REVISIT)
+
+- **Backend**: .NET 8, ASP.NET Core Web API, Clean Architecture (Domain / Application / Infrastructure / Web), CQRS via MediatR, FluentValidation, EF Core 8.
+- **Database**: PostgreSQL 16 (Azure Database for PostgreSQL Flexible Server).
+- **Cache**: Azure Cache for Redis (session, distributed lock for booking holds, hot search results).
+- **Messaging/queue**: Azure Service Bus (booking events, email dispatch, sync jobs).
+- **Real-time**: Azure SignalR Service for in-app messaging.
+- **Storage**: Azure Blob Storage (property images, message attachments).
+- **Identity**: Azure AD B2C (custom policies; social sign-in).
+- **Payments**: Stripe (propose Connect Standard vs. Express).
+- **Email**: SendGrid OR Azure Communication Services — recommend one with rationale.
+- **Hosting**: Azure Container Apps (API + background workers as separate apps/jobs).
+- **CI/CD**: GitHub Actions → Azure Container Registry → Container Apps revisions; main branch → prod, develop → staging.
+- **IaC**: Bicep modules.
+- **Frontend (Phase 1 web)**: React 18 + TypeScript + Vite + TanStack Query + Tailwind CSS + shadcn/ui. Consider Next.js only if SEO on public listing pages is judged critical — propose with rationale.
+- **Monorepo or polyrepo**: recommend with rationale (consider that multiple Claude Code agents will work in parallel).
+
+---
+
+## KEY ARCHITECTURAL DECISIONS (PRE-DECIDED)
+
+- **Modular monolith** with DDD bounded contexts (not microservices). Phase 1 ships one deployable API + background-worker apps; internal modular boundaries set up for future extraction.
+- **Bounded contexts to design** (at minimum): Identity, Catalog (properties), Pricing, Booking, Payment, Sync (iCal/channel), Messaging, Reviews, Loyalty, Notifications, Admin/Reporting.
+- **Event-driven internal communication** between modules via in-process MediatR notifications + Service Bus for cross-process (workers).
+- **Booking holds via Redis** with TTL to handle concurrent checkout attempts.
+
+---
+
+## AIRBNB SYNC STRATEGY (FINALIZED)
+
+**Option B: iCal two-way sync PLUS tentative-booking safety belt.**
+
+Design must explicitly cover:
+1. Inbound iCal poll frequency, parsing, idempotency, dedup of events across polls.
+2. Outbound iCal feed format, caching, ETag/Last-Modified support.
+3. Lag-window handling: time between a booking being made on AirBnB and appearing in the exported feed (assume 1–2 hours worst case). The tentative-state grace period must cover this.
+4. Conflict detection algorithm and owner notification pathway.
+5. Failure modes: AirBnB feed unreachable, malformed, or stale — degraded behaviour and alerting.
+6. Extensibility hooks so VRBO/Booking.com channels can be added later via the same `IExternalChannel` abstraction.
+
+---
+
+## OUT OF SCOPE (DEFER TO PHASE 2+)
+
+- Native mobile apps (architecture must support them; do not build them now).
+- Multi-language (English only).
+- Additional OTA channels beyond AirBnB.
+- Smart-lock / IoT integrations.
+- AI-driven dynamic pricing (rule-based only in Phase 1).
+- Property owner self-onboarding for multi-tenant SaaS (Phase 1 is single-owner; multi-tenant abstraction allowed but not exposed).
+
+---
+
+## EXECUTION CONSTRAINTS
+
+- **8-week timeline**, single technical lead (the user), executing with **multiple Claude Code agents in parallel using git worktrees**.
+- Plan must explicitly enable parallel work — bounded contexts must be vertically sliceable so different agents can own Catalog, Booking, Payment, Sync, Messaging, Frontend, Infra, etc. concurrently with minimal merge conflict surface.
+- Each agent must be launchable with a self-contained brief that references shared contracts (API DTOs, domain events) without needing to read every other context's internals.
+
+---
+
+## REQUIRED DELIVERABLES
+
+The proposal you produce must contain **all** of the following sections, in order. Be thorough — this document is the single source of truth for an 8-week multi-agent build.
+
+1. **Executive Summary** (1 page, business + technical highlights).
+2. **Business Case & Success Metrics** (KPIs: direct-booking %, double-booking incidents = 0, ADR, occupancy, CAC).
+3. **Solution Architecture Overview**
+   - C4 Level 1 (context) and Level 2 (container) descriptions (text + Mermaid).
+   - Azure resource topology diagram (Mermaid).
+4. **Bounded Contexts & Domain Model**
+   - List of contexts, ubiquitous language glossary, aggregate roots, key entities, value objects, domain events per context.
+5. **Database Schema**
+   - Per-context schemas (separate Postgres schemas), tables with columns, types, constraints, indexes, FK relationships, soft-delete strategy, audit fields.
+   - ER diagram per context (Mermaid `erDiagram`).
+6. **API Design**
+   - REST endpoints grouped by context: method, path, request/response DTOs, auth requirement, error codes.
+   - Versioning strategy. Pagination, filtering, sorting conventions.
+7. **Booking State Machine**
+   - Full state diagram (Mermaid `stateDiagram-v2`) with triggers, guards, side effects.
+   - Concurrency / lock strategy detail.
+8. **AirBnB iCal Sync Design**
+   - Inbound poll sequence diagram, outbound feed serving, conflict resolution algorithm, scheduling, error handling, observability.
+   - `IExternalChannel` abstraction for future channels.
+9. **Stripe Payment Flow**
+   - Sequence diagram for booking → payment intent → webhook → confirmation.
+   - Stripe Connect model recommendation (Standard vs Express) with trade-offs.
+   - Refund, dispute, and partial-capture flows.
+   - Tax strategy recommendation for US lodging taxes.
+10. **Messaging System Design**
+    - SignalR hub topology, persistence, offline-message handling, push fallback.
+11. **Reviews, Pricing, and Loyalty Modules**
+    - Rule engine design for dynamic pricing (priority resolution, examples).
+    - Loyalty tier evaluation, discount application order with other discounts/coupons.
+    - Feature-toggle implementation (per-property + global).
+12. **Admin Dashboard Specification**
+    - Screen-by-screen feature list, wireframe descriptions for top 6 screens.
+13. **Email Notification Catalog**
+    - Trigger event → template → variables → recipient → channel.
+14. **Identity & Security Architecture**
+    - AD B2C policy design, JWT validation, role/claim model, OWASP mitigation checklist, secrets management, audit logging.
+15. **Azure Infrastructure Topology**
+    - Per-resource details, environment matrix (dev/staging/prod), Bicep module structure.
+16. **CI/CD Pipeline**
+    - GitHub Actions workflows (build, test, container build, deploy), branch strategy, environment promotion, database migration approach.
+17. **Observability Plan**
+    - Logging schema, metrics list, dashboards, alert rules, on-call playbook stub.
+18. **Testing Strategy**
+    - Unit / integration / contract / E2E test approach, tools, target coverage, test data strategy.
+19. **8-Week Sprint Plan**
+    - Week-by-week deliverables, milestones, demo points, risk burn-down.
+20. **Parallel Agent Work Breakdown** ⭐ (critical for execution)
+    - Define **N independent agent missions** (where N is what the architecture realistically supports). For each agent:
+      - Agent name and bounded scope.
+      - Inputs (shared contracts, design docs it needs).
+      - Outputs (code modules, tests, docs it produces).
+      - Dependencies on other agents (what must exist before it can start).
+      - Suggested git worktree branch naming.
+      - A **self-contained prompt block** the user can paste into a fresh Claude Code session to start that agent.
+    - Include a **dependency graph** (Mermaid `graph TD`) showing which agents can run in parallel vs. which must serialize.
+21. **Risk Register**
+    - Top 10 risks (technical, scope, third-party, timeline) with likelihood, impact, mitigation, owner.
+22. **Phase 2 Roadmap**
+    - Mobile (recommend MAUI vs React Native vs PWA with reasoning), additional channels, AI pricing, multi-tenant SaaS-ification.
+23. **Appendices**
+    - Glossary, references, library versions table, environment variable inventory.
+
+---
+
+## OUTPUT FORMAT REQUIREMENTS
+
+- Single comprehensive markdown document.
+- Use Mermaid for all diagrams (do not produce image files).
+- Use tables where structured data helps (state transitions, env matrix, agent missions, risk register).
+- Use code fences for example code (DTO shapes, key configuration snippets, Bicep stubs, sample MediatR handler).
+- No placeholder text — every section must contain real, specific content. If a decision requires a recommendation between two options, make the recommendation and justify it; do not punt back to the reader.
+- Where you state an opinion or trade-off, label it clearly: `**Recommendation:** ...` / `**Trade-off:** ...`.
+- Aim for completeness over brevity, but no padding.
+
+---
+
+## TONE & STYLE
+
+- Authoritative, specific, decisive. You are the architect; act like it.
+- Assume the reader is a 17-year veteran .NET / Azure engineer (they are). Skip introductory framing of well-known concepts. Spend the words on the project-specific decisions.
+- Where a choice could go multiple ways, explain the trade-off in 2–3 lines and commit to one.
+
+---
+
+Begin the proposal now. Do not ask further clarifying questions — every decision needed has been provided above. Make any remaining minor calls yourself and justify them inline.

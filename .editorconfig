@@ -1,0 +1,50 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+
+[*.{md,markdown}]
+trim_trailing_whitespace = false
+
+[*.{cs,csx,vb,vbx}]
+indent_size = 4
+
+# C# code style
+[*.cs]
+dotnet_sort_system_directives_first = true
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+csharp_prefer_braces = true:warning
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_expression_bodied_constructors = when_on_single_line:suggestion
+csharp_style_expression_bodied_properties = when_on_single_line:suggestion
+dotnet_style_namespace_match_folder = true:warning
+dotnet_diagnostic.CA1822.severity = suggestion
+dotnet_diagnostic.IDE0058.severity = none
+
+[*.{json,jsonc,yml,yaml,xml,csproj,props,targets,bicep,bicepparam}]
+indent_size = 2
+
+[*.{ts,tsx,js,jsx,mjs,cjs,vue,svelte}]
+indent_size = 2
+
+[*.{sh,bash}]
+end_of_line = lf
+
+[*.{ps1,psm1,psd1}]
+end_of_line = crlf
+
+[Makefile]
+indent_style = tab

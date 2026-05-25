@@ -1,0 +1,6 @@
+<Project>
+
+  <!-- Inherit central package versions from /src -->
+  <Import Project="..\src\Directory.Packages.props" />
+
+</Project>

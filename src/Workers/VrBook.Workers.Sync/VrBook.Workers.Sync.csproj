@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>VrBook.Workers.Sync</RootNamespace>
+    <UserSecretsId>vrbook-workers-sync-local-secrets</UserSecretsId>
+    <Description>
+      Sync Worker — Container App Job (cron every 5 minutes). Polls due AirBnB iCal feeds,
+      upserts external reservations, detects conflicts, publishes events to Service Bus.
+      Real implementation lands in A6 (proposal §8); this A0 skeleton emits a log line and exits.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\VrBook.Application\VrBook.Application.csproj" />
+    <ProjectReference Include="..\..\VrBook.Infrastructure\VrBook.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\VrBook.Contracts\VrBook.Contracts.csproj" />
+    <ProjectReference Include="..\..\Modules\VrBook.Modules.Sync\VrBook.Modules.Sync.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="Serilog.Settings.Configuration" />
+    <PackageReference Include="Azure.Messaging.ServiceBus" />
+  </ItemGroup>
+
+</Project>

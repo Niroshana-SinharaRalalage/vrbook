@@ -1,0 +1,10 @@
+.next/
+node_modules/
+out/
+build/
+dist/
+coverage/
+playwright-report/
+test-results/
+src/lib/api/generated/
+package-lock.json

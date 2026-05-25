@@ -1,0 +1,23 @@
+<Project>
+
+  <!-- ===========================================================
+       Shared build targets — applied to every project under /src.
+       Convention: test projects MUST have an "IsTestProject" prop.
+       =========================================================== -->
+  <PropertyGroup Condition=" '$(IsTestProject)' == 'true' ">
+    <IsPackable>false</IsPackable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591;CS8618;CS8625;xUnit1031</NoWarn>
+  </PropertyGroup>
+
+  <!-- All test projects pull these in automatically. -->
+  <ItemGroup Condition=" '$(IsTestProject)' == 'true' ">
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+
+</Project>

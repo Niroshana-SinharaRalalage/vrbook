@@ -1,0 +1,400 @@
+// main.bicep — Orchestrator for the VRBook Azure deployment.
+// Wires every module together. Conditional sizing per env:
+//   prod    — HA Postgres, Front Door enabled, dedicated workload profile
+//   staging — no HA, Front Door enabled
+//   dev     — no HA, no Front Door, consumption-only
+//
+// Secrets convention:
+//   The KV is created here, but secret values are seeded out-of-band by the
+//   CI/CD pipeline (see §16). main.bicep accepts the Postgres admin password
+//   as a @secure() param so the pipeline can pass it via getSecret() from a
+//   bootstrap KV — it never appears in a parameter file.
+
+targetScope = 'resourceGroup'
+
+@description('Environment short name.')
+@allowed([
+  'dev'
+  'staging'
+  'prod'
+])
+param env string
+
+@description('Azure region.')
+param location string = 'eastus2'
+
+@description('Postgres administrator login.')
+param pgAdminLogin string = 'vrbook_admin'
+
+@description('Postgres administrator password (pipeline-supplied via getSecret() from a bootstrap KV).')
+@secure()
+param pgAdminPassword string
+
+@description('Container image for the API (pipeline supplies a tag; default placeholder for what-if).')
+param apiImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+
+@description('Container image for the iCal sync worker job.')
+param syncWorkerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+
+@description('Container image for the booking worker (SB-triggered).')
+param bookingWorkerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+
+@description('Container image for the notifications worker (SB-triggered).')
+param notificationWorkerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+
+@description('Container image for the DB migrator job (manual trigger).')
+param migratorImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+
+// ---------- Derived flags & sizing ----------
+var isProd = env == 'prod'
+var isStaging = env == 'staging'
+
+var pgSku = isProd ? 'GP_Standard_D4ds_v5' : (isStaging ? 'GP_Standard_D2ds_v5' : 'B_Standard_B2s')
+var pgTier = isProd || isStaging ? 'GeneralPurpose' : 'Burstable'
+var pgBackupRetention = isProd ? 35 : 14
+var pgStorageGB = isProd ? 256 : 128
+
+var apiMinReplicas = env == 'dev' ? 0 : 1
+var apiMaxReplicas = isProd ? 10 : 5
+
+var frontDoorEnabled = isProd || isStaging
+var dedicatedProfileEnabled = isProd
+
+var tags = {
+  env: env
+  app: 'vrbook'
+  costCenter: 'product'
+}
+
+// ---------- Foundation: network + KV + logs ----------
+module net 'modules/network.bicep' = {
+  name: 'net'
+  params: {
+    env: env
+    location: location
+    tags: tags
+  }
+}
+
+module kv 'modules/key-vault.bicep' = {
+  name: 'kv'
+  params: {
+    env: env
+    location: location
+    tags: tags
+  }
+}
+
+module law 'modules/log-analytics.bicep' = {
+  name: 'law'
+  params: {
+    env: env
+    location: location
+    tags: tags
+  }
+}
+
+module appi 'modules/app-insights.bicep' = {
+  name: 'appi'
+  params: {
+    env: env
+    location: location
+    tags: tags
+    workspaceId: law.outputs.id
+  }
+}
+
+// ---------- Container registry ----------
+module acr 'modules/acr.bicep' = {
+  name: 'acr'
+  params: {
+    env: env
+    location: location
+    tags: tags
+  }
+}
+
+// ---------- Data plane ----------
+module pg 'modules/postgres-flexible.bicep' = {
+  name: 'pg'
+  params: {
+    env: env
+    location: location
+    tags: tags
+    subnetId: net.outputs.dataSubnetId
+    privateDnsZoneId: net.outputs.pgPrivateDnsZoneId
+    skuName: pgSku
+    skuTier: pgTier
+    storageSizeGB: pgStorageGB
+    backupRetentionDays: pgBackupRetention
+    haEnabled: isProd
+    administratorLogin: pgAdminLogin
+    administratorLoginPassword: pgAdminPassword
+  }
+}
+
+module redis 'modules/redis.bicep' = {
+  name: 'redis'
+  params: {
+    env: env
+    location: location
+    tags: tags
+    subnetId: net.outputs.dataSubnetId
+    privateDnsZoneId: net.outputs.redisPrivateDnsZoneId
+  }
+}
+
+// ---------- Messaging & realtime ----------
+module sb 'modules/service-bus.bicep' = {
+  name: 'sb'
+  params: {
+    env: env
+    location: location
+    tags: tags
+  }
+}
+
+module sigr 'modules/signalr.bicep' = {
+  name: 'sigr'
+  params: {
+    env: env
+    location: location
+    tags: tags
+  }
+}
+
+// ---------- Storage ----------
+module storage 'modules/storage.bicep' = {
+  name: 'storage'
+  params: {
+    env: env
+    location: location
+    tags: tags
+  }
+}
+
+// ---------- Identity (depends on KV + storage + SB + ACR) ----------
+module mi 'modules/managed-identity.bicep' = {
+  name: 'mi'
+  params: {
+    env: env
+    location: location
+    tags: tags
+    keyVaultId: kv.outputs.id
+    storageAccountId: storage.outputs.id
+    serviceBusNamespaceId: sb.outputs.id
+    acrId: acr.outputs.id
+  }
+}
+
+// ---------- Container Apps Environment ----------
+// Pull the LA shared key inline via listKeys().
+module cae 'modules/container-apps-env.bicep' = {
+  name: 'cae'
+  params: {
+    env: env
+    location: location
+    tags: tags
+    infrastructureSubnetId: net.outputs.appsSubnetId
+    logAnalyticsCustomerId: law.outputs.customerId
+    logAnalyticsSharedKey: listKeys(law.outputs.id, '2023-09-01').primarySharedKey
+    includeDedicatedProfile: dedicatedProfileEnabled
+  }
+}
+
+// ---------- Shared env-var inventory for the API (§23.3) ----------
+// Non-secret values are inlined; secrets are referenced via secretRef into the secrets array.
+var apiEnvVars = [
+  { name: 'ASPNETCORE_ENVIRONMENT', value: isProd ? 'Production' : (isStaging ? 'Staging' : 'Development') }
+  { name: 'ASPNETCORE_URLS', value: 'http://+:8080' }
+  { name: 'ConnectionStrings__Postgres', secretRef: 'postgres-cs' }
+  { name: 'ConnectionStrings__Redis', secretRef: 'redis-cs' }
+  { name: 'ServiceBus__FullyQualifiedNamespace', value: sb.outputs.namespaceFqdn }
+  { name: 'SignalR__ConnectionString', secretRef: 'signalr-cs' }
+  { name: 'Stripe__SecretKey', secretRef: 'stripe-secret' }
+  { name: 'Stripe__WebhookSecret', secretRef: 'stripe-webhook-secret' }
+  { name: 'SendGrid__ApiKey', secretRef: 'sendgrid-key' }
+  { name: 'SendGrid__FromAddress', value: 'bookings@vrbook.example.com' }
+  { name: 'Blob__AccountUrl', value: storage.outputs.blobEndpoint }
+  { name: 'Blob__PropertyImagesContainer', value: 'property-images' }
+  { name: 'Blob__MessageAttachmentsContainer', value: 'message-attachments' }
+  { name: 'Feed__OutboundTokenPepper', secretRef: 'feed-pepper' }
+  { name: 'Sync__DefaultPollIntervalMin', value: '30' }
+  { name: 'Sync__StaleAlertHours', value: '2' }
+  { name: 'Booking__TentativeSlaHours', value: '24' }
+  { name: 'Booking__HoldDurationMinutes', value: '15' }
+  { name: 'Loyalty__BronzeThreshold', value: '1' }
+  { name: 'Loyalty__SilverThreshold', value: '3' }
+  { name: 'Loyalty__GoldThreshold', value: '6' }
+  { name: 'ApplicationInsights__ConnectionString', secretRef: 'appi-cs' }
+  { name: 'AZURE_CLIENT_ID', value: mi.outputs.clientId }
+]
+
+// Secret descriptors — names referenced by env vars above must match s.name here.
+var apiSecrets = [
+  { name: 'postgres-cs', keyVaultSecretName: 'postgres-cs' }
+  { name: 'redis-cs', keyVaultSecretName: 'redis-cs' }
+  { name: 'signalr-cs', keyVaultSecretName: 'signalr-cs' }
+  { name: 'stripe-secret', keyVaultSecretName: 'stripe-secret' }
+  { name: 'stripe-webhook-secret', keyVaultSecretName: 'stripe-webhook-secret' }
+  { name: 'sendgrid-key', keyVaultSecretName: 'sendgrid-key' }
+  { name: 'feed-pepper', keyVaultSecretName: 'feed-pepper' }
+  { name: 'appi-cs', keyVaultSecretName: 'appi-cs' }
+]
+
+// ---------- API Container App ----------
+module apiApp 'modules/container-app.bicep' = {
+  name: 'api'
+  params: {
+    name: 'ca-vrbook-api-${env}'
+    location: location
+    tags: tags
+    environmentId: cae.outputs.id
+    containerImage: apiImage
+    registryServer: acr.outputs.loginServer
+    userAssignedIdentityId: mi.outputs.id
+    workloadProfileName: dedicatedProfileEnabled ? 'd4' : 'Consumption'
+    targetPort: 8080
+    externalIngress: true
+    minReplicas: apiMinReplicas
+    maxReplicas: apiMaxReplicas
+    cpu: '1.0'
+    memory: '2Gi'
+    envVars: apiEnvVars
+    secrets: apiSecrets
+    keyVaultName: kv.outputs.name
+    scaleRuleType: 'http'
+    httpConcurrentRequests: 50
+  }
+}
+
+// ---------- Booking worker (Service Bus-triggered Container App) ----------
+module bookingWorker 'modules/container-app.bicep' = {
+  name: 'booking-worker'
+  params: {
+    name: 'ca-vrbook-bookingworker-${env}'
+    location: location
+    tags: tags
+    environmentId: cae.outputs.id
+    containerImage: bookingWorkerImage
+    registryServer: acr.outputs.loginServer
+    userAssignedIdentityId: mi.outputs.id
+    workloadProfileName: 'Consumption'
+    targetPort: 8080
+    externalIngress: false
+    minReplicas: env == 'dev' ? 0 : 1
+    maxReplicas: 5
+    cpu: '0.5'
+    memory: '1Gi'
+    envVars: apiEnvVars
+    secrets: apiSecrets
+    keyVaultName: kv.outputs.name
+    scaleRuleType: 'kedaServiceBus'
+    serviceBusNamespace: sb.outputs.namespaceFqdn
+    serviceBusTopicName: 'bookings'
+    serviceBusSubscriptionName: 'default'
+    serviceBusMessageCount: 10
+    includeProbes: false
+  }
+}
+
+// ---------- Notifications worker ----------
+module notifWorker 'modules/container-app.bicep' = {
+  name: 'notif-worker'
+  params: {
+    name: 'ca-vrbook-notifworker-${env}'
+    location: location
+    tags: tags
+    environmentId: cae.outputs.id
+    containerImage: notificationWorkerImage
+    registryServer: acr.outputs.loginServer
+    userAssignedIdentityId: mi.outputs.id
+    workloadProfileName: 'Consumption'
+    targetPort: 8080
+    externalIngress: false
+    minReplicas: env == 'dev' ? 0 : 1
+    maxReplicas: 5
+    cpu: '0.5'
+    memory: '1Gi'
+    envVars: apiEnvVars
+    secrets: apiSecrets
+    keyVaultName: kv.outputs.name
+    scaleRuleType: 'kedaServiceBus'
+    serviceBusNamespace: sb.outputs.namespaceFqdn
+    serviceBusTopicName: 'notifications'
+    serviceBusSubscriptionName: 'default'
+    serviceBusMessageCount: 20
+    includeProbes: false
+  }
+}
+
+// ---------- iCal sync worker (scheduled job, */5 * * * *) ----------
+module syncJob 'modules/container-app-job.bicep' = {
+  name: 'sync-job'
+  params: {
+    name: 'caj-vrbook-sync-${env}'
+    location: location
+    tags: tags
+    environmentId: cae.outputs.id
+    containerImage: syncWorkerImage
+    registryServer: acr.outputs.loginServer
+    userAssignedIdentityId: mi.outputs.id
+    workloadProfileName: 'Consumption'
+    triggerType: 'Schedule'
+    cronExpression: '*/5 * * * *'
+    replicaTimeoutSeconds: 600
+    cpu: '0.5'
+    memory: '1Gi'
+    envVars: apiEnvVars
+    secrets: apiSecrets
+    keyVaultName: kv.outputs.name
+  }
+}
+
+// ---------- DB migrator (manual-trigger job) ----------
+module migratorJob 'modules/container-app-job.bicep' = {
+  name: 'migrator-job'
+  params: {
+    name: 'caj-vrbook-migrator-${env}'
+    location: location
+    tags: tags
+    environmentId: cae.outputs.id
+    containerImage: migratorImage
+    registryServer: acr.outputs.loginServer
+    userAssignedIdentityId: mi.outputs.id
+    workloadProfileName: 'Consumption'
+    triggerType: 'Manual'
+    replicaTimeoutSeconds: 1800
+    cpu: '0.5'
+    memory: '1Gi'
+    envVars: apiEnvVars
+    secrets: apiSecrets
+    keyVaultName: kv.outputs.name
+  }
+}
+
+// ---------- Front Door (prod + staging only) ----------
+module fd 'modules/front-door.bicep' = if (frontDoorEnabled) {
+  name: 'fd'
+  params: {
+    env: env
+    tags: tags
+    originHostName: apiApp.outputs.fqdn
+  }
+}
+
+// ---------- Outputs ----------
+output apiFqdn string = apiApp.outputs.fqdn
+output frontDoorHostName string = frontDoorEnabled ? fd.outputs.endpointHostName : ''
+output keyVaultUri string = kv.outputs.vaultUri
+output keyVaultName string = kv.outputs.name
+output acrLoginServer string = acr.outputs.loginServer
+output containerAppsEnvName string = cae.outputs.name
+output managedIdentityClientId string = mi.outputs.clientId
+output managedIdentityPrincipalId string = mi.outputs.principalId
+output postgresFqdn string = pg.outputs.fqdn
+output redisHostName string = redis.outputs.hostName
+output serviceBusEndpoint string = sb.outputs.endpoint
+output signalrHostName string = sigr.outputs.hostName
+output storageBlobEndpoint string = storage.outputs.blobEndpoint
+output appInsightsConnectionString string = appi.outputs.connectionString

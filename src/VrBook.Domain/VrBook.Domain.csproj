@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>VrBook.Domain</RootNamespace>
+    <Description>
+      Pure domain primitives shared across all bounded contexts: AggregateRoot, Entity,
+      ValueObject, DomainEvent, BusinessRule. NO infrastructure or framework dependencies.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VrBook.Contracts\VrBook.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

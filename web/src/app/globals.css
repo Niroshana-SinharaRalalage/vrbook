@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * shadcn/ui tokens — baseColor: stone, cssVariables: true (components.json).
+ * Light = warm stone neutrals + maroon foreground accents.
+ * Dark  = near-black background with maroon-shifted surfaces.
+ * `--primary` is wired to brand orange so all default shadcn buttons read brand-on.
+ */
+
+@layer base {
+  :root {
+    --background: 60 9% 98%;
+    --foreground: 20 14% 11%;
+
+    --muted: 60 5% 96%;
+    --muted-foreground: 25 5% 45%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 14% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 20 14% 11%;
+
+    --border: 20 6% 90%;
+    --input: 20 6% 90%;
+
+    /* Brand orange (#ea580c -> hsl). */
+    --primary: 20 90% 48%;
+    --primary-foreground: 60 9% 98%;
+
+    /* Brand maroon (#8b1c2b -> hsl) as secondary. */
+    --secondary: 351 66% 33%;
+    --secondary-foreground: 60 9% 98%;
+
+    --accent: 20 91% 96%;
+    --accent-foreground: 351 66% 33%;
+
+    --destructive: 0 84% 45%;
+    --destructive-foreground: 60 9% 98%;
+
+    --ring: 20 90% 48%;
+
+    --radius: 0.625rem;
+  }
+
+  .dark {
+    --background: 20 14% 8%;
+    --foreground: 60 9% 98%;
+
+    --muted: 12 6% 16%;
+    --muted-foreground: 24 5% 64%;
+
+    --popover: 20 14% 11%;
+    --popover-foreground: 60 9% 98%;
+
+    --card: 20 14% 11%;
+    --card-foreground: 60 9% 98%;
+
+    --border: 12 6% 22%;
+    --input: 12 6% 22%;
+
+    --primary: 22 92% 52%;
+    --primary-foreground: 20 14% 8%;
+
+    --secondary: 351 50% 35%;
+    --secondary-foreground: 60 9% 98%;
+
+    --accent: 351 30% 20%;
+    --accent-foreground: 22 92% 80%;
+
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 60 9% 98%;
+
+    --ring: 22 92% 52%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+
+  body {
+    @apply min-h-dvh bg-background text-foreground antialiased;
+  }
+}

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>VrBook.Workers.Booking</RootNamespace>
+    <UserSecretsId>vrbook-workers-booking-local-secrets</UserSecretsId>
+    <Description>
+      Booking Worker — KEDA-scaled Container App (Service Bus topic 'bookings').
+      Runs SLA timers (Tentative → auto-Confirm/Reject), date-driven state transitions
+      (Confirmed → CheckedIn, CheckedOut → Completed). Real implementation in A4
+      (proposal §7).
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\VrBook.Application\VrBook.Application.csproj" />
+    <ProjectReference Include="..\..\VrBook.Infrastructure\VrBook.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\VrBook.Contracts\VrBook.Contracts.csproj" />
+    <ProjectReference Include="..\..\Modules\VrBook.Modules.Booking\VrBook.Modules.Booking.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="Serilog.Settings.Configuration" />
+    <PackageReference Include="Azure.Messaging.ServiceBus" />
+  </ItemGroup>
+
+</Project>

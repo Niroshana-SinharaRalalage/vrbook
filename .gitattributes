@@ -1,0 +1,50 @@
+# Auto-detect text files and normalize line endings on commit
+* text=auto eol=lf
+
+# Force LF on cross-platform source
+*.cs            text eol=lf diff=csharp
+*.csproj        text eol=lf
+*.sln           text eol=crlf
+*.props         text eol=lf
+*.targets       text eol=lf
+*.json          text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.md            text eol=lf
+*.ts            text eol=lf
+*.tsx           text eol=lf
+*.js            text eol=lf
+*.jsx           text eol=lf
+*.mjs           text eol=lf
+*.cjs           text eol=lf
+*.html          text eol=lf
+*.css           text eol=lf
+*.scss          text eol=lf
+*.bicep         text eol=lf
+*.bicepparam    text eol=lf
+
+# Windows-only scripts
+*.ps1           text eol=crlf
+*.psm1          text eol=crlf
+*.cmd           text eol=crlf
+*.bat           text eol=crlf
+
+# Binary
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.webp          binary
+*.ico           binary
+*.pdf           binary
+*.zip           binary
+*.gz            binary
+*.tar           binary
+*.7z            binary
+*.dll           binary
+*.exe           binary
+*.pdb           binary
+
+# Generated files don't show in diffs
+src/VrBook.Contracts/Generated/** linguist-generated=true
+web/src/api-client/generated/**   linguist-generated=true

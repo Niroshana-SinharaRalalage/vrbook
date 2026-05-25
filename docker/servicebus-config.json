@@ -1,0 +1,38 @@
+{
+  "UserConfig": {
+    "Namespaces": [
+      {
+        "Name": "vrbook-local",
+        "Queues": [
+          { "Name": "dlq-bookings", "Properties": { "DeadLetteringOnMessageExpiration": false, "DefaultMessageTimeToLive": "PT14D", "DuplicateDetectionHistoryTimeWindow": "PT20S", "ForwardDeadLetteredMessagesTo": "", "ForwardTo": "", "LockDuration": "PT30S", "MaxDeliveryCount": 10, "RequiresDuplicateDetection": false, "RequiresSession": false } },
+          { "Name": "dlq-notifications", "Properties": { "DeadLetteringOnMessageExpiration": false, "DefaultMessageTimeToLive": "PT14D", "DuplicateDetectionHistoryTimeWindow": "PT20S", "ForwardDeadLetteredMessagesTo": "", "ForwardTo": "", "LockDuration": "PT30S", "MaxDeliveryCount": 10, "RequiresDuplicateDetection": false, "RequiresSession": false } },
+          { "Name": "dlq-sync", "Properties": { "DeadLetteringOnMessageExpiration": false, "DefaultMessageTimeToLive": "PT14D", "DuplicateDetectionHistoryTimeWindow": "PT20S", "ForwardDeadLetteredMessagesTo": "", "ForwardTo": "", "LockDuration": "PT30S", "MaxDeliveryCount": 10, "RequiresDuplicateDetection": false, "RequiresSession": false } }
+        ],
+        "Topics": [
+          {
+            "Name": "bookings",
+            "Properties": { "DefaultMessageTimeToLive": "PT14D", "DuplicateDetectionHistoryTimeWindow": "PT20S", "RequiresDuplicateDetection": false },
+            "Subscriptions": [
+              { "Name": "default", "Properties": { "DeadLetteringOnMessageExpiration": false, "DefaultMessageTimeToLive": "PT14D", "LockDuration": "PT1M", "MaxDeliveryCount": 10, "ForwardDeadLetteredMessagesTo": "dlq-bookings", "ForwardTo": "", "RequiresSession": false }, "Rules": [] }
+            ]
+          },
+          {
+            "Name": "notifications",
+            "Properties": { "DefaultMessageTimeToLive": "PT14D", "DuplicateDetectionHistoryTimeWindow": "PT20S", "RequiresDuplicateDetection": false },
+            "Subscriptions": [
+              { "Name": "default", "Properties": { "DeadLetteringOnMessageExpiration": false, "DefaultMessageTimeToLive": "PT14D", "LockDuration": "PT1M", "MaxDeliveryCount": 10, "ForwardDeadLetteredMessagesTo": "dlq-notifications", "ForwardTo": "", "RequiresSession": false }, "Rules": [] }
+            ]
+          },
+          {
+            "Name": "sync",
+            "Properties": { "DefaultMessageTimeToLive": "PT14D", "DuplicateDetectionHistoryTimeWindow": "PT20S", "RequiresDuplicateDetection": false },
+            "Subscriptions": [
+              { "Name": "default", "Properties": { "DeadLetteringOnMessageExpiration": false, "DefaultMessageTimeToLive": "PT14D", "LockDuration": "PT1M", "MaxDeliveryCount": 10, "ForwardDeadLetteredMessagesTo": "dlq-sync", "ForwardTo": "", "RequiresSession": false }, "Rules": [] }
+            ]
+          }
+        ]
+      }
+    ],
+    "Logging": { "Type": "File" }
+  }
+}

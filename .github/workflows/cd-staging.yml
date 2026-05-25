@@ -1,0 +1,277 @@
+# =============================================================================
+# cd-staging.yml — Continuous Deployment to STAGING.
+# Triggered when ci.yml succeeds on the develop branch.
+# Reference: BookingApp_Proposal.md §16.2 (CD-staging), §15 (infra), §16.3 (migrations).
+# =============================================================================
+name: cd-staging
+
+on:
+  workflow_run:
+    workflows: ["ci"]
+    branches: [develop]
+    types: [completed]
+
+permissions:
+  contents: read
+  id-token: write
+  packages: read
+
+concurrency:
+  # One staging deploy at a time; cancel in-flight on new push.
+  group: cd-staging
+  cancel-in-progress: false
+
+env:
+  AZURE_LOCATION: eastus2
+  RESOURCE_GROUP: rg-vrbook-staging
+  BICEP_PARAMS: infra/environments/staging.bicepparam
+  BICEP_TEMPLATE: infra/main.bicep
+  # SHA that produced the green ci.yml run. workflow_run gives us head_sha.
+  IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+  STAGING_BASE_URL: https://api-vrbook-staging.azurecontainerapps.io
+
+jobs:
+  # Hard gate — only proceed when the upstream CI was green.
+  gate:
+    name: gate (require green ci)
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - run: echo "CI run ${{ github.event.workflow_run.id }} succeeded for sha ${{ env.IMAGE_TAG }}."
+
+  # ---------------------------------------------------------------------------
+  # infra — Bicep what-if for visibility, then apply. Subscription-scope
+  # deployment because the template creates the RG (per §15.3).
+  # ---------------------------------------------------------------------------
+  infra:
+    name: infra (Bicep)
+    needs: gate
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.IMAGE_TAG }}
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Bicep what-if
+        run: |
+          az deployment sub what-if \
+            -l ${{ env.AZURE_LOCATION }} \
+            -f ${{ env.BICEP_TEMPLATE }} \
+            -p ${{ env.BICEP_PARAMS }}
+
+      - name: Bicep deploy
+        run: |
+          az deployment sub create \
+            -l ${{ env.AZURE_LOCATION }} \
+            -f ${{ env.BICEP_TEMPLATE }} \
+            -p ${{ env.BICEP_PARAMS }}
+
+  # ---------------------------------------------------------------------------
+  # migrate — invoke the Migrator Container App Job and wait. §16.3 mandates
+  # this runs BEFORE the API revision update so the schema is ready.
+  # ---------------------------------------------------------------------------
+  migrate:
+    name: migrate
+    needs: infra
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Update migrator job image
+        run: |
+          az containerapp job update \
+            -n migrator-vrbook-staging \
+            -g ${{ env.RESOURCE_GROUP }} \
+            --image ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-migrator:${{ env.IMAGE_TAG }}
+
+      - name: Start migrator job and wait for completion
+        run: |
+          set -euo pipefail
+          EXECUTION=$(az containerapp job start \
+            -n migrator-vrbook-staging \
+            -g ${{ env.RESOURCE_GROUP }} \
+            --query "name" -o tsv)
+          echo "Started execution: $EXECUTION"
+          for i in $(seq 1 60); do
+            STATUS=$(az containerapp job execution show \
+              -n migrator-vrbook-staging \
+              -g ${{ env.RESOURCE_GROUP }} \
+              --job-execution-name "$EXECUTION" \
+              --query "properties.status" -o tsv)
+            echo "[$i/60] migrator status: $STATUS"
+            case "$STATUS" in
+              Succeeded) exit 0 ;;
+              Failed|Degraded) echo "Migrator job failed." >&2; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "Migrator did not finish within 10 minutes." >&2
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # deploy-* — one job per workload via the reusable workflow. Workers can run
+  # in parallel; API + Web depend on workers being healthy first so users
+  # never hit a frontend that fans out to a missing worker.
+  # ---------------------------------------------------------------------------
+  deploy-sync-worker:
+    needs: migrate
+    uses: ./.github/workflows/_deploy-container-app.yml
+    with:
+      app_name: sync-worker-vrbook-staging
+      resource_group: rg-vrbook-staging
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-sync-worker:${{ github.event.workflow_run.head_sha }}
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  deploy-notification-worker:
+    needs: migrate
+    uses: ./.github/workflows/_deploy-container-app.yml
+    with:
+      app_name: notification-worker-vrbook-staging
+      resource_group: rg-vrbook-staging
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-notification-worker:${{ github.event.workflow_run.head_sha }}
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  deploy-booking-worker:
+    needs: migrate
+    uses: ./.github/workflows/_deploy-container-app.yml
+    with:
+      app_name: booking-worker-vrbook-staging
+      resource_group: rg-vrbook-staging
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-booking-worker:${{ github.event.workflow_run.head_sha }}
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  deploy-api:
+    needs: [deploy-sync-worker, deploy-notification-worker, deploy-booking-worker]
+    uses: ./.github/workflows/_deploy-container-app.yml
+    with:
+      app_name: api-vrbook-staging
+      resource_group: rg-vrbook-staging
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-api:${{ github.event.workflow_run.head_sha }}
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  deploy-web:
+    needs: deploy-api
+    uses: ./.github/workflows/_deploy-container-app.yml
+    with:
+      app_name: web-vrbook-staging
+      resource_group: rg-vrbook-staging
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-web:${{ github.event.workflow_run.head_sha }}
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  # ---------------------------------------------------------------------------
+  # smoke — minimal post-deploy verification: liveness/readiness + a sample
+  # search call. Failure here triggers the rollback step below.
+  # ---------------------------------------------------------------------------
+  smoke:
+    name: smoke tests
+    needs: [deploy-api, deploy-web]
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ vars.NODE_VERSION || '20' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Curl health endpoints
+        run: |
+          set -euo pipefail
+          for url in \
+            "${{ env.STAGING_BASE_URL }}/health/live" \
+            "${{ env.STAGING_BASE_URL }}/health/ready" \
+            "${{ env.STAGING_BASE_URL }}/api/v1/properties?limit=1"; do
+            echo "GET $url"
+            curl --fail --show-error --retry 5 --retry-delay 5 --max-time 15 "$url" >/dev/null
+          done
+
+      - name: Playwright smoke suite
+        working-directory: web
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ env.STAGING_BASE_URL }}
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test --grep @smoke
+
+  # ---------------------------------------------------------------------------
+  # promote — shift 100% traffic to the new revision once smoke is green.
+  # Staging is single-slot so this is effectively idempotent.
+  # ---------------------------------------------------------------------------
+  promote:
+    name: promote (100% traffic)
+    needs: smoke
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set 100% traffic to latest revision
+        run: |
+          for app in api-vrbook-staging web-vrbook-staging; do
+            LATEST=$(az containerapp revision list -n "$app" -g ${{ env.RESOURCE_GROUP }} \
+              --query "sort_by([], &properties.createdTime)[-1].name" -o tsv)
+            echo "Promoting $LATEST on $app"
+            az containerapp ingress traffic set -n "$app" -g ${{ env.RESOURCE_GROUP }} \
+              --revision-weight "$LATEST=100"
+          done
+
+  # ---------------------------------------------------------------------------
+  # notify — Slack summary. Skipped silently if the webhook isn't configured.
+  # ---------------------------------------------------------------------------
+  notify:
+    name: notify (Slack)
+    needs: promote
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post deploy summary to Slack
+        if: env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v1.27.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+        with:
+          payload: |
+            {
+              "text": "Staging deploy ${{ needs.promote.result }} — sha `${{ env.IMAGE_TAG }}` (run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            }

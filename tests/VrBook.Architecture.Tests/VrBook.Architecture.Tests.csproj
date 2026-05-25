@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>VrBook.Architecture.Tests</RootNamespace>
+    <IsTestProject>true</IsTestProject>
+    <Description>
+      NetArchTest rules that enforce Clean Architecture invariants and modular-monolith
+      boundaries. Failing the architecture tests fails the build — these are not soft hints.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\VrBook.Domain\VrBook.Domain.csproj" />
+    <ProjectReference Include="..\..\src\VrBook.Application\VrBook.Application.csproj" />
+    <ProjectReference Include="..\..\src\VrBook.Infrastructure\VrBook.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\VrBook.Api\VrBook.Api.csproj" />
+    <ProjectReference Include="..\..\src\VrBook.Contracts\VrBook.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NetArchTest.Rules" />
+  </ItemGroup>
+
+</Project>

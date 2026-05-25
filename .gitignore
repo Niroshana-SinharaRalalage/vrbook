@@ -1,0 +1,126 @@
+# =============================================================
+# Direct-Booking Vacation Rental Platform — .gitignore
+# =============================================================
+
+# ---- .NET ----
+bin/
+obj/
+out/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Ll]og/
+[Ll]ogs/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+TestResults/
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+coverage*.json
+coverage*.xml
+coverage*.info
+.dotnet/
+.nuget/
+*.nuget.props
+*.nuget.targets
+.vs/
+.vscode/*
+!.vscode/settings.recommended.json
+!.vscode/extensions.json
+!.vscode/launch.recommended.json
+.idea/
+*.swp
+
+# ---- Node / Next.js ----
+node_modules/
+.pnp/
+.pnp.js
+.yarn/install-state.gz
+.next/
+out/
+build/
+dist/
+.npm/
+*.tsbuildinfo
+next-env.d.ts
+
+# ---- Frontend caches / coverage ----
+coverage/
+playwright-report/
+playwright/.cache/
+test-results/
+.eslintcache
+.stylelintcache
+
+# ---- Environment files ----
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.staging
+!.env.example
+!.env.*.example
+
+# ---- Secrets / certs ----
+*.pfx
+*.pem
+*.key
+*.crt
+secrets.*.json
+appsettings.Local.json
+appsettings.*.local.json
+
+# ---- IDE / OS ----
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*~
+
+# ---- Docker / local infra ----
+.docker/
+docker-volumes/
+postgres-data/
+redis-data/
+azurite-data/
+
+# ---- Bicep build output ----
+*.bicep.json
+infra/**/*.json
+!infra/**/*.parameters.json
+
+# ---- Logs ----
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Generated API clients (regenerated in CI) ----
+web/src/api-client/generated/
+src/VrBook.Contracts/Generated/
+
+# ---- Stripe CLI ----
+.stripe/
+
+# ---- Misc ----
+*.bak
+*.tmp
+*.orig
+*.rej
+.history/
+
+# ---- Claude Code local cache ----
+.claude/

@@ -1,0 +1,3 @@
+# shadcn/ui components land here when generated via `npx shadcn add <component>`.
+# Configured in components.json (style: new-york, baseColor: stone, cssVariables: true).
+# Pre-install is delegated to agent F1 — see proposal §20.

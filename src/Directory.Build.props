@@ -1,0 +1,64 @@
+<Project>
+
+  <!-- ===========================================================
+       Shared MSBuild properties for every .NET project under /src
+       =========================================================== -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>CS1591;CS8618</WarningsNotAsErrors>
+    <!--
+      NoWarn rationale:
+        CS1591  — public-API XML comments are optional in scaffold; A0 documents at the type level.
+        CA1000  — static factory methods on generic types are an idiomatic functional pattern (Result<T>.Success).
+        CA1716  — disabled for parameters named after well-known DTO fields (Address.To, Range.From).
+        RCS1194 — exception ctors restricted on purpose; framework-style 4-ctor pattern is obsolete (BinarySerialization).
+        S4035   — IEquatable<T> on an unsealed base class is the established Clean-Architecture ValueObject pattern.
+    -->
+    <NoWarn>$(NoWarn);CS1591;CA1000;CA1305;CA1716;CA1848;CA1861;RCS1194;S125;S1118;S1135;S2139;S3267;S3903;S4035;S6966</NoWarn>
+    <!--
+      Additional rationale (continued):
+        CA1305 — IFormatProvider on third-party API calls (e.g., Serilog Console sink); not our surface.
+        CA1861 — constant array literals in DI registration are one-time at startup; micro-opt.
+        S1118  — partial Program class for WebApplicationFactory&lt;Program&gt; needs no static/ctor.
+        S3903  — nested helper classes in Program.cs are fine in minimal-hosting style.
+        S6966  — Run() vs RunAsync(): Run is the idiomatic top-level statement entry; both block.
+    -->
+    <!--
+      Additional rationale:
+        S125  — module stubs intentionally show commented sample code as documentation
+                for the downstream agent who will implement them.
+        S1135 — TODO comments are first-class scaffolding annotations naming the owning agent (e.g. TODO(A2)).
+    -->
+    <!--
+      Additional rationale:
+        CA1848 — LoggerMessage delegates are a hot-path optimization. The pipeline behaviors log
+                 once per request and are not on the hot path; readability wins.
+        S2139  — pipeline behaviors deliberately log + rethrow so the upstream layer can also handle.
+    -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <RootNamespace>$(MSBuildProjectName)</RootNamespace>
+    <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition=" '$(GITHUB_ACTIONS)' == 'true' ">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Source-link for stack-trace links -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <!-- Test projects opt in via <IsPackable>false</IsPackable> + <IsTestProject>true</IsTestProject> -->
+
+</Project>

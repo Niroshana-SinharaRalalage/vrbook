@@ -1,0 +1,577 @@
+openapi: 3.0.3
+info:
+  title: VrBook API
+  version: 0.1.0
+  description: |
+    Direct-Booking Vacation Rental Platform — Phase 1 API.
+
+    **Source of truth:** [`BookingApp_Proposal.md`](../BookingApp_Proposal.md).
+    **Status:** v0.1 — every endpoint is stubbed; payload schemas are referenced but
+    most are placeholders. Downstream agents replace stubs with real implementations
+    per `proposal §20`.
+
+    **Conventions** (proposal §6.1):
+    - Base path: `/api/v1`. Major version always in URL.
+    - Errors: RFC 7807 ProblemDetails. Validation: 400 with field-keyed `errors`.
+    - Pagination: cursor for high-cardinality lists, offset for admin tables.
+    - Idempotency: `Idempotency-Key` header on mutating endpoints; 24h dedupe.
+    - Rate limits: 100/min anonymous, 600/min authenticated; `RateLimit-*` headers.
+  contact:
+    name: Solutions Architecture
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local dev
+  - url: https://api.vrbook.example.com/api/v1
+    description: Production
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Identity
+  - name: Catalog
+  - name: Pricing
+  - name: Booking
+  - name: "Booking — Admin"
+  - name: Payment
+  - name: "Payment — Webhooks"
+  - name: Sync
+  - name: "Sync — Admin"
+  - name: "Sync — Public Feed"
+  - name: Messaging
+  - name: Reviews
+  - name: "Reviews — Admin"
+  - name: "Admin — Users"
+  - name: "Admin — Reports"
+  - name: "Admin — Feature toggles"
+  - name: "Admin — Alerts"
+
+paths:
+  # =========================== Identity ===========================
+  /me:
+    get:
+      tags: [Identity]
+      summary: Get the current user's profile.
+      responses:
+        '200': { $ref: '#/components/responses/User' }
+        '401': { $ref: '#/components/responses/Problem401' }
+    put:
+      tags: [Identity]
+      summary: Update the current user's profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateProfileRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/User' }
+    delete:
+      tags: [Identity]
+      summary: Self-deactivate (GDPR-ready).
+      responses:
+        '204': { description: Deactivated. }
+
+  # =========================== Catalog ============================
+  /properties:
+    get:
+      tags: [Catalog]
+      summary: Public property search.
+      security: []
+      parameters:
+        - { name: destination,  in: query, schema: { type: string } }
+        - { name: checkin,      in: query, schema: { type: string, format: date } }
+        - { name: checkout,     in: query, schema: { type: string, format: date } }
+        - { name: guests,       in: query, schema: { type: integer, minimum: 1 } }
+        - { name: min_price,    in: query, schema: { type: number } }
+        - { name: max_price,    in: query, schema: { type: number } }
+        - { name: amenities,    in: query, schema: { type: array, items: { type: string } }, style: form, explode: true }
+        - { name: min_rating,   in: query, schema: { type: number, minimum: 1, maximum: 5 } }
+        - { name: sort,         in: query, schema: { type: string } }
+        - { name: cursor,       in: query, schema: { type: string } }
+        - { name: limit,        in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: Search results. }
+    post:
+      tags: [Catalog]
+      summary: Create a property (Owner).
+      responses:
+        '201': { description: Created. }
+
+  /properties/{slug}:
+    get:
+      tags: [Catalog]
+      summary: Public property detail.
+      security: []
+      parameters: [ { name: slug, in: path, required: true, schema: { type: string } } ]
+      responses:
+        '200': { description: Property. }
+        '404': { $ref: '#/components/responses/Problem404' }
+
+  /properties/{id}/availability:
+    get:
+      tags: [Catalog]
+      summary: Day-by-day availability.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to,   in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Days. }
+
+  /properties/{id}/images:
+    post:
+      tags: [Catalog]
+      summary: Upload property image (multipart, Owner).
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties: { file: { type: string, format: binary } }
+      responses:
+        '201': { description: Uploaded. }
+
+  /properties/{id}/images/order:
+    put:
+      tags: [Catalog]
+      summary: Reorder images (Owner).
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '204': { description: Reordered. } }
+
+  /properties/{id}/images/{imageId}:
+    delete:
+      tags: [Catalog]
+      summary: Delete an image (Owner).
+      parameters:
+        - { name: id,      in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: imageId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { '204': { description: Deleted. } }
+
+  /amenities:
+    get:
+      tags: [Catalog]
+      summary: Lookup list of amenities.
+      security: []
+      responses: { '200': { description: List. } }
+
+  # =========================== Pricing ============================
+  /properties/{propertyId}/pricing:
+    get:
+      tags: [Pricing]
+      summary: Read pricing plan (Owner).
+      parameters: [ { name: propertyId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Plan. } }
+    put:
+      tags: [Pricing]
+      summary: Replace pricing plan basics (Owner).
+      parameters: [ { name: propertyId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Updated. } }
+
+  /properties/{propertyId}/pricing/rules:
+    post:
+      tags: [Pricing]
+      summary: Add a pricing rule (Owner).
+      parameters: [ { name: propertyId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '201': { description: Created. } }
+
+  /properties/{propertyId}/pricing/rules/{ruleId}:
+    delete:
+      tags: [Pricing]
+      summary: Remove a pricing rule (Owner).
+      parameters:
+        - { name: propertyId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: ruleId,     in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { '204': { description: Deleted. } }
+
+  /properties/{propertyId}/quotes:
+    post:
+      tags: [Pricing]
+      summary: Compute a price quote for a date range (anonymous, rate-limited).
+      security: []
+      parameters: [ { name: propertyId, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Quote. } }
+
+  # =========================== Booking ============================
+  /bookings/holds:
+    post:
+      tags: [Booking]
+      summary: Create a 15-minute Redis hold. Idempotent.
+      responses:
+        '201': { description: Hold. }
+        '409': { $ref: '#/components/responses/Problem409' }
+    delete:
+      tags: [Booking]
+      summary: Release a hold (delete is no-op if already expired).
+      responses: { '204': { description: Released. } }
+
+  /bookings/holds/{id}:
+    delete:
+      tags: [Booking]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '204': { description: Released. } }
+
+  /bookings:
+    get:
+      tags: [Booking]
+      summary: List the caller's bookings.
+      responses: { '200': { description: List. } }
+    post:
+      tags: [Booking]
+      summary: Place a booking. Idempotency-Key required.
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      responses:
+        '201': { description: Placed (Draft → Tentative). }
+        '409': { $ref: '#/components/responses/Problem409' }
+
+  /bookings/{id}:
+    get:
+      tags: [Booking]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses:
+        '200': { description: Booking. }
+        '404': { $ref: '#/components/responses/Problem404' }
+
+  /bookings/{id}/cancel:
+    post:
+      tags: [Booking]
+      summary: Guest cancellation (policy-driven refund).
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Cancelled. } }
+
+  /bookings/{id}/confirm:
+    post:
+      tags: [Booking]
+      summary: Owner manual confirmation.
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Confirmed. } }
+
+  /bookings/{id}/reject:
+    post:
+      tags: [Booking]
+      summary: Owner rejection of a Tentative booking.
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Rejected. } }
+
+  /bookings/{id}/check-in:
+    post:
+      tags: [Booking]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Checked in. } }
+
+  /bookings/{id}/check-out:
+    post:
+      tags: [Booking]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Checked out. } }
+
+  /bookings/{id}/review:
+    post:
+      tags: [Reviews]
+      summary: Submit post-stay review (after CheckedOut, within 14 days).
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '201': { description: Submitted. } }
+
+  /admin/bookings/queue:
+    get:
+      tags: ["Booking — Admin"]
+      summary: Tentative-bookings queue awaiting owner action.
+      responses: { '200': { description: Queue. } }
+
+  /admin/bookings/manual:
+    post:
+      tags: ["Booking — Admin"]
+      summary: Walk-in / phone booking entered by owner.
+      responses: { '201': { description: Created. } }
+
+  # =========================== Payment ============================
+  /payments/intents:
+    post:
+      tags: [Payment]
+      summary: Create a Stripe Payment Intent for a booking.
+      responses: { '201': { description: Created. } }
+
+  /payments/intents/{id}:
+    get:
+      tags: [Payment]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Intent. } }
+
+  /payments/intents/{id}/confirm:
+    post:
+      tags: [Payment]
+      summary: Server-side confirm.
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Confirmed. } }
+
+  /payments/refunds:
+    post:
+      tags: [Payment]
+      summary: Issue a refund (Owner). Idempotency-Key required.
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      responses: { '201': { description: Refund queued. } }
+
+  /payments/webhooks/stripe:
+    post:
+      tags: ["Payment — Webhooks"]
+      summary: Stripe webhook. Signature-verified; idempotent.
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object } } }
+      responses: { '200': { description: Acknowledged. } }
+
+  # =========================== Sync ===============================
+  /feeds/{outboundToken}.ics:
+    get:
+      tags: ["Sync — Public Feed"]
+      summary: Outbound iCal feed. Token-secured.
+      security: []
+      parameters: [ { name: outboundToken, in: path, required: true, schema: { type: string } } ]
+      responses:
+        '200':
+          description: VCALENDAR.
+          content: { text/calendar: { schema: { type: string } } }
+        '404': { $ref: '#/components/responses/Problem404' }
+
+  /admin/channel-feeds:
+    get:
+      tags: ["Sync — Admin"]
+      responses: { '200': { description: List. } }
+    post:
+      tags: ["Sync — Admin"]
+      summary: Configure inbound iCal URL for a property.
+      responses: { '201': { description: Created. } }
+
+  /admin/channel-feeds/{id}:
+    put:
+      tags: ["Sync — Admin"]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Updated. } }
+
+  /admin/channel-feeds/{id}/sync-now:
+    post:
+      tags: ["Sync — Admin"]
+      summary: Trigger an immediate sync run.
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '202': { description: Queued. } }
+
+  /admin/sync-conflicts:
+    get:
+      tags: ["Sync — Admin"]
+      responses: { '200': { description: List. } }
+
+  /admin/sync-conflicts/{id}/resolve:
+    post:
+      tags: ["Sync — Admin"]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Resolved. } }
+
+  # =========================== Messaging ==========================
+  /threads:
+    get:
+      tags: [Messaging]
+      responses: { '200': { description: List. } }
+
+  /threads/{id}/messages:
+    get:
+      tags: [Messaging]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit,  in: query, schema: { type: integer, default: 50 } }
+      responses: { '200': { description: Messages. } }
+    post:
+      tags: [Messaging]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '201': { description: Sent. } }
+
+  /threads/{id}/read:
+    post:
+      tags: [Messaging]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '204': { description: Read receipt accepted. } }
+
+  /threads/{id}/attachments:
+    post:
+      tags: [Messaging]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { type: object, properties: { file: { type: string, format: binary } } }
+      responses: { '201': { description: Uploaded. } }
+
+  /realtime/negotiate:
+    get:
+      tags: [Messaging]
+      summary: SignalR negotiate. Returns Service URL + access token.
+      responses: { '200': { description: Connection info. } }
+
+  # =========================== Reviews ============================
+  /reviews/{id}/response:
+    post:
+      tags: [Reviews]
+      summary: Owner replies to a review.
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '201': { description: Response posted. } }
+
+  /properties/{id}/reviews:
+    get:
+      tags: [Reviews]
+      summary: Public reviews list.
+      security: []
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: List. } }
+
+  /admin/reviews/moderation:
+    get:
+      tags: ["Reviews — Admin"]
+      responses: { '200': { description: Pending queue. } }
+
+  /admin/reviews/{id}/approve:
+    post:
+      tags: ["Reviews — Admin"]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Approved. } }
+
+  /admin/reviews/{id}/reject:
+    post:
+      tags: ["Reviews — Admin"]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Rejected. } }
+
+  # =========================== Admin / Reports ====================
+  /admin/users:
+    get:
+      tags: ["Admin — Users"]
+      summary: Search guests.
+      parameters:
+        - { name: q,    in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: size, in: query, schema: { type: integer, default: 20 } }
+      responses: { '200': { description: Page. } }
+
+  /admin/reports/occupancy:
+    get:
+      tags: ["Admin — Reports"]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to,   in: query, required: true, schema: { type: string, format: date } }
+        - { name: propertyId, in: query, schema: { type: string, format: uuid } }
+      responses: { '200': { description: Rows. } }
+
+  /admin/reports/revenue:
+    get:
+      tags: ["Admin — Reports"]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to,   in: query, required: true, schema: { type: string, format: date } }
+        - { name: propertyId, in: query, schema: { type: string, format: uuid } }
+      responses: { '200': { description: Rows. } }
+
+  /admin/reports/adr:
+    get:
+      tags: ["Admin — Reports"]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to,   in: query, required: true, schema: { type: string, format: date } }
+        - { name: propertyId, in: query, schema: { type: string, format: uuid } }
+      responses: { '200': { description: Rows. } }
+
+  /admin/toggles:
+    get:
+      tags: ["Admin — Feature toggles"]
+      responses: { '200': { description: List. } }
+
+  /admin/toggles/{key}:
+    put:
+      tags: ["Admin — Feature toggles"]
+      parameters: [ { name: key, in: path, required: true, schema: { type: string } } ]
+      responses: { '200': { description: Updated. } }
+
+  /admin/alerts:
+    get:
+      tags: ["Admin — Alerts"]
+      responses: { '200': { description: Alerts. } }
+
+  /admin/alerts/{id}/dismiss:
+    post:
+      tags: ["Admin — Alerts"]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '204': { description: Dismissed. } }
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: AD B2C bearer token.
+
+  schemas:
+    # Stub schemas. Each gets a full definition as the corresponding agent ships.
+    Problem:
+      type: object
+      properties:
+        type:     { type: string, format: uri }
+        title:    { type: string }
+        status:   { type: integer, format: int32 }
+        detail:   { type: string }
+        instance: { type: string }
+        traceId:  { type: string }
+      additionalProperties: true
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        displayName: { type: string }
+        phone:       { type: string, nullable: true }
+      required: [displayName]
+
+    UserDto:
+      type: object
+      properties:
+        id:             { type: string, format: uuid }
+        email:          { type: string, format: email }
+        displayName:    { type: string }
+        phone:          { type: string, nullable: true }
+        isOwner:        { type: boolean }
+        isAdmin:        { type: boolean }
+        emailVerified:  { type: boolean }
+        createdAt:      { type: string, format: date-time }
+        lastLoginAt:    { type: string, format: date-time, nullable: true }
+      required: [id, email, displayName, isOwner, isAdmin, emailVerified, createdAt]
+
+  responses:
+    User:
+      description: User profile.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/UserDto' }
+    Problem401:
+      description: Unauthorized.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Problem403:
+      description: Forbidden.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Problem404:
+      description: Not found.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Problem409:
+      description: Conflict.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }

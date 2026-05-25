@@ -1,0 +1,59 @@
+{
+  "name": "vrbook-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Direct-Booking Vacation Rental Platform — Next.js 14 web app",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "gen:api": "openapi --input ../contracts/openapi.yaml --output ./src/lib/api/generated --client fetch --useOptions --useUnionTypes"
+  },
+  "dependencies": {
+    "@azure/msal-browser": "3.27.0",
+    "@azure/msal-react": "2.2.0",
+    "@tanstack/react-query": "5.62.0",
+    "clsx": "2.1.1",
+    "lucide-react": "0.460.0",
+    "next": "14.2.18",
+    "next-themes": "0.4.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-hook-form": "7.53.2",
+    "tailwind-merge": "2.5.4",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.0",
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.0.1",
+    "@testing-library/user-event": "14.5.2",
+    "@types/node": "20.17.6",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@typescript-eslint/eslint-plugin": "8.14.0",
+    "@typescript-eslint/parser": "8.14.0",
+    "@vitejs/plugin-react": "4.3.3",
+    "autoprefixer": "10.4.20",
+    "eslint": "8.57.1",
+    "eslint-config-next": "14.2.18",
+    "eslint-config-prettier": "9.1.0",
+    "jsdom": "25.0.1",
+    "openapi-typescript-codegen": "0.29.0",
+    "postcss": "8.4.49",
+    "prettier": "3.3.3",
+    "prettier-plugin-tailwindcss": "0.6.8",
+    "tailwindcss": "3.4.15",
+    "typescript": "5.5.4",
+    "vitest": "2.1.5"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

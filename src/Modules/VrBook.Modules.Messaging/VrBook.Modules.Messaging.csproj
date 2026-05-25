@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>VrBook.Modules.Messaging</RootNamespace>
+    <Description>
+      Messaging bounded context. Thread + Message aggregates, SignalR Serverless integration, attachments via Blob, offline-to-email handoff.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\VrBook.Domain\VrBook.Domain.csproj" />
+    <ProjectReference Include="..\..\VrBook.Application\VrBook.Application.csproj" />
+    <ProjectReference Include="..\..\VrBook.Infrastructure\VrBook.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\VrBook.Contracts\VrBook.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Mapster" />
+  </ItemGroup>
+
+</Project>

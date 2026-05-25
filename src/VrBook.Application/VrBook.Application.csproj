@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>VrBook.Application</RootNamespace>
+    <Description>
+      Cross-cutting application concerns: MediatR pipeline behaviors (validation, logging,
+      authorization, audit), shared DI extensions, common abstractions (IUnitOfWork,
+      ICurrentUser, IDateTimeProvider).
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VrBook.Domain\VrBook.Domain.csproj" />
+    <ProjectReference Include="..\VrBook.Contracts\VrBook.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="Mapster" />
+    <PackageReference Include="Serilog.AspNetCore" />
+  </ItemGroup>
+
+</Project>

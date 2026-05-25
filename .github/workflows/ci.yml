@@ -1,0 +1,343 @@
+# =============================================================================
+# ci.yml — Continuous Integration for VrBook
+# Triggered on every PR and push to main/develop.
+# Reference: BookingApp_Proposal.md §16.2 (CI), §18 (Testing), §23.2 (Versions).
+# =============================================================================
+name: ci
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+concurrency:
+  group: ${{ github.ref }}-ci
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: "8.0.x"
+  NODE_VERSION: "20"
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  # Image registry login server is derived from ACR_NAME at runtime: ${{ secrets.ACR_NAME }}.azurecr.io
+  SOLUTION: src/VrBook.sln
+  OPENAPI_SPEC: contracts/openapi.yaml
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # backend — restore, lint, build, unit tests, then integration tests against
+  # ephemeral postgres + redis service containers (not Testcontainers in CI;
+  # service containers are cheaper and more deterministic in hosted runners).
+  # ---------------------------------------------------------------------------
+  backend:
+    name: backend (.NET 8)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vrbook
+          POSTGRES_PASSWORD: vrbook
+          POSTGRES_DB: vrbook
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U vrbook"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Integration tests pick these up via Microsoft.Extensions.Configuration.
+      ConnectionStrings__Postgres: "Host=localhost;Port=5432;Database=vrbook;Username=vrbook;Password=vrbook"
+      ConnectionStrings__Redis: "localhost:6379"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history is required for the OpenAPI diff job to access main's blob.
+          fetch-depth: 0
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # Cache the NuGet HTTP cache. We hash every csproj + central package
+      # management file so cache invalidates only when dependencies change.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props', '**/global.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION }}
+
+      - name: Lint (dotnet format)
+        run: dotnet format ${{ env.SOLUTION }} --verify-no-changes --no-restore
+
+      - name: Build (Release)
+        run: dotnet build ${{ env.SOLUTION }} --no-restore --configuration Release
+
+      - name: Unit tests
+        run: |
+          dotnet test ${{ env.SOLUTION }} \
+            --no-build \
+            --configuration Release \
+            --filter "Category!=Integration" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --logger "trx;LogFileName=unit.trx"
+
+      - name: Integration tests
+        run: |
+          dotnet test ${{ env.SOLUTION }} \
+            --no-build \
+            --configuration Release \
+            --filter "Category=Integration" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --logger "trx;LogFileName=integration.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: ./TestResults
+          retention-days: 14
+
+      # Codecov upload is opt-in; only runs if the secret is configured.
+      - name: Upload coverage to Codecov
+        if: env.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v4
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          directory: ./TestResults
+          fail_ci_if_error: false
+
+  # ---------------------------------------------------------------------------
+  # contracts — OpenAPI diff vs. main and Spectral linting. Runs in parallel
+  # with backend; doesn't depend on .NET build output.
+  # ---------------------------------------------------------------------------
+  contracts:
+    name: contracts (OpenAPI)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # oasdiff is distributed as a single Go binary; pin to a tested release.
+      - name: Install oasdiff
+        run: |
+          OASDIFF_VERSION="1.10.25"
+          curl -fsSL "https://github.com/Tufin/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin oasdiff
+          oasdiff --version
+
+      # Extract main's copy of the spec to a temp file so oasdiff can compare.
+      # Tolerates first-ever push where main has no spec yet.
+      - name: Fetch main copy of OpenAPI spec
+        id: base_spec
+        run: |
+          mkdir -p .ci-tmp
+          if git cat-file -e "origin/main:${OPENAPI_SPEC}" 2>/dev/null; then
+            git show "origin/main:${OPENAPI_SPEC}" > .ci-tmp/openapi.main.yaml
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No baseline OpenAPI spec on main; skipping diff."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Decision: fail only on the breaking-change subset. Warn (don't fail)
+      # on additive changes by running the changelog separately for visibility.
+      - name: OpenAPI breaking-change check (fail on breaks)
+        if: steps.base_spec.outputs.exists == 'true' && hashFiles(env.OPENAPI_SPEC) != ''
+        run: |
+          oasdiff breaking \
+            --fail-on ERR \
+            --format githubactions \
+            .ci-tmp/openapi.main.yaml ${{ env.OPENAPI_SPEC }}
+
+      - name: OpenAPI changelog (informational)
+        if: steps.base_spec.outputs.exists == 'true' && hashFiles(env.OPENAPI_SPEC) != ''
+        continue-on-error: true
+        run: |
+          oasdiff changelog \
+            --format githubactions \
+            .ci-tmp/openapi.main.yaml ${{ env.OPENAPI_SPEC }}
+
+      - name: Spectral lint OpenAPI
+        if: hashFiles(env.OPENAPI_SPEC) != ''
+        run: |
+          npm install -g @stoplight/spectral-cli@6.13.1
+          spectral lint --fail-severity=warn ${{ env.OPENAPI_SPEC }}
+
+  # ---------------------------------------------------------------------------
+  # frontend — Next.js 14 / Node 20 (per §23.2). Independent job; runs in
+  # parallel with backend + contracts.
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: frontend (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint + typecheck
+        run: |
+          npm run lint
+          npm run typecheck
+
+      - name: Test (Vitest)
+        run: npm test -- --run
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: web/.next
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # images — build the .NET worker images in parallel via a matrix, plus the
+  # API + Web. Only runs on push to develop/main (PRs don't push to ACR).
+  # SBOM (syft) + vuln scan (trivy, fail on HIGH+) on every produced image.
+  # ---------------------------------------------------------------------------
+  images:
+    name: build & scan images
+    needs: [backend, contracts, frontend]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            dockerfile: src/VrBook.Api/Dockerfile
+            context: .
+          - name: migrator
+            dockerfile: src/VrBook.Migrator/Dockerfile
+            context: .
+          - name: sync-worker
+            dockerfile: src/Workers/VrBook.Workers.Sync/Dockerfile
+            context: .
+          - name: notification-worker
+            dockerfile: src/Workers/VrBook.Workers.Notifications/Dockerfile
+            context: .
+          - name: booking-worker
+            dockerfile: src/Workers/VrBook.Workers.Booking/Dockerfile
+            context: .
+          - name: web
+            dockerfile: web/Dockerfile
+            context: .
+    env:
+      IMAGE: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-${{ matrix.name }}:${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Azure login via OIDC — no client secret stored in GitHub.
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: ACR login
+        run: az acr login --name ${{ secrets.ACR_NAME }}
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          tags: ${{ env.IMAGE }}
+          # Don't push yet — scan first, then push if clean.
+          push: false
+          load: true
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max
+
+      # Decision: SBOM in SPDX JSON (industry standard for supply-chain tools).
+      - name: Generate SBOM (Syft)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE }}
+          format: spdx-json
+          artifact-name: sbom-${{ matrix.name }}.spdx.json
+          output-file: sbom-${{ matrix.name }}.spdx.json
+
+      # Decision: fail on HIGH or CRITICAL only. MEDIUM is reported but does
+      # not block; tightening to MEDIUM tends to require near-daily base-image
+      # rebuilds. We rely on Dependabot + weekly base image refresh instead.
+      - name: Vulnerability scan (Trivy)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: sarif
+          output: trivy-${{ matrix.name }}.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.name }}.sarif
+          category: trivy-${{ matrix.name }}
+
+      - name: Upload SBOM artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.name }}
+          path: sbom-${{ matrix.name }}.spdx.json
+          retention-days: 30
+
+      - name: Push image to ACR
+        run: docker push ${{ env.IMAGE }}

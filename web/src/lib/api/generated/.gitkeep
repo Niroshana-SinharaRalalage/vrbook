@@ -1,0 +1,3 @@
+# openapi-typescript-codegen output lands here.
+# Regenerate with: npm run gen:api
+# The contents of this directory are gitignored (see ../../../../.gitignore).

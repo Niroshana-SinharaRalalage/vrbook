@@ -1,0 +1,11 @@
+<Project>
+
+  <!-- All projects under /tests inherit /src/Directory.Build.props via this file -->
+  <Import Project="..\src\Directory.Build.props" />
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+</Project>
