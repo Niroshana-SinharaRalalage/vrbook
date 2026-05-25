@@ -124,3 +124,6 @@ src/VrBook.Contracts/Generated/
 
 # ---- Claude Code local cache ----
 .claude/
+
+# ---- Bootstrap script state (non-secret IDs, but team-private) ----
+infra/.state/
