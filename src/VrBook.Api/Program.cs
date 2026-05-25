@@ -1,5 +1,4 @@
 using Hellang.Middleware.ProblemDetails;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
 using VrBook.Api.Health;
@@ -12,6 +11,7 @@ using VrBook.Modules.Admin;
 using VrBook.Modules.Booking;
 using VrBook.Modules.Catalog;
 using VrBook.Modules.Identity;
+using VrBook.Modules.Identity.Infrastructure.Auth;
 using VrBook.Modules.Loyalty;
 using VrBook.Modules.Messaging;
 using VrBook.Modules.Notifications;
@@ -69,33 +69,11 @@ builder.Services
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerConfigured();
 
-// ---- AuthN / AuthZ (AD B2C bearer; tolerant in dev when not configured) ----
-var b2cAuthority = builder.Configuration["AzureAdB2C:Instance"];
-if (!string.IsNullOrWhiteSpace(b2cAuthority))
-{
-    builder.Services
-        .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-        .AddJwtBearer(opts =>
-        {
-            opts.Authority = b2cAuthority;
-            opts.Audience = builder.Configuration["AzureAdB2C:ClientId"];
-            opts.RequireHttpsMetadata = builder.Environment.IsProduction();
-        });
-}
-else
-{
-    // Dev: register a placeholder authentication scheme so [Authorize] still works
-    // (it just returns 401 since no token will validate). This avoids a crash when
-    // running against an unconfigured B2C tenant.
-    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-        .AddJwtBearer();
-}
-
-builder.Services.AddAuthorization(opts =>
-{
-    opts.AddPolicy("OwnerOrAdmin", p => p.RequireRole("Owner", "Admin"));
-    opts.AddPolicy("Admin", p => p.RequireRole("Admin"));
-});
+// ---- AuthN / AuthZ — owned by the Identity module (proposal §14). ----
+// Real AD B2C JWT bearer when AzureAdB2C:* is configured; falls through to the
+// synthetic DevAuth principal when DevAuth:AllowAnonymous=true. Authorization
+// policies (OwnerOrAdmin, Admin) registered inside.
+builder.Services.AddVrBookAuthentication(builder.Configuration);
 
 // ---- App + infra cores ----
 builder.Services.AddApplicationCore();
@@ -147,6 +125,7 @@ if (app.Environment.IsDevelopment() ||
 app.UseRouting();
 app.UseCors();
 app.UseAuthentication();
+app.UseIdentityModule();   // on-first-login provisioning — MUST run after UseAuthentication
 app.UseAuthorization();
 
 app.MapControllers();

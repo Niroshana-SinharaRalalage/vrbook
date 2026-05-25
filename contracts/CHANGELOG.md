@@ -11,6 +11,19 @@ Versioning: **independent semver** for the contract surface, distinct from the a
 
 ---
 
+## [0.2.0] — 2026-05-25
+
+### Changed (BREAKING for unreleased clients only)
+- `IBookingAvailabilityReader.GetDailyAvailabilityAsync`: parameter `from`/`to` renamed to `fromDate`/`toDate` (CA1716 fix — `to` collides with VB.NET keyword).
+- `IDomainEventPublisher.PublishAsync`: parameter `@event` → `domainEvent`, `events` → `domainEvents` (same reason).
+
+### Added
+- `/me`, `PUT /me`, `DELETE /me`, `GET /admin/users` are now real endpoints — wired to the Identity module's MediatR handlers. Same OpenAPI shape as v0.1 (which was stubbed at 501); contract surface unchanged.
+- `DevAuth:AllowAnonymous` configuration toggle — when true, every request authenticates as a synthetic "Dev Owner" so the API is reachable in local dev without a real B2C tenant. Disabled by default; meant for `Development` only.
+
+### Removed
+- Nothing removed — only behavior added behind existing endpoint shapes.
+
 ## [0.1.0] — 2026-01-15
 
 ### Added

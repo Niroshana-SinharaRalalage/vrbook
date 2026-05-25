@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
+using VrBook.Modules.Identity;
 
 // =================================================================================
 // VrBook.Migrator — one-shot console app run as a Container App Job before every
@@ -29,14 +30,11 @@ try
         .ReadFrom.Configuration(builder.Configuration)
         .Enrich.FromLogContext());
 
-    // TODO(modules): each module that owns a DbContext registers it here.
-    // The contract: the module exposes a static AddXxxDbContextForMigrator helper
-    // (separate from AddXxxModule so the migrator isn't pulling in MediatR / API services).
-    // Example once A2 ships:
-    //
-    //   builder.Services.AddCatalogDbContextForMigrator(builder.Configuration);
-    //
-    // For A0 this is a no-op — there are no DbContexts to migrate yet.
+    // Each module exposes a static AddXxxDbContextForMigrator helper (separate from
+    // AddXxxModule so the migrator isn't pulling in MediatR / API / middleware services).
+    builder.Services.AddIdentityDbContextForMigrator(builder.Configuration);
+    // TODO(A2): builder.Services.AddCatalogDbContextForMigrator(builder.Configuration);
+    // TODO(A3..): one per module-DbContext as they ship.
 
     using var host = builder.Build();
 

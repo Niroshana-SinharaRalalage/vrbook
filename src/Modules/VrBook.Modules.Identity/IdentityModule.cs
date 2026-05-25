@@ -1,26 +1,45 @@
+using MediatR;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using VrBook.Application.Common;
+using VrBook.Contracts.Interfaces;
+using VrBook.Modules.Identity.Application.Behaviors;
+using VrBook.Modules.Identity.Infrastructure.Auth;
+using VrBook.Modules.Identity.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Identity;
 
-/// <summary>
-/// Module bootstrap for the <c>Identity</c> bounded context. The Api host calls
-/// <c>services.AddIdentityModule(configuration)</c> from Program.cs. This A0 stub
-/// registers nothing meaningful — downstream agents replace it with the real
-/// implementation. See proposal §20.2 for the per-agent scope.
-/// </summary>
 public sealed class IdentityModule : IModuleRegistration
 {
     public string Name => "identity";
 
     public IServiceCollection AddModule(IServiceCollection services, IConfiguration configuration)
     {
-        // TODO(agent): register the module's DbContext, MediatR handlers, validators, and
-        // context-specific services. To pick up MediatR handlers + FluentValidation
-        // validators from this assembly, call:
-        //
-        //   services.AddModuleAssembly(typeof(IdentityModule).Assembly);
+        // DbContext — module owns its schema.
+        services.AddDbContext<IdentityDbContext>(opts =>
+            opts.UseNpgsql(
+                configuration.GetConnectionString("Postgres") ?? string.Empty,
+                npg => npg.MigrationsHistoryTable("__ef_migrations_history", IdentityDbContext.SchemaName)));
+
+        services.AddScoped<IUserRepository, UserRepository>();
+
+        // The DbContext doubles as the module's IUnitOfWork.
+        services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<IdentityDbContext>());
+
+        // Replace the AnonymousCurrentUser stub from A0 with the HTTP-aware reader.
+        services.AddHttpContextAccessor();
+        services.Replace(ServiceDescriptor.Scoped<ICurrentUser, HttpCurrentUser>());
+
+        // MediatR handlers + FluentValidation validators (assembly scan).
+        services.AddModuleAssembly(typeof(IdentityModule).Assembly);
+
+        // Audit pipeline behavior — registered AFTER cross-cutting behaviors from
+        // Application.Common so it doesn't audit invalid requests.
+        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(AuditLogBehavior<,>));
+
         return services;
     }
 }
@@ -30,4 +49,28 @@ public static class IdentityModuleRegistration
     public static IServiceCollection AddIdentityModule(
         this IServiceCollection services, IConfiguration configuration) =>
         new IdentityModule().AddModule(services, configuration);
+
+    /// <summary>
+    /// Variant used by VrBook.Migrator. Registers only what's needed to apply migrations.
+    /// </summary>
+    public static IServiceCollection AddIdentityDbContextForMigrator(
+        this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddDbContext<IdentityDbContext>(opts =>
+            opts.UseNpgsql(
+                configuration.GetConnectionString("Postgres") ?? string.Empty,
+                npg => npg.MigrationsHistoryTable("__ef_migrations_history", IdentityDbContext.SchemaName)));
+        services.AddScoped<DbContext>(sp => sp.GetRequiredService<IdentityDbContext>());
+
+        // Migrator never serves requests, but BaseDbContext requires these dependencies.
+        services.AddSingleton<IDateTimeProvider, VrBook.Infrastructure.Common.SystemClock>();
+        services.AddSingleton<ICurrentUser, VrBook.Infrastructure.Common.AnonymousCurrentUser>();
+        return services;
+    }
+
+    /// <summary>
+    /// Map Identity-owned middleware. MUST run AFTER UseAuthentication().
+    /// </summary>
+    public static IApplicationBuilder UseIdentityModule(this IApplicationBuilder app) =>
+        app.UseMiddleware<UserProvisioningMiddleware>();
 }

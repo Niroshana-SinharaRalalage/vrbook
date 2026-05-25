@@ -1,6 +1,13 @@
 # Azure AD B2C — Tenant Configuration
 
-> Status: A0 documentation stub. Owner: A1 (Identity) — replaces with real exports after the dev tenant is created.
+> Status: A1 — see [`setup.md`](./setup.md) for the step-by-step provisioning runbook.
+> Owner: A1 (Identity).
+
+## Quick links
+
+- [**setup.md**](./setup.md) — full setup runbook with `az` CLI commands. Run once per env.
+- [API auth wiring](../../src/Modules/VrBook.Modules.Identity/Infrastructure/Auth/AuthExtensions.cs)
+- [Dev-only synthetic principal](../../src/Modules/VrBook.Modules.Identity/Infrastructure/Auth/DevAuthHandler.cs) (`DevAuth:AllowAnonymous=true`)
 
 ## Tenants
 

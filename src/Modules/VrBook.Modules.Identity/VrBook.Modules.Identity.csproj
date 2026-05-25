@@ -15,11 +15,20 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Identity module hosts middleware + auth wiring, so it needs the ASP.NET Core
+         framework reference. Other modules (Catalog, Booking, …) do NOT need this. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="MediatR" />
     <PackageReference Include="FluentValidation" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <!-- Microsoft.EntityFrameworkCore.Design lives on VrBook.Migrator only — it brings
+         in Roslyn deps that conflict with WireMock.Net in the integration test project. -->
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Mapster" />
   </ItemGroup>
 

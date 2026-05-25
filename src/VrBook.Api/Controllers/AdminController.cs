@@ -1,8 +1,10 @@
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
+using VrBook.Modules.Identity.Application.Users.Queries;
 
 namespace VrBook.Api.Controllers;
 
@@ -10,13 +12,17 @@ namespace VrBook.Api.Controllers;
 [Route("api/v1/admin/users")]
 [Tags("Admin — Users")]
 [Authorize(Roles = "Owner,Admin")]
-public sealed class AdminUsersController : StubController
+public sealed class AdminUsersController(IMediator mediator) : ControllerBase
 {
     [HttpGet]
-    [SwaggerOperation(Summary = "Search guests.")]
+    [SwaggerOperation(Summary = "Search guests by display name or email.")]
     [ProducesResponseType(typeof(OffsetPagedResult<UserDto>), StatusCodes.Status200OK)]
-    public IActionResult Search([FromQuery] string? q, [FromQuery] int page = 1, [FromQuery] int size = 20) =>
-        NotImplementedYet("A1");
+    public async Task<ActionResult<OffsetPagedResult<UserDto>>> Search(
+        [FromQuery] string? q,
+        [FromQuery] int page = 1,
+        [FromQuery] int size = 20,
+        CancellationToken ct = default) =>
+        Ok(await mediator.Send(new SearchUsersQuery(q, page, size), ct));
 }
 
 [Route("api/v1/admin/reports")]
