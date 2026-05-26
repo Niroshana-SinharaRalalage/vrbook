@@ -40,14 +40,18 @@ jobs:
       - run: echo "CI run ${{ github.event.workflow_run.id }} succeeded for sha ${{ env.IMAGE_TAG }}."
 
   # ---------------------------------------------------------------------------
-  # infra — Bicep what-if for visibility, then apply. Subscription-scope
-  # deployment because the template creates the RG (per §15.3).
+  # infra — Bicep what-if for visibility, then apply. RG-scoped deployment
+  # (targetScope = 'resourceGroup' in main.bicep). The RG must exist already;
+  # provisioned by the one-time bootstrap (infra/scripts/00-foundation.ps1
+  # or Claude SP setup via infra/scripts/CLAUDE-ACCESS.md).
   # ---------------------------------------------------------------------------
   infra:
     name: infra (Bicep)
     needs: gate
     runs-on: ubuntu-latest
     environment: staging
+    env:
+      RESOURCE_GROUP: rg-vrbook-staging
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -63,15 +67,15 @@ jobs:
 
       - name: Bicep what-if
         run: |
-          az deployment sub what-if \
-            -l ${{ env.AZURE_LOCATION }} \
+          az deployment group what-if \
+            -g $RESOURCE_GROUP \
             -f ${{ env.BICEP_TEMPLATE }} \
             -p ${{ env.BICEP_PARAMS }}
 
       - name: Bicep deploy
         run: |
-          az deployment sub create \
-            -l ${{ env.AZURE_LOCATION }} \
+          az deployment group create \
+            -g $RESOURCE_GROUP \
             -f ${{ env.BICEP_TEMPLATE }} \
             -p ${{ env.BICEP_PARAMS }}
 

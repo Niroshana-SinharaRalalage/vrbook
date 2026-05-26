@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Bootstrap your own B2C account with isOwner=true + isAdmin=true so that the
     [Authorize(Roles="Owner,Admin")] guarded endpoints work for you. One-time per env.

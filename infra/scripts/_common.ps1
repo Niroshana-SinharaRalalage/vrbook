@@ -1,4 +1,4 @@
-# =====================================================================================
+﻿# =====================================================================================
 # Common helpers for VrBook bootstrap scripts. Sourced by 00..30-*.ps1.
 # =====================================================================================
 
@@ -40,15 +40,15 @@ function Get-ResourceNames {
 function Write-Step {
     param([string]$Message)
     Write-Host ''
-    Write-Host '═══════════════════════════════════════════════════════════════════════════' -ForegroundColor Cyan
+    Write-Host '===========================================================================' -ForegroundColor Cyan
     Write-Host "  $Message" -ForegroundColor Cyan
-    Write-Host '═══════════════════════════════════════════════════════════════════════════' -ForegroundColor Cyan
+    Write-Host '===========================================================================' -ForegroundColor Cyan
 }
 
-function Write-Ok    { param([string]$Message) Write-Host "  ✓ $Message" -ForegroundColor Green }
-function Write-Skip  { param([string]$Message) Write-Host "  ◌ $Message" -ForegroundColor Gray }
-function Write-Warn2 { param([string]$Message) Write-Host "  ⚠ $Message" -ForegroundColor Yellow }
-function Write-Fail  { param([string]$Message) Write-Host "  ✗ $Message" -ForegroundColor Red }
+function Write-Ok    { param([string]$Message) Write-Host "  [OK] $Message" -ForegroundColor Green }
+function Write-Skip  { param([string]$Message) Write-Host "  [-] $Message" -ForegroundColor Gray }
+function Write-Warn2 { param([string]$Message) Write-Host "  [!] $Message" -ForegroundColor Yellow }
+function Write-Fail  { param([string]$Message) Write-Host "  [X] $Message" -ForegroundColor Red }
 
 function Assert-AzCli {
     $v = az --version 2>$null | Select-String '^azure-cli'

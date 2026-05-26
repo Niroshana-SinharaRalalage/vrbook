@@ -1,7 +1,7 @@
-<#
+﻿<#
 .SYNOPSIS
     Create the foundational Azure resources for a VrBook environment: Resource Group,
-    Key Vault, User-Assigned Managed Identity. Idempotent — safe to re-run.
+    Key Vault, User-Assigned Managed Identity. Idempotent -- safe to re-run.
 
 .PARAMETER Env
     Target environment. One of dev | staging | prod.
@@ -35,7 +35,7 @@ if (-not $Location)       { $Location = $Script:DefaultLocation }
 
 $names = Get-ResourceNames -Env $Env
 
-Write-Step "VrBook Foundation — $Env"
+Write-Step "VrBook Foundation -- $Env"
 Assert-AzCli
 Assert-AzLogin -TenantId $TenantId -SubscriptionId $SubscriptionId
 
@@ -91,7 +91,7 @@ $hasAdmin = az role assignment list --assignee $me --scope $kvScope --role "Key 
 if ($hasAdmin.Count -eq 0) {
     az role assignment create --assignee-object-id $me --assignee-principal-type User `
         --role "Key Vault Administrator" --scope $kvScope | Out-Null
-    Write-Ok "Granted yourself 'Key Vault Administrator' on $($names.KeyVault) — wait 30s for propagation"
+    Write-Ok "Granted yourself 'Key Vault Administrator' on $($names.KeyVault) -- wait 30s for propagation"
     Start-Sleep -Seconds 30
 } else {
     Write-Skip "You already have 'Key Vault Administrator' on this vault"

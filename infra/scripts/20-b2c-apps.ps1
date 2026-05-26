@@ -1,8 +1,8 @@
-<#
+﻿<#
 .SYNOPSIS
     Provision the two AD B2C app registrations (vrbook-api, vrbook-web) and the
     isOwner/isAdmin extension attributes. Assumes the B2C tenant already exists
-    (created via Azure portal per docs/b2c/setup.md §1) — Microsoft does NOT expose
+    (created via Azure portal per docs/b2c/setup.md §1) -- Microsoft does NOT expose
     tenant creation via CLI as of 2026-05.
 
 .PARAMETER Env
@@ -36,7 +36,7 @@ if (-not $state.keyVaultName) {
     throw "No state file for env=$Env. Run 00-foundation.ps1 first."
 }
 
-Write-Step "VrBook B2C App Registrations — $Env ($B2CDomain)"
+Write-Step "VrBook B2C App Registrations -- $Env ($B2CDomain)"
 Write-Warn2 "Signing into the B2C tenant (separate from your work tenant)..."
 Write-Host "    A browser window will open. Use a Global Admin in $B2CDomain."
 

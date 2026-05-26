@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Configure GitHub Actions OIDC federation against the User-Assigned Managed Identity
     created by 00-foundation.ps1. Lets cd-staging.yml / cd-prod.yml deploy to Azure
@@ -44,7 +44,7 @@ if (-not $state.uamiName) {
     throw "No UAMI in state file for env=$Env. Run 00-foundation.ps1 first."
 }
 
-Write-Step "GitHub OIDC federation — $Env (uami: $($state.uamiName))"
+Write-Step "GitHub OIDC federation -- $Env (uami: $($state.uamiName))"
 Assert-AzLogin -TenantId $state.tenantId -SubscriptionId $state.subscriptionId
 
 # ---- 1. Branch-based federated credential (for push-triggered workflows) ----

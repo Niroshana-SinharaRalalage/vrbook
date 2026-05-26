@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Loads Claude-only service principal credentials from .azure-claude/creds.json and
     logs in with az CLI. Dot-source before any az command. Isolated from your interactive

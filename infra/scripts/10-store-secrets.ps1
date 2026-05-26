@@ -1,8 +1,8 @@
-<#
+﻿<#
 .SYNOPSIS
     Populate Key Vault with secrets the VrBook stack needs. Auto-generates random
     secrets where applicable; prompts for external provider secrets (Stripe, SendGrid).
-    Idempotent — re-running updates existing secret values to a new version.
+    Idempotent -- re-running updates existing secret values to a new version.
 
 .PARAMETER Env
     Target environment. One of dev | staging | prod.
@@ -28,7 +28,7 @@ if (-not $state.keyVaultName) {
 }
 $kv = $state.keyVaultName
 
-Write-Step "VrBook Secrets — $Env (vault: $kv)"
+Write-Step "VrBook Secrets -- $Env (vault: $kv)"
 
 function Set-KvSecret {
     param([string]$Name, [string]$Value, [string]$Description, [switch]$Overwrite)
@@ -76,21 +76,21 @@ Set-KvSecret -Name 'appi-cs' -Value 'pending-bicep-deploy' `
     -Description 'Application Insights connection string. Overwritten by Bicep post-deploy.'
 
 # ---- Prompted external secrets ----
-Write-Step "External providers — enter values now (press Enter to skip & set later)"
+Write-Step "External providers -- enter values now (press Enter to skip & set later)"
 
-$stripeSecret = Read-SecretPrompt -Label 'Stripe — secret key' -Hint 'sk_test_… from https://dashboard.stripe.com/test/apikeys'
+$stripeSecret = Read-SecretPrompt -Label 'Stripe -- secret key' -Hint 'sk_test_... from https://dashboard.stripe.com/test/apikeys'
 if ($stripeSecret) {
     Set-KvSecret -Name 'stripe-secret' -Value $stripeSecret `
         -Description 'Stripe API secret key. Test mode for dev/staging; live for prod.' -Overwrite
 }
 
-$stripeWebhook = Read-SecretPrompt -Label 'Stripe — webhook signing secret' -Hint 'whsec_… from the webhook endpoint settings page'
+$stripeWebhook = Read-SecretPrompt -Label 'Stripe -- webhook signing secret' -Hint 'whsec_... from the webhook endpoint settings page'
 if ($stripeWebhook) {
     Set-KvSecret -Name 'stripe-webhook-secret' -Value $stripeWebhook `
         -Description 'Stripe webhook signature verification secret. See proposal §9.7.' -Overwrite
 }
 
-$sendgrid = Read-SecretPrompt -Label 'SendGrid — API key (or skip if going Azure Communication Services per LankaConnect)' `
+$sendgrid = Read-SecretPrompt -Label 'SendGrid -- API key (or skip if going Azure Communication Services per LankaConnect)' `
     -Hint 'SG.xxxxxxxxxxxxxxxx from https://app.sendgrid.com/settings/api_keys'
 if ($sendgrid) {
     Set-KvSecret -Name 'sendgrid-key' -Value $sendgrid `
@@ -98,7 +98,7 @@ if ($sendgrid) {
 }
 
 # ---- Optional: AD B2C client secret (only needed for confidential-client flows) ----
-$b2cClient = Read-SecretPrompt -Label 'AD B2C — vrbook-api client secret (only if you created one)' `
+$b2cClient = Read-SecretPrompt -Label 'AD B2C -- vrbook-api client secret (only if you created one)' `
     -Hint 'leave blank unless 20-b2c-apps.ps1 told you to set one'
 if ($b2cClient) {
     Set-KvSecret -Name 'b2c-api-client-secret' -Value $b2cClient `
