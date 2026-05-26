@@ -11,6 +11,34 @@ Versioning: **independent semver** for the contract surface, distinct from the a
 
 ---
 
+## [0.3.0] — 2026-05-26
+
+### Changed (BREAKING for unreleased clients only)
+- Identity provider switched from Azure AD B2C to **Microsoft Entra External ID**
+  ([ADR-0012](../docs/adr/0012-entra-external-id-over-b2c.md) supersedes proposal §14).
+  Configuration keys renamed:
+  - `AzureAdB2C__Instance` → `EntraExternalId__Instance`
+  - `AzureAdB2C__TenantId` → `EntraExternalId__TenantId`
+  - `AzureAdB2C__ClientId` → `EntraExternalId__ClientId`
+  - `AzureAdB2C__Domain`, `AzureAdB2C__SignUpSignInPolicyId` — **removed** (Entra External ID has no policy id concept).
+  - `NEXT_PUBLIC_B2C_AUTHORITY` → `NEXT_PUBLIC_ENTRA_AUTHORITY`
+  - `NEXT_PUBLIC_B2C_CLIENT_ID` → `NEXT_PUBLIC_ENTRA_CLIENT_ID`
+- Email provider switched from SendGrid to **Azure Communication Services**
+  ([ADR-0011](../docs/adr/0011-azure-communication-services-email.md) supersedes ADR-0004).
+  Configuration keys renamed:
+  - `SendGrid__ApiKey` → `Acs__ConnectionString`
+  - `SendGrid__FromAddress` → `Acs__SenderAddress`
+
+### Why these are minor breaking
+DTOs, events, endpoint shapes, and the `INotificationSender` interface are unchanged.
+The only consumers of the renamed config keys are the Api host + Migrator + Workers — all
+internal. No external contract surface (OpenAPI, public events) is affected.
+
+### Migration
+- `.env`: rename keys per above. Local dev: copy from `.env.example`.
+- KV: re-seed under new secret names (`entra-instance`, `entra-tenant-id`,
+  `entra-api-client-id`, `entra-web-client-id`, `acs-connection-string`).
+
 ## [0.2.0] — 2026-05-25
 
 ### Changed (BREAKING for unreleased clients only)

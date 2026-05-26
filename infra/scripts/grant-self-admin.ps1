@@ -1,54 +1,66 @@
-﻿<#
+<#
 .SYNOPSIS
-    Bootstrap your own B2C account with isOwner=true + isAdmin=true so that the
+    Bootstrap your own Entra External ID account with isOwner=true + isAdmin=true so
     [Authorize(Roles="Owner,Admin")] guarded endpoints work for you. One-time per env.
-    Sign up at the SignUpSignIn_v1 flow FIRST, then run this.
+    Sign up via the External tenant's user flow FIRST, then run this.
+
+    Per ADR-0012, identity is Microsoft Entra External ID (replaced AD B2C).
 
 .PARAMETER Env
-    The environment whose B2C tenant to write to. dev | staging | prod.
+    Which environment's External tenant to write to. dev | staging | prod.
 
 .PARAMETER UserEmail
     The email you signed up with.
 
+.PARAMETER ExternalTenant
+    The External tenant domain (e.g. vrbookcid.onmicrosoft.com). If not provided,
+    reads from infra/.state/<env>.json (key: entraTenantDomain).
+
+.PARAMETER ApiAppId
+    The vrbook-api app registration's appId in the External tenant. If not provided,
+    reads from infra/.state/<env>.json (key: entraApiAppId).
+
 .EXAMPLE
-    .\grant-self-admin.ps1 -Env dev -UserEmail you@example.com
+    .\grant-self-admin.ps1 -Env staging -UserEmail you@example.com
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][ValidateSet('dev','staging','prod')][string]$Env,
-    [Parameter(Mandatory=$true)][string]$UserEmail
+    [Parameter(Mandatory=$true)][string]$UserEmail,
+    [string]$ExternalTenant,
+    [string]$ApiAppId
 )
 
-$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '_common.ps1')
 
 $state = Read-State -Env $Env
-if (-not $state.b2cDomain -or -not $state.b2cApiAppId) {
-    throw "B2C state for env=$Env not found. Run 20-b2c-apps.ps1 first."
+if (-not $ExternalTenant) { $ExternalTenant = $state.entraTenantDomain }
+if (-not $ApiAppId)       { $ApiAppId       = $state.entraApiAppId }
+
+if (-not $ExternalTenant -or -not $ApiAppId) {
+    throw "ExternalTenant + ApiAppId required (either as params or in infra/.state/$Env.json keys entraTenantDomain + entraApiAppId). Run docs/identity/setup.md §1-4 first."
 }
 
-Write-Step "Granting $UserEmail isOwner + isAdmin on $($state.b2cDomain)"
-az login --tenant $state.b2cDomain --allow-no-subscriptions | Out-Null
+Write-Step "Granting $UserEmail isOwner + isAdmin on $ExternalTenant"
+az login --tenant $ExternalTenant --allow-no-subscriptions | Out-Null
 
-# Find the user's object id. B2C local-account email sign-ins are stored as
-# `identities` with signInType=emailAddress, so we need a Graph query.
+# Try identities first (local accounts), fall back to mail (federated accounts).
 $users = az rest --method GET `
-    --uri "https://graph.microsoft.com/v1.0/users?`$filter=identities/any(c:c/issuerAssignedId eq '$UserEmail' and c/issuer eq '$($state.b2cDomain)')" `
+    --uri "https://graph.microsoft.com/v1.0/users?`$filter=identities/any(c:c/issuerAssignedId eq '$UserEmail' and c/issuer eq '$ExternalTenant')" `
     -o json | ConvertFrom-Json
 
-if ($users.value.Count -eq 0) {
-    # Fall back to mail attribute (social sign-ins land here).
+if (-not $users.value -or $users.value.Count -eq 0) {
     $users = az rest --method GET --uri "https://graph.microsoft.com/v1.0/users?`$filter=mail eq '$UserEmail'" -o json | ConvertFrom-Json
 }
 
-if ($users.value.Count -eq 0) {
-    throw "No B2C user found with email '$UserEmail'. Sign up via the SignUpSignIn_v1 user flow first."
+if (-not $users.value -or $users.value.Count -eq 0) {
+    throw "No Entra user found with email '$UserEmail'. Sign up via the SignUpAndSignIn user flow first."
 }
 
 $user = $users.value[0]
 Write-Ok "Found user $($user.id) ($($user.displayName))"
 
-$apiAppIdNoDashes = $state.b2cApiAppId.Replace('-', '')
+$apiAppIdNoDashes = $ApiAppId.Replace('-', '')
 $ownerProp = "extension_${apiAppIdNoDashes}_isOwner"
 $adminProp = "extension_${apiAppIdNoDashes}_isAdmin"
 
