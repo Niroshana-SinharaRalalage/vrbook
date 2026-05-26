@@ -127,3 +127,6 @@ src/VrBook.Contracts/Generated/
 
 # ---- Bootstrap script state (non-secret IDs, but team-private) ----
 infra/.state/
+
+# ---- Claude's Azure credentials (SP client secret) ----
+.azure-claude/
