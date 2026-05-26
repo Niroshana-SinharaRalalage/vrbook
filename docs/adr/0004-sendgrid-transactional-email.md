@@ -1,9 +1,13 @@
 # 4. SendGrid for Transactional Email
 
-- Status: Accepted
+- Status: **Superseded by [ADR-0011](./0011-azure-communication-services-email.md)** (2026-05-26)
 - Date: 2026-01-15
 - Deciders: Solutions Architecture
 - Tags: notifications, email, third-party, deliverability
+
+> **Update 2026-05-26:** Decision reversed. The client already runs another product (LankaConnect) on Azure Communication Services Email; standardizing on ACS removes a vendor, lets Phase 1 reuse operational knowledge, and keeps billing inside the Azure subscription. The `INotificationSender` abstraction in `VrBook.Contracts.Interfaces` is provider-agnostic, so the swap is an A9 implementation choice — no contract changes. See [ADR-0011](./0011-azure-communication-services-email.md) for the rationale, trade-offs, and migration impact.
+>
+> The analysis below remains valuable as a snapshot of why SendGrid was originally chosen and what we give up by switching. SES/Postmark/Mailgun stay valid fallbacks if ACS deliverability disappoints in production.
 
 ## Context and Problem Statement
 

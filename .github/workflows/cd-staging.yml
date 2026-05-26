@@ -65,19 +65,30 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      # main.bicep's pgAdminPassword is @secure() — fetch from the bootstrap KV at deploy time.
+      # The KV was provisioned out-of-band by infra/scripts/00-foundation.ps1 (or Claude's SP setup).
+      - name: Fetch secrets from Key Vault
+        id: secrets
+        run: |
+          PG_PWD=$(az keyvault secret show --vault-name kv-vrbook-staging --name postgres-admin-password --query value -o tsv)
+          echo "::add-mask::$PG_PWD"
+          echo "pg_admin_password=$PG_PWD" >> $GITHUB_OUTPUT
+
       - name: Bicep what-if
         run: |
           az deployment group what-if \
             -g $RESOURCE_GROUP \
             -f ${{ env.BICEP_TEMPLATE }} \
-            -p ${{ env.BICEP_PARAMS }}
+            -p ${{ env.BICEP_PARAMS }} \
+            -p pgAdminPassword='${{ steps.secrets.outputs.pg_admin_password }}'
 
       - name: Bicep deploy
         run: |
           az deployment group create \
             -g $RESOURCE_GROUP \
             -f ${{ env.BICEP_TEMPLATE }} \
-            -p ${{ env.BICEP_PARAMS }}
+            -p ${{ env.BICEP_PARAMS }} \
+            -p pgAdminPassword='${{ steps.secrets.outputs.pg_admin_password }}'
 
   # ---------------------------------------------------------------------------
   # migrate — invoke the Migrator Container App Job and wait. §16.3 mandates
