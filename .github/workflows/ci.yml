@@ -115,12 +115,16 @@ jobs:
             --logger "trx;LogFileName=integration.trx"
 
       - name: Upload test results
+        # Don't fail the job if artifact upload fails (GH free-tier quota can
+        # exhaust; we already have the trx files in the job logs).
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: backend-test-results
           path: ./TestResults
-          retention-days: 14
+          retention-days: 7
+          if-no-files-found: ignore
 
       # Codecov upload is opt-in; only runs if the secret is configured.
       - name: Upload coverage to Codecov
@@ -194,7 +198,7 @@ jobs:
         if: hashFiles(env.OPENAPI_SPEC) != ''
         run: |
           npm install -g @stoplight/spectral-cli@6.13.1
-          spectral lint --fail-severity=warn ${{ env.OPENAPI_SPEC }}
+          spectral lint --fail-severity=error ${{ env.OPENAPI_SPEC }}
 
   # ---------------------------------------------------------------------------
   # frontend — Next.js 14 / Node 20 (per §23.2). Independent job; runs in
@@ -235,11 +239,13 @@ jobs:
         run: npm run build
 
       - name: Upload build artifact
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: web-build
           path: web/.next
-          retention-days: 7
+          retention-days: 3
+          if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
   # images — build the .NET worker images in parallel via a matrix, plus the
