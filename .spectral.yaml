@@ -1,0 +1,35 @@
+# Spectral ruleset for VrBook's OpenAPI 3 spec.
+# Inherits Stoplight's official OAS ruleset, with a few rules relaxed for our
+# v0.1 / scaffold-era spec. Tighten as the surface stabilizes.
+
+extends: ["spectral:oas"]
+
+rules:
+  # Operation summaries are nice-to-have at v0.1 — many of our stubbed endpoints
+  # rely on the tag + path to convey intent. Relax to warn.
+  operation-description: warn
+  operation-summary: warn
+  operation-operationId: warn
+  operation-operationId-unique: error
+
+  # We document responses on the success path; error envelopes are documented
+  # globally via the Problem schema. Don't require per-operation error responses
+  # until A1+ formally classifies them.
+  operation-4xx-response: off
+  operation-success-response: warn
+
+  # The Problem schema references a $ref but Spectral's default rule wants
+  # examples for every response. Examples come with each module's implementation.
+  oas3-valid-media-example: warn
+  oas3-valid-schema-example: warn
+
+  # Information document — we have title, version, contact. License is intentionally
+  # absent (proprietary; License field would mislead).
+  info-license: off
+  license-url: off
+
+  # Tag declaration — we declare tags inline on operations + at root level. Spectral's
+  # tag-description rule is overzealous in v0.1.
+  openapi-tags: off
+  openapi-tags-uniqueness: error
+  operation-tag-defined: warn

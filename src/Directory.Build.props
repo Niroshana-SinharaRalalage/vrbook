@@ -18,7 +18,12 @@
         RCS1194 — exception ctors restricted on purpose; framework-style 4-ctor pattern is obsolete (BinarySerialization).
         S4035   — IEquatable<T> on an unsealed base class is the established Clean-Architecture ValueObject pattern.
     -->
-    <NoWarn>$(NoWarn);CS1591;CA1000;CA1305;CA1707;CA1716;CA1848;CA1861;RCS1194;S125;S1118;S1135;S2139;S3267;S3903;S4035;S6966</NoWarn>
+    <NoWarn>$(NoWarn);CS1591;CA1000;CA1305;CA1707;CA1716;CA1848;CA1861;CA1873;RCS1194;S125;S1118;S1135;S2139;S3267;S3903;S4035;S6966</NoWarn>
+    <!--
+      CA1873 — "Evaluation of this argument may be expensive". The pipeline behaviors'
+               structured-log calls are exactly the right pattern (no LoggerMessage delegate
+               needed; not hot path). Same rationale as CA1848.
+    -->
     <!--
       Additional rationale (continued):
         CA1305 — IFormatProvider on third-party API calls (e.g., Serilog Console sink); not our surface.
