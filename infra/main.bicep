@@ -188,7 +188,16 @@ module mi 'modules/managed-identity.bicep' = {
 }
 
 // ---------- Container Apps Environment ----------
-// Pull the LA shared key inline via listKeys().
+// Reference the Log Analytics workspace via `existing` so listKeys() can resolve at
+// deploy-prep time (the name pattern is computable at compile time because `env` is
+// a param). dependsOn keeps ordering with the deploying module.
+resource lawExisting 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
+  name: 'law-vrbook-${env}'
+  dependsOn: [
+    law
+  ]
+}
+
 module cae 'modules/container-apps-env.bicep' = {
   name: 'cae'
   params: {
@@ -197,7 +206,7 @@ module cae 'modules/container-apps-env.bicep' = {
     tags: tags
     infrastructureSubnetId: net.outputs.appsSubnetId
     logAnalyticsCustomerId: law.outputs.customerId
-    logAnalyticsSharedKey: listKeys(law.outputs.id, '2023-09-01').primarySharedKey
+    logAnalyticsSharedKey: lawExisting.listKeys().primarySharedKey
     includeDedicatedProfile: dedicatedProfileEnabled
   }
 }
@@ -213,8 +222,17 @@ var apiEnvVars = [
   { name: 'SignalR__ConnectionString', secretRef: 'signalr-cs' }
   { name: 'Stripe__SecretKey', secretRef: 'stripe-secret' }
   { name: 'Stripe__WebhookSecret', secretRef: 'stripe-webhook-secret' }
-  { name: 'SendGrid__ApiKey', secretRef: 'sendgrid-key' }
-  { name: 'SendGrid__FromAddress', value: 'bookings@vrbook.example.com' }
+  // Email — Azure Communication Services (ADR-0011 supersedes SendGrid).
+  // Connection string is seeded out-of-band into KV (or provisioned by a future
+  // acs-email.bicep module). A9 reads Acs__* in lieu of SendGrid__*.
+  { name: 'Acs__ConnectionString', secretRef: 'acs-connection-string' }
+  { name: 'Acs__SenderAddress', value: 'donotreply@vrbook.example.com' }
+  // Identity — Microsoft Entra External ID (ADR-0012 supersedes AD B2C).
+  { name: 'EntraExternalId__Instance', secretRef: 'entra-instance' }
+  { name: 'EntraExternalId__TenantId', secretRef: 'entra-tenant-id' }
+  { name: 'EntraExternalId__ClientId', secretRef: 'entra-api-client-id' }
+  // DevAuth disabled in non-dev environments by default — enable per-env via env var.
+  { name: 'DevAuth__AllowAnonymous', value: env == 'dev' ? 'true' : 'false' }
   { name: 'Blob__AccountUrl', value: storage.outputs.blobEndpoint }
   { name: 'Blob__PropertyImagesContainer', value: 'property-images' }
   { name: 'Blob__MessageAttachmentsContainer', value: 'message-attachments' }
@@ -237,7 +255,10 @@ var apiSecrets = [
   { name: 'signalr-cs', keyVaultSecretName: 'signalr-cs' }
   { name: 'stripe-secret', keyVaultSecretName: 'stripe-secret' }
   { name: 'stripe-webhook-secret', keyVaultSecretName: 'stripe-webhook-secret' }
-  { name: 'sendgrid-key', keyVaultSecretName: 'sendgrid-key' }
+  { name: 'acs-connection-string', keyVaultSecretName: 'acs-connection-string' }
+  { name: 'entra-instance', keyVaultSecretName: 'entra-instance' }
+  { name: 'entra-tenant-id', keyVaultSecretName: 'entra-tenant-id' }
+  { name: 'entra-api-client-id', keyVaultSecretName: 'entra-api-client-id' }
   { name: 'feed-pepper', keyVaultSecretName: 'feed-pepper' }
   { name: 'appi-cs', keyVaultSecretName: 'appi-cs' }
 ]
