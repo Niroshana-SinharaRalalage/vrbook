@@ -36,17 +36,23 @@ public static class AuthExtensions
             !string.IsNullOrWhiteSpace(entraTenantId) &&
             !string.IsNullOrWhiteSpace(entraClientId))
         {
-            var authority = $"{entraInstance.TrimEnd('/')}/{entraTenantId}/v2.0";
+            // Authority for OIDC discovery — the friendly-subdomain URL works for the
+            // discovery doc fetch, but the issuer Entra actually stamps in tokens is
+            // https://{tenantId}.ciamlogin.com/{tenantId}/v2.0 (tenant id in the host,
+            // verified empirically against the OIDC discovery endpoint). We list both
+            // forms in ValidIssuers and let JwtBearer match whichever shows up.
+            var discoveryAuthority = $"{entraInstance.TrimEnd('/')}/{entraTenantId}/v2.0";
+            var actualIssuer = $"https://{entraTenantId}.ciamlogin.com/{entraTenantId}/v2.0";
 
             auth.AddJwtBearer(opts =>
             {
-                opts.Authority = authority;
+                opts.Authority = discoveryAuthority;
                 opts.Audience = entraClientId;
                 opts.RequireHttpsMetadata = true;
                 opts.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
-                    ValidIssuer = authority,
+                    ValidIssuers = new[] { discoveryAuthority, actualIssuer },
                     ValidateAudience = true,
                     ValidAudience = entraClientId,
                     ValidateLifetime = true,
