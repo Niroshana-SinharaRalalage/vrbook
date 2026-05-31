@@ -30,10 +30,10 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS runtime
 WORKDIR /app
 
 # Run as non-root.
-RUN addgroup -S app && adduser -S app -G app
-USER app
+RUN addgroup -S vrbook && adduser -S vrbook -G vrbook
+USER vrbook
 
-COPY --from=build --chown=app:app /app/publish .
+COPY --from=build --chown=vrbook:vrbook /app/publish .
 
 ENV ASPNETCORE_URLS=http://+:8080 \
     DOTNET_RUNNING_IN_CONTAINER=true \

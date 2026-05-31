@@ -6,7 +6,7 @@ RUN dotnet publish src/VrBook.Migrator/VrBook.Migrator.csproj \
 
 FROM mcr.microsoft.com/dotnet/runtime:8.0-alpine AS runtime
 WORKDIR /app
-RUN addgroup -S app && adduser -S app -G app
-USER app
-COPY --from=build --chown=app:app /app/publish .
+RUN addgroup -S vrbook && adduser -S vrbook -G vrbook
+USER vrbook
+COPY --from=build --chown=vrbook:vrbook /app/publish .
 ENTRYPOINT ["dotnet", "VrBook.Migrator.dll"]
