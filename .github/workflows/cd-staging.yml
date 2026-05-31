@@ -6,21 +6,13 @@
 name: cd-staging
 
 on:
-  workflow_run:
-    workflows: ["ci"]
-    branches: [develop]
-    types: [completed]
-  # TEMPORARY (until first staging is healthy + workflow_run from main is wired):
-  # also fire on direct push to develop and via manual dispatch. Remove after
-  # merging develop -> main and confirming workflow_run is firing reliably.
+  # Direct push trigger — simpler than workflow_run, which requires the workflow
+  # file on the DEFAULT branch (main) and confuses GitHub's context validator
+  # when mixed with push. Restore workflow_run after merging develop -> main.
   push:
     branches: [develop]
     paths-ignore: ["**/*.md", "docs/**"]
   workflow_dispatch:
-    inputs:
-      image_tag:
-        description: Container image SHA to deploy (default = current HEAD).
-        required: false
 
 permissions:
   contents: read
@@ -37,23 +29,26 @@ env:
   RESOURCE_GROUP: rg-vrbook-staging
   BICEP_PARAMS: infra/environments/staging.bicepparam
   BICEP_TEMPLATE: infra/main.bicep
-  # SHA to deploy. From workflow_run: the SHA that produced the green ci.yml.
-  # From push or workflow_dispatch: the SHA of the commit being deployed.
-  # (`inputs.image_tag` is supported via the `with:` blocks of called workflows
-  # where the inputs context is in scope; we don't reference it here at top-level
-  # env because GitHub validates env strictly across all trigger types.)
-  IMAGE_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
+  # SHA of the commit being deployed.
+  IMAGE_TAG: ${{ github.sha }}
   STAGING_BASE_URL: https://api-vrbook-staging.azurecontainerapps.io
 
 jobs:
-  # Hard gate — only proceed when the upstream CI was green (workflow_run trigger),
-  # OR when triggered directly via push/dispatch (we assume the engineer verified CI).
+  # Hard gate — checks that the corresponding ci.yml run on this SHA was green.
+  # (Without workflow_run trigger, we look it up via the API instead.)
   gate:
     name: gate (require green ci)
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - run: echo "Deploying sha ${{ env.IMAGE_TAG }} (event=${{ github.event_name }})."
+      - name: Verify CI run was green
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Looking up ci.yml status for sha ${{ env.IMAGE_TAG }}..."
+          CONCLUSION=$(gh api "repos/${{ github.repository }}/actions/runs?event=push&branch=develop&head_sha=${{ env.IMAGE_TAG }}" \
+            --jq '.workflow_runs[] | select(.name=="ci") | .conclusion' | head -1)
+          echo "ci conclusion: $CONCLUSION"
+          [ "$CONCLUSION" = "success" ] || { echo "::error::ci.yml did not succeed for this sha"; exit 1; }
 
   # ---------------------------------------------------------------------------
   # infra — Bicep what-if for visibility, then apply. RG-scoped deployment
