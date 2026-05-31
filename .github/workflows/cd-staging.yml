@@ -160,7 +160,7 @@ jobs:
     with:
       app_name: sync-worker-vrbook-staging
       resource_group: rg-vrbook-staging
-      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-sync-worker:${{ github.event.workflow_run.head_sha || github.sha }}
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-sync-worker:${{ github.sha }}
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -172,7 +172,7 @@ jobs:
     with:
       app_name: notification-worker-vrbook-staging
       resource_group: rg-vrbook-staging
-      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-notification-worker:${{ github.event.workflow_run.head_sha || github.sha }}
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-notification-worker:${{ github.sha }}
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -184,7 +184,7 @@ jobs:
     with:
       app_name: booking-worker-vrbook-staging
       resource_group: rg-vrbook-staging
-      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-booking-worker:${{ github.event.workflow_run.head_sha || github.sha }}
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-booking-worker:${{ github.sha }}
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -196,7 +196,7 @@ jobs:
     with:
       app_name: api-vrbook-staging
       resource_group: rg-vrbook-staging
-      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-api:${{ github.event.workflow_run.head_sha || github.sha }}
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-api:${{ github.sha }}
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
