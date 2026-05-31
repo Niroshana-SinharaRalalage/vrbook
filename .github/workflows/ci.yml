@@ -331,8 +331,8 @@ jobs:
       # not block; tightening to MEDIUM tends to require near-daily base-image
       # rebuilds. We rely on Dependabot + weekly base image refresh instead.
       - name: Vulnerability scan (Trivy)
-        # 0.28.x is the current stable; 0.24.0 was yanked.
-        uses: aquasecurity/trivy-action@0.28.0
+        # Tags use `v` prefix; v0.36.0 is current as of May 2026.
+        uses: aquasecurity/trivy-action@v0.36.0
         continue-on-error: true
         with:
           image-ref: ${{ env.IMAGE }}
