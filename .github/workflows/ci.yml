@@ -283,9 +283,11 @@ jobs:
           - name: booking-worker
             dockerfile: src/Workers/VrBook.Workers.Booking/Dockerfile
             context: .
-          - name: web
-            dockerfile: web/Dockerfile
-            context: .
+          # web image temporarily disabled — F1 frontend scaffold isn't installable
+          # without a committed package-lock.json. Re-add when F1 lands.
+          # - name: web
+          #   dockerfile: web/Dockerfile
+          #   context: .
     env:
       IMAGE: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-${{ matrix.name }}:${{ github.sha }}
     steps:
