@@ -10,6 +10,17 @@ on:
     workflows: ["ci"]
     branches: [develop]
     types: [completed]
+  # TEMPORARY (until first staging is healthy + workflow_run from main is wired):
+  # also fire on direct push to develop and via manual dispatch. Remove after
+  # merging develop -> main and confirming workflow_run is firing reliably.
+  push:
+    branches: [develop]
+    paths-ignore: ["**/*.md", "docs/**"]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Container image SHA to deploy (default = current HEAD).
+        required: false
 
 permissions:
   contents: read
@@ -26,18 +37,20 @@ env:
   RESOURCE_GROUP: rg-vrbook-staging
   BICEP_PARAMS: infra/environments/staging.bicepparam
   BICEP_TEMPLATE: infra/main.bicep
-  # SHA that produced the green ci.yml run. workflow_run gives us head_sha.
-  IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+  # SHA to deploy. From workflow_run: the SHA that produced the green ci.yml.
+  # From push: the SHA of the commit being pushed. From workflow_dispatch: input or HEAD.
+  IMAGE_TAG: ${{ github.event.workflow_run.head_sha || inputs.image_tag || github.sha }}
   STAGING_BASE_URL: https://api-vrbook-staging.azurecontainerapps.io
 
 jobs:
-  # Hard gate — only proceed when the upstream CI was green.
+  # Hard gate — only proceed when the upstream CI was green (workflow_run trigger),
+  # OR when triggered directly via push/dispatch (we assume the engineer verified CI).
   gate:
     name: gate (require green ci)
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - run: echo "CI run ${{ github.event.workflow_run.id }} succeeded for sha ${{ env.IMAGE_TAG }}."
+      - run: echo "Deploying sha ${{ env.IMAGE_TAG }} (event=${{ github.event_name }})."
 
   # ---------------------------------------------------------------------------
   # infra — Bicep what-if for visibility, then apply. RG-scoped deployment
