@@ -162,7 +162,7 @@ jobs:
     with:
       app_name: sync-worker-vrbook-staging
       resource_group: rg-vrbook-staging
-      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-sync-worker:${{ github.event.workflow_run.head_sha }}
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-sync-worker:${{ github.event.workflow_run.head_sha || inputs.image_tag || github.sha }}
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -174,7 +174,7 @@ jobs:
     with:
       app_name: notification-worker-vrbook-staging
       resource_group: rg-vrbook-staging
-      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-notification-worker:${{ github.event.workflow_run.head_sha }}
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-notification-worker:${{ github.event.workflow_run.head_sha || inputs.image_tag || github.sha }}
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -186,7 +186,7 @@ jobs:
     with:
       app_name: booking-worker-vrbook-staging
       resource_group: rg-vrbook-staging
-      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-booking-worker:${{ github.event.workflow_run.head_sha }}
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-booking-worker:${{ github.event.workflow_run.head_sha || inputs.image_tag || github.sha }}
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -198,23 +198,17 @@ jobs:
     with:
       app_name: api-vrbook-staging
       resource_group: rg-vrbook-staging
-      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-api:${{ github.event.workflow_run.head_sha }}
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-api:${{ github.event.workflow_run.head_sha || inputs.image_tag || github.sha }}
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-  deploy-web:
-    needs: deploy-api
-    uses: ./.github/workflows/_deploy-container-app.yml
-    with:
-      app_name: web-vrbook-staging
-      resource_group: rg-vrbook-staging
-      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-web:${{ github.event.workflow_run.head_sha }}
-    secrets:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  # deploy-web disabled until F1 web image is buildable (no package-lock.json).
+  # When restored: needs deploy-api, image: ...vrbook-web:<tag>
+  # deploy-web:
+  #   needs: deploy-api
+  #   uses: ./.github/workflows/_deploy-container-app.yml
 
   # ---------------------------------------------------------------------------
   # smoke — minimal post-deploy verification: liveness/readiness + a sample
@@ -222,7 +216,8 @@ jobs:
   # ---------------------------------------------------------------------------
   smoke:
     name: smoke tests
-    needs: [deploy-api, deploy-web]
+    # deploy-web temporarily removed until F1 ships; smoke only validates API.
+    needs: [deploy-api]
     runs-on: ubuntu-latest
     environment: staging
     steps:
