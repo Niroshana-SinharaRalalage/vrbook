@@ -38,8 +38,11 @@ env:
   BICEP_PARAMS: infra/environments/staging.bicepparam
   BICEP_TEMPLATE: infra/main.bicep
   # SHA to deploy. From workflow_run: the SHA that produced the green ci.yml.
-  # From push: the SHA of the commit being pushed. From workflow_dispatch: input or HEAD.
-  IMAGE_TAG: ${{ github.event.workflow_run.head_sha || inputs.image_tag || github.sha }}
+  # From push or workflow_dispatch: the SHA of the commit being deployed.
+  # (`inputs.image_tag` is supported via the `with:` blocks of called workflows
+  # where the inputs context is in scope; we don't reference it here at top-level
+  # env because GitHub validates env strictly across all trigger types.)
+  IMAGE_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
   STAGING_BASE_URL: https://api-vrbook-staging.azurecontainerapps.io
 
 jobs:
@@ -162,7 +165,7 @@ jobs:
     with:
       app_name: sync-worker-vrbook-staging
       resource_group: rg-vrbook-staging
-      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-sync-worker:${{ github.event.workflow_run.head_sha || inputs.image_tag || github.sha }}
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-sync-worker:${{ github.event.workflow_run.head_sha || github.sha }}
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -174,7 +177,7 @@ jobs:
     with:
       app_name: notification-worker-vrbook-staging
       resource_group: rg-vrbook-staging
-      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-notification-worker:${{ github.event.workflow_run.head_sha || inputs.image_tag || github.sha }}
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-notification-worker:${{ github.event.workflow_run.head_sha || github.sha }}
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -186,7 +189,7 @@ jobs:
     with:
       app_name: booking-worker-vrbook-staging
       resource_group: rg-vrbook-staging
-      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-booking-worker:${{ github.event.workflow_run.head_sha || inputs.image_tag || github.sha }}
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-booking-worker:${{ github.event.workflow_run.head_sha || github.sha }}
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -198,7 +201,7 @@ jobs:
     with:
       app_name: api-vrbook-staging
       resource_group: rg-vrbook-staging
-      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-api:${{ github.event.workflow_run.head_sha || inputs.image_tag || github.sha }}
+      image: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-api:${{ github.event.workflow_run.head_sha || github.sha }}
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
