@@ -319,13 +319,17 @@ jobs:
           cache-to: type=gha,scope=${{ matrix.name }},mode=max
 
       # Decision: SBOM in SPDX JSON (industry standard for supply-chain tools).
+      # upload-artifact disabled — GH free-tier quota is sensitive; the SBOM
+      # output-file is still preserved on the runner for downstream tooling.
       - name: Generate SBOM (Syft)
+        continue-on-error: true
         uses: anchore/sbom-action@v0
         with:
           image: ${{ env.IMAGE }}
           format: spdx-json
           artifact-name: sbom-${{ matrix.name }}.spdx.json
           output-file: sbom-${{ matrix.name }}.spdx.json
+          upload-artifact: false
 
       # Decision: fail on HIGH or CRITICAL only. MEDIUM is reported but does
       # not block; tightening to MEDIUM tends to require near-daily base-image
