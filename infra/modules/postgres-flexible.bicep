@@ -22,8 +22,8 @@ param subnetId string
 @description('Resource ID of the private DNS zone privatelink.postgres.database.azure.com.')
 param privateDnsZoneId string
 
-@description('SKU name (e.g. B_Standard_B2s, GP_Standard_D2ds_v5, GP_Standard_D4ds_v5).')
-param skuName string = 'GP_Standard_D2ds_v5'
+@description('SKU name without tier prefix (e.g. Standard_B2s, Standard_D2ds_v5, Standard_D4ds_v5).')
+param skuName string = 'Standard_D2ds_v5'
 
 @description('Tier (Burstable | GeneralPurpose | MemoryOptimized).')
 @allowed([
