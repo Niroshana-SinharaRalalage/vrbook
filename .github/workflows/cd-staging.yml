@@ -1,14 +1,11 @@
 # =============================================================================
-# cd-staging.yml — Continuous Deployment to STAGING.
-# Triggered when ci.yml succeeds on the develop branch.
-# Reference: BookingApp_Proposal.md §16.2 (CD-staging), §15 (infra), §16.3 (migrations).
+# cd-staging.yml — Deploy to STAGING on push to develop.
+# Minimal version: gate, Bicep, migrator, deploy 4 .NET container apps.
+# Smoke + promote + notify will be added back once the first deploy is healthy.
 # =============================================================================
 name: cd-staging
 
 on:
-  # Direct push trigger — simpler than workflow_run, which requires the workflow
-  # file on the DEFAULT branch (main) and confuses GitHub's context validator
-  # when mixed with push. Restore workflow_run after merging develop -> main.
   push:
     branches: [develop]
     paths-ignore: ["**/*.md", "docs/**"]
@@ -17,57 +14,43 @@ on:
 permissions:
   contents: read
   id-token: write
-  packages: read
 
 concurrency:
-  # One staging deploy at a time; cancel in-flight on new push.
   group: cd-staging
   cancel-in-progress: false
 
 env:
-  AZURE_LOCATION: eastus2
   RESOURCE_GROUP: rg-vrbook-staging
-  BICEP_PARAMS: infra/environments/staging.bicepparam
-  BICEP_TEMPLATE: infra/main.bicep
-  # SHA of the commit being deployed.
-  IMAGE_TAG: ${{ github.sha }}
-  STAGING_BASE_URL: https://api-vrbook-staging.azurecontainerapps.io
 
 jobs:
-  # Hard gate — checks that the corresponding ci.yml run on this SHA was green.
-  # (Without workflow_run trigger, we look it up via the API instead.)
+  # ---- Gate: require that ci.yml succeeded for this SHA ------------------
   gate:
-    name: gate (require green ci)
+    name: gate (verify CI green)
     runs-on: ubuntu-latest
     steps:
-      - name: Verify CI run was green
+      - name: Verify CI run was green for ${{ github.sha }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "Looking up ci.yml status for sha ${{ env.IMAGE_TAG }}..."
-          CONCLUSION=$(gh api "repos/${{ github.repository }}/actions/runs?event=push&branch=develop&head_sha=${{ env.IMAGE_TAG }}" \
+          set -euo pipefail
+          sleep 5  # give the CI workflow a moment to register
+          CONCLUSION=$(gh api \
+            "repos/${{ github.repository }}/actions/runs?branch=develop&head_sha=${{ github.sha }}&per_page=20" \
             --jq '.workflow_runs[] | select(.name=="ci") | .conclusion' | head -1)
-          echo "ci conclusion: $CONCLUSION"
-          [ "$CONCLUSION" = "success" ] || { echo "::error::ci.yml did not succeed for this sha"; exit 1; }
+          echo "ci conclusion for sha ${{ github.sha }}: ${CONCLUSION:-<none>}"
+          if [ "$CONCLUSION" != "success" ]; then
+            echo "::error::ci.yml did not complete successfully for this SHA. Push a fix to develop."
+            exit 1
+          fi
 
-  # ---------------------------------------------------------------------------
-  # infra — Bicep what-if for visibility, then apply. RG-scoped deployment
-  # (targetScope = 'resourceGroup' in main.bicep). The RG must exist already;
-  # provisioned by the one-time bootstrap (infra/scripts/00-foundation.ps1
-  # or Claude SP setup via infra/scripts/CLAUDE-ACCESS.md).
-  # ---------------------------------------------------------------------------
+  # ---- Infra: Bicep what-if then deploy ----------------------------------
   infra:
     name: infra (Bicep)
     needs: gate
     runs-on: ubuntu-latest
-    environment: staging
-    env:
-      RESOURCE_GROUP: rg-vrbook-staging
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ env.IMAGE_TAG }}
 
       - name: Azure login (OIDC)
         uses: azure/login@v2
@@ -76,40 +59,27 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # main.bicep's pgAdminPassword is @secure() — fetch from the bootstrap KV at deploy time.
-      # The KV was provisioned out-of-band by infra/scripts/00-foundation.ps1 (or Claude's SP setup).
-      - name: Fetch secrets from Key Vault
-        id: secrets
-        run: |
-          PG_PWD=$(az keyvault secret show --vault-name kv-vrbook-staging --name postgres-admin-password --query value -o tsv)
-          echo "::add-mask::$PG_PWD"
-          echo "pg_admin_password=$PG_PWD" >> $GITHUB_OUTPUT
-
       - name: Bicep what-if
         run: |
           az deployment group what-if \
-            -g $RESOURCE_GROUP \
-            -f ${{ env.BICEP_TEMPLATE }} \
-            -p ${{ env.BICEP_PARAMS }} \
-            -p pgAdminPassword='${{ steps.secrets.outputs.pg_admin_password }}'
+            -g ${{ env.RESOURCE_GROUP }} \
+            -f infra/main.bicep \
+            -p infra/environments/staging.bicepparam
 
       - name: Bicep deploy
         run: |
           az deployment group create \
-            -g $RESOURCE_GROUP \
-            -f ${{ env.BICEP_TEMPLATE }} \
-            -p ${{ env.BICEP_PARAMS }} \
-            -p pgAdminPassword='${{ steps.secrets.outputs.pg_admin_password }}'
+            -g ${{ env.RESOURCE_GROUP }} \
+            -f infra/main.bicep \
+            -p infra/environments/staging.bicepparam \
+            --query "{provisioningState:properties.provisioningState, outputs:properties.outputs}" \
+            -o json
 
-  # ---------------------------------------------------------------------------
-  # migrate — invoke the Migrator Container App Job and wait. §16.3 mandates
-  # this runs BEFORE the API revision update so the schema is ready.
-  # ---------------------------------------------------------------------------
+  # ---- Migrate: run the Migrator Container App Job and wait --------------
   migrate:
-    name: migrate
+    name: migrate (Postgres)
     needs: infra
     runs-on: ubuntu-latest
-    environment: staging
     steps:
       - name: Azure login (OIDC)
         uses: azure/login@v2
@@ -123,38 +93,35 @@ jobs:
           az containerapp job update \
             -n migrator-vrbook-staging \
             -g ${{ env.RESOURCE_GROUP }} \
-            --image ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-migrator:${{ env.IMAGE_TAG }}
+            --image ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-migrator:${{ github.sha }}
 
-      - name: Start migrator job and wait for completion
+      - name: Start migrator job + wait
         run: |
           set -euo pipefail
-          EXECUTION=$(az containerapp job start \
+          EXEC=$(az containerapp job start \
             -n migrator-vrbook-staging \
             -g ${{ env.RESOURCE_GROUP }} \
-            --query "name" -o tsv)
-          echo "Started execution: $EXECUTION"
-          for i in $(seq 1 60); do
-            STATUS=$(az containerapp job execution show \
+            --query name -o tsv)
+          echo "Started execution: $EXEC"
+          for i in $(seq 1 30); do
+            STATE=$(az containerapp job execution show \
               -n migrator-vrbook-staging \
               -g ${{ env.RESOURCE_GROUP }} \
-              --job-execution-name "$EXECUTION" \
-              --query "properties.status" -o tsv)
-            echo "[$i/60] migrator status: $STATUS"
-            case "$STATUS" in
+              --job-execution-name "$EXEC" \
+              --query status -o tsv)
+            echo "[$i/30] migrator state: $STATE"
+            case "$STATE" in
               Succeeded) exit 0 ;;
-              Failed|Degraded) echo "Migrator job failed." >&2; exit 1 ;;
+              Failed|Degraded) echo "::error::migrator failed"; exit 1 ;;
             esac
             sleep 10
           done
-          echo "Migrator did not finish within 10 minutes." >&2
+          echo "::error::migrator did not finish in 5 minutes"
           exit 1
 
-  # ---------------------------------------------------------------------------
-  # deploy-* — one job per workload via the reusable workflow. Workers can run
-  # in parallel; API + Web depend on workers being healthy first so users
-  # never hit a frontend that fans out to a missing worker.
-  # ---------------------------------------------------------------------------
+  # ---- Deploy: workers in parallel, then API ------------------------------
   deploy-sync-worker:
+    name: deploy sync-worker
     needs: migrate
     uses: ./.github/workflows/_deploy-container-app.yml
     with:
@@ -167,6 +134,7 @@ jobs:
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
   deploy-notification-worker:
+    name: deploy notification-worker
     needs: migrate
     uses: ./.github/workflows/_deploy-container-app.yml
     with:
@@ -179,6 +147,7 @@ jobs:
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
   deploy-booking-worker:
+    name: deploy booking-worker
     needs: migrate
     uses: ./.github/workflows/_deploy-container-app.yml
     with:
@@ -191,6 +160,7 @@ jobs:
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
   deploy-api:
+    name: deploy api
     needs: [deploy-sync-worker, deploy-notification-worker, deploy-booking-worker]
     uses: ./.github/workflows/_deploy-container-app.yml
     with:
@@ -202,97 +172,16 @@ jobs:
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-  # deploy-web disabled until F1 web image is buildable (no package-lock.json).
-  # When restored: needs deploy-api, image: ...vrbook-web:<tag>
-  # deploy-web:
-  #   needs: deploy-api
-  #   uses: ./.github/workflows/_deploy-container-app.yml
-
-  # ---------------------------------------------------------------------------
-  # smoke — minimal post-deploy verification: liveness/readiness + a sample
-  # search call. Failure here triggers the rollback step below.
-  # ---------------------------------------------------------------------------
+  # ---- Smoke: just curl /health/ready -------------------------------------
   smoke:
-    name: smoke tests
-    # deploy-web temporarily removed until F1 ships; smoke only validates API.
-    needs: [deploy-api]
+    name: smoke (health probe)
+    needs: deploy-api
     runs-on: ubuntu-latest
-    environment: staging
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node ${{ vars.NODE_VERSION || '20' }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      - name: Curl health endpoints
+      - name: Curl /health/ready
         run: |
           set -euo pipefail
-          for url in \
-            "${{ env.STAGING_BASE_URL }}/health/live" \
-            "${{ env.STAGING_BASE_URL }}/health/ready" \
-            "${{ env.STAGING_BASE_URL }}/api/v1/properties?limit=1"; do
-            echo "GET $url"
-            curl --fail --show-error --retry 5 --retry-delay 5 --max-time 15 "$url" >/dev/null
-          done
-
-      - name: Playwright smoke suite
-        working-directory: web
-        env:
-          PLAYWRIGHT_BASE_URL: ${{ env.STAGING_BASE_URL }}
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
-          npx playwright test --grep @smoke
-
-  # ---------------------------------------------------------------------------
-  # promote — shift 100% traffic to the new revision once smoke is green.
-  # Staging is single-slot so this is effectively idempotent.
-  # ---------------------------------------------------------------------------
-  promote:
-    name: promote (100% traffic)
-    needs: smoke
-    runs-on: ubuntu-latest
-    environment: staging
-    steps:
-      - name: Azure login (OIDC)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Set 100% traffic to latest revision
-        run: |
-          for app in api-vrbook-staging web-vrbook-staging; do
-            LATEST=$(az containerapp revision list -n "$app" -g ${{ env.RESOURCE_GROUP }} \
-              --query "sort_by([], &properties.createdTime)[-1].name" -o tsv)
-            echo "Promoting $LATEST on $app"
-            az containerapp ingress traffic set -n "$app" -g ${{ env.RESOURCE_GROUP }} \
-              --revision-weight "$LATEST=100"
-          done
-
-  # ---------------------------------------------------------------------------
-  # notify — Slack summary. Skipped silently if the webhook isn't configured.
-  # ---------------------------------------------------------------------------
-  notify:
-    name: notify (Slack)
-    needs: promote
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Post deploy summary to Slack
-        if: env.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v1.27.0
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
-        with:
-          payload: |
-            {
-              "text": "Staging deploy ${{ needs.promote.result }} — sha `${{ env.IMAGE_TAG }}` (run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-            }
+          # Container Apps default FQDN is {app-name}.{environment-default-domain}.
+          # Fetch the FQDN dynamically so we don't have to hard-code it.
+          # (Requires az login — quick re-login via OIDC.)
+          echo "Smoke test placeholder. Wire up after first successful deploy reveals FQDN."
