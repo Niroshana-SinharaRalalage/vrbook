@@ -58,7 +58,10 @@ var pgStorageGB = isProd ? 256 : 128
 var apiMinReplicas = env == 'dev' ? 0 : 1
 var apiMaxReplicas = isProd ? 10 : 5
 
-var frontDoorEnabled = isProd || isStaging
+// Front Door deferred for staging — the staging WAF policy needs Premium_AzureFrontDoor
+// SKU to use managed rules (Standard rejects ManagedRules per WAF schema). Enable for prod
+// only until we revisit Premium AFD vs custom-rules-only WAF. See ADR-XXXX (todo).
+var frontDoorEnabled = isProd
 var dedicatedProfileEnabled = isProd
 
 var tags = {
