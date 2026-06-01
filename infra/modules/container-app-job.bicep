@@ -159,4 +159,3 @@ resource job 'Microsoft.App/jobs@2025-01-01' = {
 
 output id string = job.id
 output name string = job.name
-output principalId string = job.identity.principalId

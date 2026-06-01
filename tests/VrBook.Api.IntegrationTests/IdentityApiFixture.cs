@@ -50,7 +50,12 @@ public sealed class IdentityApiFixture : WebApplicationFactory<Program>, IAsyncL
             {
                 ["ConnectionStrings:Postgres"] = _postgres.GetConnectionString(),
                 ["ConnectionStrings:Redis"] = string.Empty, // skip Redis in tests
-                ["AzureAdB2C:Instance"] = string.Empty,     // disables real JWT bearer
+                // Blank out all three Entra keys so AuthExtensions skips JwtBearer
+                // registration entirely (otherwise it would try to fetch the OIDC
+                // discovery document over the network during test startup).
+                ["EntraExternalId:Instance"] = string.Empty,
+                ["EntraExternalId:TenantId"] = string.Empty,
+                ["EntraExternalId:ClientId"] = string.Empty,
                 ["DevAuth:AllowAnonymous"] = DevAuthEnabled ? "true" : "false",
                 ["DevAuth:FakeOid"] = "test-owner-aaaa",
                 ["DevAuth:FakeEmail"] = "owner@vrbook.test",

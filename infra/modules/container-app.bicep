@@ -198,5 +198,4 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
 output id string = app.id
 output name string = app.name
 output fqdn string = app.properties.configuration.ingress.fqdn
-output principalId string = app.identity.principalId
 output latestRevisionName string = app.properties.latestRevisionName
