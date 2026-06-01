@@ -25,7 +25,7 @@ env:
   NODE_VERSION: "20"
   DOTNET_NOLOGO: "true"
   DOTNET_CLI_TELEMETRY_OPTOUT: "true"
-  # Image registry login server is derived from ACR_NAME at runtime: ${{ secrets.ACR_NAME }}.azurecr.io
+  # Image registry login server is derived from ACR_NAME at runtime: ${{ vars.ACR_NAME }}.azurecr.io
   SOLUTION: src/VrBook.sln
   OPENAPI_SPEC: contracts/openapi.yaml
 
@@ -289,7 +289,7 @@ jobs:
           #   dockerfile: web/Dockerfile
           #   context: .
     env:
-      IMAGE: ${{ secrets.ACR_NAME }}.azurecr.io/vrbook-${{ matrix.name }}:${{ github.sha }}
+      IMAGE: ${{ vars.ACR_NAME }}.azurecr.io/vrbook-${{ matrix.name }}:${{ github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -306,7 +306,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: ACR login
-        run: az acr login --name ${{ secrets.ACR_NAME }}
+        run: az acr login --name ${{ vars.ACR_NAME }}
 
       - name: Build image
         uses: docker/build-push-action@v6
