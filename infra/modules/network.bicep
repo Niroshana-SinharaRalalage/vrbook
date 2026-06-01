@@ -25,12 +25,16 @@ param vnetAddressPrefix string = '10.40.0.0/16'
 @description('Subnet for Container Apps Environment (must be /23 minimum for workload profiles).')
 param appsSubnetPrefix string = '10.40.0.0/23'
 
-@description('Subnet for Private Endpoints (Postgres, Redis, etc.).')
+@description('Subnet for Private Endpoints (Redis PE, future PEs).')
 param dataSubnetPrefix string = '10.40.2.0/24'
+
+@description('Subnet delegated to Microsoft.DBforPostgreSQL/flexibleServers (VNet-injected Postgres).')
+param pgSubnetPrefix string = '10.40.3.0/24'
 
 var vnetName = 'vnet-vrbook-${env}'
 var appsSubnetName = 'snet-apps'
 var dataSubnetName = 'snet-data'
+var pgSubnetName = 'snet-pg'
 
 resource appsNsg 'Microsoft.Network/networkSecurityGroups@2024-01-01' = {
   name: 'nsg-${appsSubnetName}-${env}'
@@ -132,6 +136,25 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
           privateLinkServiceNetworkPolicies: 'Enabled'
         }
       }
+      {
+        name: pgSubnetName
+        properties: {
+          addressPrefix: pgSubnetPrefix
+          networkSecurityGroup: {
+            id: dataNsg.id
+          }
+          delegations: [
+            {
+              name: 'Microsoft.DBforPostgreSQL.flexibleServers'
+              properties: {
+                serviceName: 'Microsoft.DBforPostgreSQL/flexibleServers'
+              }
+            }
+          ]
+          privateEndpointNetworkPolicies: 'Disabled'
+          privateLinkServiceNetworkPolicies: 'Enabled'
+        }
+      }
     ]
   }
 }
@@ -179,5 +202,6 @@ output vnetId string = vnet.id
 output vnetName string = vnet.name
 output appsSubnetId string = '${vnet.id}/subnets/${appsSubnetName}'
 output dataSubnetId string = '${vnet.id}/subnets/${dataSubnetName}'
+output pgSubnetId string = '${vnet.id}/subnets/${pgSubnetName}'
 output pgPrivateDnsZoneId string = pgDnsZone.id
 output redisPrivateDnsZoneId string = redisDnsZone.id

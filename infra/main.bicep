@@ -122,7 +122,7 @@ module pg 'modules/postgres-flexible.bicep' = {
     env: env
     location: location
     tags: tags
-    subnetId: net.outputs.dataSubnetId
+    subnetId: net.outputs.pgSubnetId
     privateDnsZoneId: net.outputs.pgPrivateDnsZoneId
     skuName: pgSku
     skuTier: pgTier
@@ -134,7 +134,13 @@ module pg 'modules/postgres-flexible.bicep' = {
   }
 }
 
-module redis 'modules/redis.bicep' = {
+// Azure Cache for Redis is being retired by Microsoft. We're temporarily skipping
+// it for staging to unblock the first deploy; will revisit with Azure Managed Redis
+// (Microsoft.Cache/redisEnterprise) before A3 (pricing engine) which actually needs it.
+@description('Whether to deploy Azure Cache for Redis. Disabled in staging due to MS retirement.')
+param deployRedis bool = false
+
+module redis 'modules/redis.bicep' = if (deployRedis) {
   name: 'redis'
   params: {
     env: env
@@ -415,7 +421,7 @@ output containerAppsEnvName string = cae.outputs.name
 output managedIdentityClientId string = mi.outputs.clientId
 output managedIdentityPrincipalId string = mi.outputs.principalId
 output postgresFqdn string = pg.outputs.fqdn
-output redisHostName string = redis.outputs.hostName
+output redisHostName string = deployRedis ? redis.outputs.hostName : ''
 output serviceBusEndpoint string = sb.outputs.endpoint
 output signalrHostName string = sigr.outputs.hostName
 output storageBlobEndpoint string = storage.outputs.blobEndpoint
