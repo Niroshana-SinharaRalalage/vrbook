@@ -101,7 +101,7 @@ jobs:
       - name: Update migrator job image
         run: |
           az containerapp job update \
-            -n migrator-vrbook-staging \
+            -n caj-vrbook-migrator-staging \
             -g ${{ env.RESOURCE_GROUP }} \
             --image ${{ vars.ACR_NAME }}.azurecr.io/vrbook-migrator:${{ github.sha }}
 
@@ -109,13 +109,13 @@ jobs:
         run: |
           set -euo pipefail
           EXEC=$(az containerapp job start \
-            -n migrator-vrbook-staging \
+            -n caj-vrbook-migrator-staging \
             -g ${{ env.RESOURCE_GROUP }} \
             --query name -o tsv)
           echo "Started execution: $EXEC"
           for i in $(seq 1 30); do
             STATE=$(az containerapp job execution show \
-              -n migrator-vrbook-staging \
+              -n caj-vrbook-migrator-staging \
               -g ${{ env.RESOURCE_GROUP }} \
               --job-execution-name "$EXEC" \
               --query status -o tsv)
@@ -129,25 +129,32 @@ jobs:
           echo "::error::migrator did not finish in 5 minutes"
           exit 1
 
+  # sync-worker is a scheduled Container Apps Job (cron */5), not a long-lived app.
+  # Update its image with `containerapp job update` rather than the app reusable workflow.
   deploy-sync-worker:
-    name: deploy sync-worker
+    name: deploy sync-worker (job)
     needs: migrate
-    uses: ./.github/workflows/_deploy-container-app.yml
-    with:
-      app_name: sync-worker-vrbook-staging
-      resource_group: rg-vrbook-staging
-      image: ${{ vars.ACR_NAME }}.azurecr.io/vrbook-sync-worker:${{ github.sha }}
-    secrets:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Update sync-worker job image
+        run: |
+          az containerapp job update \
+            -n caj-vrbook-sync-staging \
+            -g ${{ env.RESOURCE_GROUP }} \
+            --image ${{ vars.ACR_NAME }}.azurecr.io/vrbook-sync-worker:${{ github.sha }}
 
   deploy-notification-worker:
     name: deploy notification-worker
     needs: migrate
     uses: ./.github/workflows/_deploy-container-app.yml
     with:
-      app_name: notification-worker-vrbook-staging
+      app_name: ca-vrbook-notifworker-staging
       resource_group: rg-vrbook-staging
       image: ${{ vars.ACR_NAME }}.azurecr.io/vrbook-notification-worker:${{ github.sha }}
     secrets:
@@ -160,7 +167,7 @@ jobs:
     needs: migrate
     uses: ./.github/workflows/_deploy-container-app.yml
     with:
-      app_name: booking-worker-vrbook-staging
+      app_name: ca-vrbook-bookingworker-staging
       resource_group: rg-vrbook-staging
       image: ${{ vars.ACR_NAME }}.azurecr.io/vrbook-booking-worker:${{ github.sha }}
     secrets:
@@ -173,7 +180,7 @@ jobs:
     needs: [deploy-sync-worker, deploy-notification-worker, deploy-booking-worker]
     uses: ./.github/workflows/_deploy-container-app.yml
     with:
-      app_name: api-vrbook-staging
+      app_name: ca-vrbook-api-staging
       resource_group: rg-vrbook-staging
       image: ${{ vars.ACR_NAME }}.azurecr.io/vrbook-api:${{ github.sha }}
     secrets:
