@@ -49,7 +49,8 @@ param migratorImage string = 'mcr.microsoft.com/azuredocs/containerapps-hellowor
 var isProd = env == 'prod'
 var isStaging = env == 'staging'
 
-var pgSku = isProd ? 'GP_Standard_D4ds_v5' : (isStaging ? 'GP_Standard_D2ds_v5' : 'B_Standard_B2s')
+// Postgres Flexible Server SKU NAME (without tier prefix). Tier passed separately via skuTier.
+var pgSku = isProd ? 'Standard_D4ds_v5' : (isStaging ? 'Standard_D2ds_v5' : 'Standard_B2s')
 var pgTier = isProd || isStaging ? 'GeneralPurpose' : 'Burstable'
 var pgBackupRetention = isProd ? 35 : 14
 var pgStorageGB = isProd ? 256 : 128

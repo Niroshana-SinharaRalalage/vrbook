@@ -37,7 +37,7 @@ var roles = {
   keyVaultSecretsUser: '4633458b-17de-408a-b874-0445c86b69e6'
   storageBlobDataContributor: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
   serviceBusDataOwner: '090c5cfd-751d-490a-894a-3ce6f1109419'
-  acrPull: '7f951dda-4ed3-11e8-a6c4-7d9f8d3e4096' // hard-coded canonical AcrPull def id (also expressible via resourceId)
+  acrPull: '7f951dda-4ed3-4680-a7ca-43fe172d538d' // built-in AcrPull role definition GUID
 }
 
 resource mi 'Microsoft.ManagedIdentity/userAssignedIdentities@2024-11-30' = {
