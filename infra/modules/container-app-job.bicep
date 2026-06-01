@@ -113,7 +113,7 @@ var triggerConfig = triggerType == 'Schedule'
   ? scheduleTriggerConfig
   : triggerType == 'Manual' ? manualTriggerConfig : eventTriggerConfig
 
-resource job 'Microsoft.App/jobs@2024-03-01' = {
+resource job 'Microsoft.App/jobs@2025-01-01' = {
   name: name
   location: location
   tags: tags

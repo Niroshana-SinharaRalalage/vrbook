@@ -49,7 +49,7 @@ var workloadProfiles = includeDedicatedProfile ? [
   }
 ]
 
-resource cae 'Microsoft.App/managedEnvironments@2024-03-01' = {
+resource cae 'Microsoft.App/managedEnvironments@2025-01-01' = {
   name: envName
   location: location
   tags: tags

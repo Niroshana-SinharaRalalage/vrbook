@@ -107,21 +107,13 @@ var httpRule = [
   }
 ]
 
-var sbRule = [
-  {
-    name: 'sb-scale'
-    custom: {
-      type: 'azure-servicebus'
-      metadata: {
-        namespace: serviceBusNamespace
-        topicName: serviceBusTopicName
-        subscriptionName: serviceBusSubscriptionName
-        messageCount: string(serviceBusMessageCount)
-      }
-      identity: userAssignedIdentityId
-    }
-  }
-]
+// KEDA azure-servicebus scaler with workload identity is intentionally
+// deferred until Agent A4 (Booking) actually wires up Service Bus consumers.
+// Workers run at fixed replica count for staging-first-deploy. Once we have
+// real SB topics with non-trivial backlog, switch this to:
+//   custom: { type: 'azure-servicebus', metadata: {...}, identity: <uami-id> }
+// using API >= 2025-02-02-preview which validates the property correctly.
+var sbRule = []
 
 var scaleRules = scaleRuleType == 'http'
   ? httpRule
@@ -146,7 +138,7 @@ var probesArray = includeProbes ? [
   }
 ] : []
 
-resource app 'Microsoft.App/containerApps@2024-03-01' = {
+resource app 'Microsoft.App/containerApps@2025-01-01' = {
   name: name
   location: location
   tags: tags
