@@ -3,6 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <RootNamespace>VrBook.Workers.Booking</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
     <UserSecretsId>vrbook-workers-booking-local-secrets</UserSecretsId>
     <Description>
       Booking Worker — KEDA-scaled Container App (Service Bus topic 'bookings').

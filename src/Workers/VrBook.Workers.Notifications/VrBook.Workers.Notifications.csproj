@@ -3,6 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <RootNamespace>VrBook.Workers.Notifications</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
     <UserSecretsId>vrbook-workers-notifications-local-secrets</UserSecretsId>
     <Description>
       Notification Worker — KEDA-scaled Container App (Service Bus topic 'notifications').

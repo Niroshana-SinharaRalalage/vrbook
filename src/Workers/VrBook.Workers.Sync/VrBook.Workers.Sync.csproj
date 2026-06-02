@@ -3,6 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <RootNamespace>VrBook.Workers.Sync</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
     <UserSecretsId>vrbook-workers-sync-local-secrets</UserSecretsId>
     <Description>
       Sync Worker — Container App Job (cron every 5 minutes). Polls due AirBnB iCal feeds,

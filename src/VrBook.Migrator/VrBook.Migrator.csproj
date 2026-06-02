@@ -4,6 +4,10 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>VrBook.Migrator</RootNamespace>
     <UserSecretsId>vrbook-migrator-local-secrets</UserSecretsId>
+    <!-- Migrator ships on dotnet/aspnet:8.0-alpine which has no ICU. Override the
+         repo-wide InvariantGlobalization=false from Directory.Build.props since
+         the migrator has no need for culture-aware formatting. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
     <Description>
       Standalone console app that runs EF Core migrations against every per-context DbContext.
       Deployed as a one-shot Container App Job invoked before the API revision update.
