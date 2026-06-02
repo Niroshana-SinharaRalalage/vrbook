@@ -4,7 +4,7 @@ COPY src/ src/
 RUN dotnet publish src/Workers/VrBook.Workers.Booking/VrBook.Workers.Booking.csproj \
     -c Release -o /app/publish /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/runtime:8.0-alpine AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS runtime
 WORKDIR /app
 RUN addgroup -S vrbook && adduser -S vrbook -G vrbook
 USER vrbook
