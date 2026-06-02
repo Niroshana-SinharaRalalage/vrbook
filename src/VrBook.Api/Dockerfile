@@ -29,6 +29,11 @@ RUN dotnet publish src/VrBook.Api/VrBook.Api.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS runtime
 WORKDIR /app
 
+# alpine's aspnet image ships without ICU; install it so .NET globalization
+# (date/time/culture) works correctly. Migrator + workers run with
+# DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true and skip this.
+RUN apk add --no-cache icu-data-full icu-libs
+
 # Run as non-root.
 RUN addgroup -S vrbook && adduser -S vrbook -G vrbook
 USER vrbook
