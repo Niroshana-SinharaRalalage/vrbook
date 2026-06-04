@@ -9,6 +9,4 @@ WORKDIR /app
 RUN groupadd --system vrbook && useradd --system --gid vrbook vrbook
 USER vrbook
 COPY --from=build --chown=vrbook:vrbook /app/publish .
-# TEMP DEBUG: print what's in /app + try dotnet --info + try to run the app explicitly
-# capturing both stdout+stderr through `2>&1`. Revert once we see real output.
-ENTRYPOINT ["sh", "-c", "echo '=== ls /app ==='; ls -la /app; echo '=== runtimeconfig ==='; cat /app/VrBook.Migrator.runtimeconfig.json || true; echo '=== dotnet --info ==='; dotnet --info; echo '=== running app ==='; dotnet /app/VrBook.Migrator.dll 2>&1; echo '=== exit: '$?"]
+ENTRYPOINT ["dotnet", "VrBook.Migrator.dll"]
