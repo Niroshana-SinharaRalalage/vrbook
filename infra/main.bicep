@@ -326,6 +326,7 @@ module bookingWorker 'modules/container-app.bicep' = {
     serviceBusSubscriptionName: 'default'
     serviceBusMessageCount: 10
     includeProbes: false
+    enableIngress: false
   }
 }
 
@@ -356,6 +357,7 @@ module notifWorker 'modules/container-app.bicep' = {
     serviceBusSubscriptionName: 'default'
     serviceBusMessageCount: 20
     includeProbes: false
+    enableIngress: false
   }
 }
 

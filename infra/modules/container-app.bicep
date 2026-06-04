@@ -81,6 +81,9 @@ param serviceBusMessageCount int = 10
 @description('Include liveness/readiness probes (disable for non-HTTP workers).')
 param includeProbes bool = true
 
+@description('Whether the container app exposes any HTTP ingress. False for background workers that have no listener.')
+param enableIngress bool = true
+
 @description('Revisions mode: single | multiple.')
 @allowed([
   'single'
@@ -153,7 +156,7 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
     workloadProfileName: workloadProfileName
     configuration: {
       activeRevisionsMode: revisionsMode
-      ingress: {
+      ingress: enableIngress ? {
         external: externalIngress
         targetPort: targetPort
         transport: 'auto'
@@ -164,7 +167,7 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
             weight: 100
           }
         ]
-      }
+      } : null
       registries: [
         {
           server: registryServer
@@ -197,5 +200,5 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
 
 output id string = app.id
 output name string = app.name
-output fqdn string = app.properties.configuration.ingress.fqdn
+output fqdn string = enableIngress ? app.properties.configuration.ingress.fqdn : ''
 output latestRevisionName string = app.properties.latestRevisionName
