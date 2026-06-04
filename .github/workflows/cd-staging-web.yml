@@ -1,0 +1,78 @@
+# =============================================================================
+# cd-staging-web.yml — Deploy the Next.js web app to STAGING.
+# Triggered by push to develop on web/** paths. Gates on ci-frontend.
+# Backend has its own cd-staging-api.yml — they run independently.
+# =============================================================================
+name: cd-staging-web
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - "web/**"
+      - ".github/workflows/cd-staging-web.yml"
+      - ".github/workflows/_deploy-container-app.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+concurrency:
+  group: cd-staging-web
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: rg-vrbook-staging
+
+jobs:
+  # ---- Gate: require ci-frontend to be green for this SHA ----------------
+  gate:
+    name: gate (verify ci-frontend green)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for ci-frontend to complete + verify success
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # ci-frontend fires on the same push and runs in parallel with us.
+          # Poll up to 25 minutes for it to complete; abort if it failed.
+          for i in $(seq 1 75); do
+            RAW=$(gh api \
+              "repos/${{ github.repository }}/actions/runs?branch=develop&head_sha=${{ github.sha }}&per_page=20" \
+              --jq '.workflow_runs[] | select(.name=="ci-frontend") | {status, conclusion}' | head -2)
+            STATUS=$(echo "$RAW" | jq -r '.status // "missing"' | head -1)
+            CONCLUSION=$(echo "$RAW" | jq -r '.conclusion // ""' | head -1)
+            echo "[$i/75] ci-frontend status=$STATUS conclusion=${CONCLUSION:-<none>}"
+            if [ "$STATUS" = "missing" ] && [ "$i" -ge 3 ]; then
+              echo "ci-frontend did not run for this SHA (path filters skipped it); proceeding."
+              exit 0
+            fi
+            if [ "$STATUS" = "completed" ]; then
+              if [ "$CONCLUSION" = "success" ] || [ "$CONCLUSION" = "skipped" ]; then
+                echo "ci-frontend succeeded; proceeding."
+                exit 0
+              fi
+              echo "::error::ci-frontend completed with conclusion='$CONCLUSION' — aborting deploy."
+              exit 1
+            fi
+            sleep 20
+          done
+          echo "::error::ci-frontend did not complete within 25 minutes"
+          exit 1
+
+  # ---- Deploy: roll the web container -------------------------------------
+  deploy-web:
+    name: deploy web
+    needs: gate
+    uses: ./.github/workflows/_deploy-container-app.yml
+    with:
+      app_name: ca-vrbook-web-staging
+      resource_group: rg-vrbook-staging
+      image: ${{ vars.ACR_NAME }}.azurecr.io/vrbook-web:${{ github.sha }}
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
