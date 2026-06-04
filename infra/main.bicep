@@ -45,6 +45,9 @@ param notificationWorkerImage string = 'mcr.microsoft.com/azuredocs/containerapp
 @description('Container image for the DB migrator job (manual trigger).')
 param migratorImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
+@description('Container image for the Next.js web frontend.')
+param webImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+
 // ---------- Derived flags & sizing ----------
 var isProd = env == 'prod'
 var isStaging = env == 'staging'
@@ -407,6 +410,45 @@ module migratorJob 'modules/container-app-job.bicep' = {
   }
 }
 
+// ---------- Web (Next.js Container App) ----------
+// Separate set of env vars so we don't expose API secrets to the web container.
+// Only NEXT_PUBLIC_* values are baked into the client bundle at build time, but
+// we still inject them at runtime as well for any server components.
+var webEnvVars = [
+  { name: 'NODE_ENV', value: 'production' }
+  { name: 'PORT', value: '3000' }
+  { name: 'HOSTNAME', value: '0.0.0.0' }
+  { name: 'NEXT_TELEMETRY_DISABLED', value: '1' }
+  { name: 'NEXT_PUBLIC_API_BASE_URL', value: 'https://${apiApp.outputs.fqdn}' }
+]
+
+module webApp 'modules/container-app.bicep' = {
+  name: 'web'
+  params: {
+    name: 'ca-vrbook-web-${env}'
+    location: location
+    tags: tags
+    environmentId: cae.outputs.id
+    containerImage: webImage
+    registryServer: acr.outputs.loginServer
+    userAssignedIdentityId: mi.outputs.id
+    workloadProfileName: 'Consumption'
+    targetPort: 3000
+    externalIngress: true
+    minReplicas: env == 'dev' ? 0 : 1
+    maxReplicas: isProd ? 5 : 3
+    cpu: '0.5'
+    memory: '1Gi'
+    envVars: webEnvVars
+    secrets: []
+    keyVaultName: kv.outputs.name
+    scaleRuleType: 'http'
+    httpConcurrentRequests: 50
+    includeProbes: false
+    enableIngress: true
+  }
+}
+
 // ---------- Front Door (prod + staging only) ----------
 module fd 'modules/front-door.bicep' = if (frontDoorEnabled) {
   name: 'fd'
@@ -419,6 +461,7 @@ module fd 'modules/front-door.bicep' = if (frontDoorEnabled) {
 
 // ---------- Outputs ----------
 output apiFqdn string = apiApp.outputs.fqdn
+output webFqdn string = webApp.outputs.fqdn
 output frontDoorHostName string = frontDoorEnabled ? fd.outputs.endpointHostName : ''
 output keyVaultUri string = kv.outputs.vaultUri
 output keyVaultName string = kv.outputs.name

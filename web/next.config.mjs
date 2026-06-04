@@ -3,8 +3,10 @@ const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
   poweredByHeader: false,
+  // typedRoutes is opt-in and currently fights with our dynamic href usage
+  // (search params, computed paths). Re-enable per-page later when stable.
   experimental: {
-    typedRoutes: true,
+    typedRoutes: false,
   },
   images: {
     remotePatterns: [

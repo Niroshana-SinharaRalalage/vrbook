@@ -187,3 +187,16 @@ jobs:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  deploy-web:
+    name: deploy web
+    needs: deploy-api
+    uses: ./.github/workflows/_deploy-container-app.yml
+    with:
+      app_name: ca-vrbook-web-staging
+      resource_group: rg-vrbook-staging
+      image: ${{ vars.ACR_NAME }}.azurecr.io/vrbook-web:${{ github.sha }}
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}

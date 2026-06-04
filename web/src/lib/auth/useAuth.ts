@@ -36,7 +36,7 @@ const toAuthUser = (account: AccountInfo | null): AuthUser | null => {
 export const useAuth = () => {
   const { instance, accounts, inProgress } = useMsal();
   const isAuthenticated = useIsAuthenticated();
-  const account = useAccount(accounts[0] ?? null);
+  const account = useAccount(accounts[0]);
 
   const user = useMemo(() => toAuthUser(account), [account]);
 

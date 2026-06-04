@@ -213,10 +213,6 @@ jobs:
   frontend:
     name: frontend (Next.js)
     runs-on: ubuntu-latest
-    # F1 scaffold lacks a generated package-lock.json. Until F1 ships properly
-    # this job is best-effort — failures don't block the staging deploy. Remove
-    # this flag once F1 lands and we have a committed lock file.
-    continue-on-error: true
     defaults:
       run:
         working-directory: web
@@ -228,10 +224,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          # No npm cache yet — no package-lock.json committed. Enable when F1 ships.
+          cache: npm
+          cache-dependency-path: web/package-lock.json
 
-      - name: Install (generates lock-file in-CI for now)
-        run: npm install
+      - name: Install (npm ci against committed lock)
+        run: npm ci --no-audit --no-fund
 
       - name: Lint + typecheck
         run: |
@@ -260,8 +257,7 @@ jobs:
   # ---------------------------------------------------------------------------
   images:
     name: build & scan images
-    # Don't block on frontend — F1 scaffold lacks package-lock.json (continue-on-error).
-    needs: [backend, contracts]
+    needs: [backend, contracts, frontend]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     runs-on: ubuntu-latest
     strategy:
@@ -283,11 +279,9 @@ jobs:
           - name: booking-worker
             dockerfile: src/Workers/VrBook.Workers.Booking/Dockerfile
             context: .
-          # web image temporarily disabled — F1 frontend scaffold isn't installable
-          # without a committed package-lock.json. Re-add when F1 lands.
-          # - name: web
-          #   dockerfile: web/Dockerfile
-          #   context: .
+          - name: web
+            dockerfile: web/Dockerfile
+            context: web
     env:
       IMAGE: ${{ vars.ACR_NAME }}.azurecr.io/vrbook-${{ matrix.name }}:${{ github.sha }}
     steps:

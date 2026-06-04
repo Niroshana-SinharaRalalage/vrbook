@@ -19,7 +19,14 @@ import {
 import { cn } from '@/lib/utils/cn';
 
 /** Admin nav per proposal §12.1. */
-const items = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  exact?: boolean;
+};
+
+const items: readonly NavItem[] = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { href: '/admin/properties', label: 'Properties', icon: Home },
   { href: '/admin/calendar', label: 'Calendar', icon: CalendarDays },
@@ -31,7 +38,7 @@ const items = [
   { href: '/admin/reports', label: 'Reports', icon: BarChart3 },
   { href: '/admin/sync', label: 'Sync', icon: RefreshCw },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
-] as const;
+];
 
 export const AdminSidebar = () => {
   const pathname = usePathname();

@@ -1,17 +1,17 @@
 'use client';
 
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
 import { InteractionStatus } from '@azure/msal-browser';
 
 /**
- * AD B2C redirect handler (proposal §14.1). MSAL's PublicClientApplication
- * processes the redirect automatically on instantiation — this page exists so
- * the configured `redirectUri` resolves to a real route, and so we can route
- * the user to wherever they were headed when auth was triggered.
+ * Entra External ID redirect handler. MSAL's PublicClientApplication processes
+ * the redirect automatically on instantiation — this page exists so the
+ * configured `redirectUri` resolves to a real route, and so we can route the
+ * user to wherever they were headed when auth was triggered.
  */
-const AuthCallbackPage = () => {
+const CallbackInner = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { instance, inProgress } = useMsal();
@@ -33,5 +33,17 @@ const AuthCallbackPage = () => {
     </main>
   );
 };
+
+const AuthCallbackPage = () => (
+  <Suspense
+    fallback={
+      <main className="flex min-h-dvh items-center justify-center">
+        <div className="text-center text-sm text-muted-foreground">Loading…</div>
+      </main>
+    }
+  >
+    <CallbackInner />
+  </Suspense>
+);
 
 export default AuthCallbackPage;
