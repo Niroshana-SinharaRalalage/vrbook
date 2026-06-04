@@ -84,3 +84,5 @@ exposes port 3000, container-platform probe hits `/api/health`.
 docker build -t vrbook-web:dev .
 docker run -p 3000:3000 --env-file .env.local vrbook-web:dev
 ```
+
+<!-- pipeline-split verification touch -->
