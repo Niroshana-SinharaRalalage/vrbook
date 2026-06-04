@@ -11,6 +11,13 @@ using VrBook.Modules.Identity;
 // applies its pending EF migrations. Owns the only Postgres role with DDL rights.
 // =================================================================================
 
+// TEMP BOOT DIAGNOSTICS: prove Main() actually runs. Container Apps was reporting
+// silent exit-1 from the migrator job. Remove once root cause is identified.
+Console.Error.WriteLine("[BOOT] Migrator Main entered. CLR ready (stderr).");
+Console.Error.Flush();
+Console.WriteLine("[BOOT] Migrator Main entered. CLR ready (stdout).");
+Console.Out.Flush();
+
 Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
     .Enrich.WithProperty("Application", "VrBook.Migrator")
