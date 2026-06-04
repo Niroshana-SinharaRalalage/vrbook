@@ -118,7 +118,7 @@ jobs:
               -n caj-vrbook-migrator-staging \
               -g ${{ env.RESOURCE_GROUP }} \
               --job-execution-name "$EXEC" \
-              --query status -o tsv)
+              --query properties.status -o tsv)
             echo "[$i/30] migrator state: $STATE"
             case "$STATE" in
               Succeeded) exit 0 ;;
