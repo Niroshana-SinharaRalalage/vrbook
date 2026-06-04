@@ -79,6 +79,19 @@ resource dataNsg 'Microsoft.Network/networkSecurityGroups@2024-01-01' = {
         }
       }
       {
+        name: 'AllowAppsToPg'
+        properties: {
+          priority: 110
+          access: 'Allow'
+          direction: 'Inbound'
+          protocol: 'Tcp'
+          sourceAddressPrefix: appsSubnetPrefix
+          sourcePortRange: '*'
+          destinationAddressPrefix: pgSubnetPrefix
+          destinationPortRange: '5432'
+        }
+      }
+      {
         name: 'DenyAllInbound'
         properties: {
           priority: 4096
