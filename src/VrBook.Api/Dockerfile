@@ -26,23 +26,18 @@ RUN dotnet publish src/VrBook.Api/VrBook.Api.csproj \
     /p:UseAppHost=false
 
 # ----- Runtime -----
-FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS runtime
+# Debian-based image ships with ICU + full globalization. No apk gymnastics needed.
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
-# alpine's aspnet image ships without ICU; install it so .NET globalization
-# (date/time/culture) works correctly. Migrator + workers run with
-# DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true and skip this.
-RUN apk add --no-cache icu-data-full icu-libs
-
 # Run as non-root.
-RUN addgroup -S vrbook && adduser -S vrbook -G vrbook
+RUN groupadd --system vrbook && useradd --system --gid vrbook vrbook
 USER vrbook
 
 COPY --from=build --chown=vrbook:vrbook /app/publish .
 
 ENV ASPNETCORE_URLS=http://+:8080 \
-    DOTNET_RUNNING_IN_CONTAINER=true \
-    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+    DOTNET_RUNNING_IN_CONTAINER=true
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \

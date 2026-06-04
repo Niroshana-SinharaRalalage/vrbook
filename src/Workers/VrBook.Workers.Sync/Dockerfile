@@ -4,10 +4,9 @@ COPY src/ src/
 RUN dotnet publish src/Workers/VrBook.Workers.Sync/VrBook.Workers.Sync.csproj \
     -c Release -o /app/publish /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
-ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
-RUN addgroup -S vrbook && adduser -S vrbook -G vrbook
+RUN groupadd --system vrbook && useradd --system --gid vrbook vrbook
 USER vrbook
 COPY --from=build --chown=vrbook:vrbook /app/publish .
 ENTRYPOINT ["dotnet", "VrBook.Workers.Sync.dll"]
