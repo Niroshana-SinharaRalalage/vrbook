@@ -236,7 +236,9 @@ jobs:
           npm run typecheck
 
       - name: Test (Vitest)
-        run: npm test -- --run
+        # F1 ships no unit tests yet; component tests land per-feature with
+        # A2+. --passWithNoTests keeps the job green until the first .test.ts.
+        run: npm test -- --run --passWithNoTests
 
       - name: Build
         run: npm run build
