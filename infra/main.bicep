@@ -241,8 +241,9 @@ var apiEnvVars = [
   { name: 'EntraExternalId__Instance', secretRef: 'entra-instance' }
   { name: 'EntraExternalId__TenantId', secretRef: 'entra-tenant-id' }
   { name: 'EntraExternalId__ClientId', secretRef: 'entra-api-client-id' }
-  // DevAuth disabled in non-dev environments by default — enable per-env via env var.
-  { name: 'DevAuth__AllowAnonymous', value: env == 'dev' ? 'true' : 'false' }
+  // DevAuth enabled in dev + staging (first-deploy validation path); disabled in prod.
+  // Switch staging back to 'false' before exposing to anyone outside the eng team.
+  { name: 'DevAuth__AllowAnonymous', value: isProd ? 'false' : 'true' }
   { name: 'Blob__AccountUrl', value: storage.outputs.blobEndpoint }
   { name: 'Blob__PropertyImagesContainer', value: 'property-images' }
   { name: 'Blob__MessageAttachmentsContainer', value: 'message-attachments' }
