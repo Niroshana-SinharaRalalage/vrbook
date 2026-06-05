@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
+using VrBook.Modules.Catalog;
 using VrBook.Modules.Identity;
 
 // =================================================================================
@@ -33,7 +34,7 @@ try
     // Each module exposes a static AddXxxDbContextForMigrator helper (separate from
     // AddXxxModule so the migrator isn't pulling in MediatR / API / middleware services).
     builder.Services.AddIdentityDbContextForMigrator(builder.Configuration);
-    // TODO(A2): builder.Services.AddCatalogDbContextForMigrator(builder.Configuration);
+    builder.Services.AddCatalogDbContextForMigrator(builder.Configuration);
     // TODO(A3..): one per module-DbContext as they ship.
 
     using var host = builder.Build();
