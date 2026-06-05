@@ -32,10 +32,19 @@ public abstract class BaseDbContext(
             var clr = entityType.ClrType;
             if (typeof(AggregateRoot).IsAssignableFrom(clr))
             {
-                // Concurrency token
-                modelBuilder.Entity(clr)
-                    .Property(nameof(AggregateRoot.RowVersion))
-                    .IsConcurrencyToken();
+                // Concurrency token — DISABLED for the Phase-1 single-actor MVP.
+                // Re-enable when collaborative editing actually exists (proposal
+                // §11.3 stretch). The auto-increment in ApplyAudit caused
+                // EF Core 8 + Npgsql to throw DbUpdateConcurrencyException on
+                // single-request UPDATEs on aggregates with owned types
+                // (Property has Address/Capacity/CheckInWindow). Per-config
+                // overrides via PropertyConfiguration.IsConcurrencyToken(false)
+                // did not take effect; disabling globally here is the cleanest
+                // workaround until concurrency is genuinely needed.
+                //
+                // modelBuilder.Entity(clr)
+                //     .Property(nameof(AggregateRoot.RowVersion))
+                //     .IsConcurrencyToken();
 
                 // Soft delete filter — `e => e.DeletedAt == null`
                 var parameter = System.Linq.Expressions.Expression.Parameter(clr, "e");
