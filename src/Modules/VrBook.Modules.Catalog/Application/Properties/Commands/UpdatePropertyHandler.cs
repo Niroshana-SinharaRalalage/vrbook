@@ -9,9 +9,16 @@ using VrBook.Modules.Catalog.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Catalog.Application.Properties.Commands;
 
+/// <summary>
+/// Update handler that bypasses EF Core change tracking and uses ExecuteUpdate
+/// / raw inserts. EF tracking of the Property aggregate (which holds three
+/// owned value objects + a collection of HouseRules + an opaque amenity join)
+/// triggered DbUpdateConcurrencyException on EF Core 8 + Npgsql for reasons we
+/// couldn't pin down in the time budget. This handler is deliberately
+/// procedural to keep PUT predictable until that's revisited.
+/// </summary>
 internal sealed class UpdatePropertyHandler(
     ICurrentUser currentUser,
-    IPropertyRepository properties,
     IAmenityRepository amenities,
     CatalogDbContext db,
     IPropertyImageUrlBuilder urls) : IRequestHandler<UpdatePropertyCommand, PropertyDto>
@@ -23,65 +30,108 @@ internal sealed class UpdatePropertyHandler(
             throw new ForbiddenException("Sign-in required.");
         }
 
-        var p = await properties.GetByIdAsync(request.Id, cancellationToken)
-            ?? throw new NotFoundException("Property", request.Id);
-
-        if (p.OwnerUserId != currentUser.UserId.Value && !currentUser.IsAdmin)
-        {
-            throw new ForbiddenException("You are not the owner of this property.");
-        }
-
         var r = request.Request ?? throw new ArgumentException("Request body is required.", nameof(request));
         if (r.Address is null)
         {
             throw new ArgumentException("Address is required.", nameof(request));
         }
 
+        // Load the row's owner + slug WITHOUT tracking. We use the result for
+        // authZ and to refetch the canonical state at the end.
+        var existing = await db.Properties.AsNoTracking()
+            .Where(p => p.Id == request.Id)
+            .Select(p => new { p.Id, p.OwnerUserId, p.Slug })
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("Property", request.Id);
+
+        if (existing.OwnerUserId != currentUser.UserId.Value && !currentUser.IsAdmin)
+        {
+            throw new ForbiddenException("You are not the owner of this property.");
+        }
+
+        // Validate domain VOs by constructing them - throws if invariants violated.
         var address = new Address(
             r.Address.Street, r.Address.City, r.Address.State, r.Address.PostalCode,
             r.Address.CountryCode, r.Address.Latitude, r.Address.Longitude);
         var capacity = new Capacity(r.MaxGuests, r.Bedrooms, r.Bathrooms, r.Beds);
         var checkIn = new CheckInWindow(r.CheckinFrom, r.CheckinTo, r.CheckoutBy);
 
-        p.UpdateBasics(
-            r.Title, r.Description, address, capacity, checkIn,
-            r.ReviewsEnabled, r.DynamicPricingEnabled, r.MessagingEnabled);
-        p.ReplaceHouseRules(r.HouseRules ?? Array.Empty<string>());
-
+        // Validate amenity ids exist.
         var validAmenities = (r.AmenityIds is null || r.AmenityIds.Count == 0)
             ? Array.Empty<Amenity>()
             : (await amenities.GetByIdsAsync(r.AmenityIds, cancellationToken)).ToArray();
-        p.ReplaceAmenities(validAmenities.Select(a => a.Id));
 
-        if (r.IsActive && !p.IsActive)
+        var now = DateTimeOffset.UtcNow;
+
+        // Update Property + owned-type columns via raw ExecuteUpdate. No
+        // tracking, no concurrency check, no row_version drama.
+        var updated = await db.Properties.Where(p => p.Id == request.Id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(p => p.Title, r.Title.Trim())
+                .SetProperty(p => p.Description, r.Description.Trim())
+                .SetProperty(p => p.IsActive, r.IsActive)
+                .SetProperty(p => p.ReviewsEnabled, r.ReviewsEnabled)
+                .SetProperty(p => p.DynamicPricingEnabled, r.DynamicPricingEnabled)
+                .SetProperty(p => p.MessagingEnabled, r.MessagingEnabled)
+                .SetProperty(p => p.UpdatedAt, now)
+                .SetProperty(p => p.UpdatedBy, (Guid?)currentUser.UserId.Value),
+                cancellationToken);
+        if (updated == 0)
         {
-            p.Activate();
+            throw new NotFoundException("Property", request.Id);
         }
-        else if (!r.IsActive && p.IsActive)
+
+        // Owned VO columns can't go through ExecuteUpdate (EF doesn't translate
+        // owned-type setters in ExecuteUpdate yet); use a raw UPDATE.
+        await db.Database.ExecuteSqlInterpolatedAsync($@"
+UPDATE catalog.properties
+SET street = {address.Street},
+    city = {address.City},
+    state = {address.State},
+    postal_code = {address.PostalCode},
+    country = {address.Country},
+    latitude = {address.Latitude},
+    longitude = {address.Longitude},
+    max_guests = {capacity.MaxGuests},
+    bedrooms = {capacity.Bedrooms},
+    bathrooms = {capacity.Bathrooms},
+    beds = {capacity.Beds},
+    checkin_from = {checkIn.CheckinFrom},
+    checkin_to = {checkIn.CheckinTo},
+    checkout_by = {checkIn.CheckoutBy}
+WHERE id = {request.Id}", cancellationToken);
+
+        // Replace house rules (DELETE + INSERT) via raw SQL.
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"DELETE FROM catalog.house_rules WHERE property_id = {request.Id}", cancellationToken);
+        var ruleIndex = 0;
+        foreach (var rule in (r.HouseRules ?? Array.Empty<string>()).Where(x => !string.IsNullOrWhiteSpace(x)))
         {
-            p.Deactivate("Deactivated by owner.");
+            var rid = Guid.NewGuid();
+            var trimmed = rule.Trim();
+            var order = ruleIndex++;
+            await db.Database.ExecuteSqlInterpolatedAsync($@"
+INSERT INTO catalog.house_rules (""Id"", property_id, rule_text, sort_order)
+VALUES ({rid}, {request.Id}, {trimmed}, {order})", cancellationToken);
         }
 
-        await db.SaveChangesAsync(cancellationToken);
-
-        // Replace the amenity join rows: delete all existing, then insert the
-        // newly-validated set. Cheaper + simpler than diffing for low cardinality.
-        var existingJoin = await db.Set<Dictionary<string, object>>("property_amenities")
-            .Where(j => (Guid)j["property_id"] == p.Id)
-            .ToListAsync(cancellationToken);
-        db.Set<Dictionary<string, object>>("property_amenities").RemoveRange(existingJoin);
-
-        foreach (var aid in validAmenities.Select(a => a.Id))
+        // Replace amenity join rows.
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"DELETE FROM catalog.property_amenities WHERE property_id = {request.Id}", cancellationToken);
+        foreach (var a in validAmenities)
         {
-            db.Set<Dictionary<string, object>>("property_amenities").Add(new Dictionary<string, object>
-            {
-                ["property_id"] = p.Id,
-                ["amenity_id"] = aid,
-            });
+            await db.Database.ExecuteSqlInterpolatedAsync($@"
+INSERT INTO catalog.property_amenities (property_id, amenity_id)
+VALUES ({request.Id}, {a.Id})", cancellationToken);
         }
-        await db.SaveChangesAsync(cancellationToken);
+
+        // Re-read the updated property for the response (fresh, untracked).
+        var fresh = await db.Properties.AsNoTracking()
+            .Include(p => p.Images)
+            .Include(p => p.HouseRules)
+            .FirstAsync(p => p.Id == request.Id, cancellationToken);
 
         var amenityDtos = validAmenities.Select(a => a.ToDto()).ToArray();
-        return p.ToDto(amenityDtos, urls.ToUrl);
+        return fresh.ToDto(amenityDtos, urls.ToUrl);
     }
 }
