@@ -22,6 +22,9 @@ on:
       - "**/VrBook.sln"
       - ".github/workflows/cd-staging-api.yml"
       - ".github/workflows/_deploy-container-app.yml"
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
   workflow_dispatch:
 
 permissions:
@@ -240,43 +243,9 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,scope=${{ matrix.name }},mode=max
 
-      - name: Generate SBOM (Syft)
-        continue-on-error: true
-        uses: anchore/sbom-action@v0
-        with:
-          image: ${{ env.IMAGE }}
-          format: spdx-json
-          artifact-name: sbom-${{ matrix.name }}.spdx.json
-          output-file: sbom-${{ matrix.name }}.spdx.json
-          upload-artifact: false
-
-      - name: Vulnerability scan (Trivy)
-        uses: aquasecurity/trivy-action@v0.36.0
-        continue-on-error: true
-        with:
-          image-ref: ${{ env.IMAGE }}
-          format: sarif
-          output: trivy-${{ matrix.name }}.sarif
-          severity: HIGH,CRITICAL
-          exit-code: "1"
-          ignore-unfixed: true
-
-      - name: Upload Trivy SARIF
-        if: always()
-        continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: trivy-${{ matrix.name }}.sarif
-          category: trivy-${{ matrix.name }}
-
-      - name: Upload SBOM artifact
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom-${{ matrix.name }}
-          path: sbom-${{ matrix.name }}.spdx.json
-          retention-days: 30
+      # Trivy + Syft are deferred to prod-CD to save staging quota.
+      # When the prod pipeline lands, add: name=='api' (or matrix-level)
+      # SBOM + Trivy gates so we never push an HIGH-CVE image to prod.
 
       - name: Push image to ACR
         run: docker push ${{ env.IMAGE }}

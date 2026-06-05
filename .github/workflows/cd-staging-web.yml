@@ -13,6 +13,9 @@ on:
       - "web/**"
       - ".github/workflows/cd-staging-web.yml"
       - ".github/workflows/_deploy-container-app.yml"
+    paths-ignore:
+      - "web/**/*.md"
+      - "web/README.md"
   workflow_dispatch:
 
 permissions:
@@ -106,43 +109,7 @@ jobs:
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max
 
-      - name: Generate SBOM (Syft)
-        continue-on-error: true
-        uses: anchore/sbom-action@v0
-        with:
-          image: ${{ env.IMAGE }}
-          format: spdx-json
-          artifact-name: sbom-web.spdx.json
-          output-file: sbom-web.spdx.json
-          upload-artifact: false
-
-      - name: Vulnerability scan (Trivy)
-        uses: aquasecurity/trivy-action@v0.36.0
-        continue-on-error: true
-        with:
-          image-ref: ${{ env.IMAGE }}
-          format: sarif
-          output: trivy-web.sarif
-          severity: HIGH,CRITICAL
-          exit-code: "1"
-          ignore-unfixed: true
-
-      - name: Upload Trivy SARIF
-        if: always()
-        continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: trivy-web.sarif
-          category: trivy-web
-
-      - name: Upload SBOM artifact
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom-web
-          path: sbom-web.spdx.json
-          retention-days: 30
+      # Trivy + Syft deferred to prod-CD - same rationale as cd-staging-api.
 
       - name: Push image to ACR
         run: docker push ${{ env.IMAGE }}
