@@ -12,7 +12,7 @@ internal sealed class CreatePropertyHandler(
     ICurrentUser currentUser,
     IPropertyRepository properties,
     IAmenityRepository amenities,
-    IUnitOfWork uow,
+    CatalogDbContext db,
     IPropertyImageUrlBuilder urls) : IRequestHandler<CreatePropertyCommand, PropertyDto>
 {
     public async Task<PropertyDto> Handle(CreatePropertyCommand request, CancellationToken cancellationToken)
@@ -22,7 +22,12 @@ internal sealed class CreatePropertyHandler(
             throw new ForbiddenException("Sign-in required to create a property.");
         }
 
-        var r = request.Request;
+        var r = request.Request ?? throw new ArgumentException("Request body is required.", nameof(request));
+        if (r.Address is null)
+        {
+            throw new ArgumentException("Address is required.", nameof(request));
+        }
+
         var address = new Address(
             r.Address.Street, r.Address.City, r.Address.State, r.Address.PostalCode,
             r.Address.CountryCode, r.Address.Latitude, r.Address.Longitude);
@@ -40,7 +45,9 @@ internal sealed class CreatePropertyHandler(
         }
 
         // Validate amenity ids exist before persisting the join.
-        var validAmenities = await amenities.GetByIdsAsync(r.AmenityIds, cancellationToken);
+        var validAmenities = (r.AmenityIds is null || r.AmenityIds.Count == 0)
+            ? Array.Empty<Amenity>()
+            : (await amenities.GetByIdsAsync(r.AmenityIds, cancellationToken)).ToArray();
         var validIds = validAmenities.Select(a => a.Id).ToArray();
 
         var p = Property.Create(
@@ -51,12 +58,29 @@ internal sealed class CreatePropertyHandler(
             address: address,
             capacity: capacity,
             checkIn: checkIn,
-            houseRules: r.HouseRules,
+            houseRules: r.HouseRules ?? Array.Empty<string>(),
             amenityIds: validIds,
             slug: slug);
 
         await properties.AddAsync(p, cancellationToken);
-        await uow.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+
+        // Property is now persisted; write the amenity join rows. The Property
+        // aggregate's AmenityIds list is Ignore'd on the EF model (proposal
+        // §5.1 keeps the join opaque), so we materialise it via the join set
+        // here.
+        foreach (var aid in validIds)
+        {
+            db.Set<Dictionary<string, object>>("property_amenities").Add(new Dictionary<string, object>
+            {
+                ["property_id"] = p.Id,
+                ["amenity_id"] = aid,
+            });
+        }
+        if (validIds.Length > 0)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
 
         var amenityDtos = validAmenities.Select(a => a.ToDto()).ToArray();
         return p.ToDto(amenityDtos, urls.ToUrl);

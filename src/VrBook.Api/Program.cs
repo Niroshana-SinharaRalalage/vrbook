@@ -48,6 +48,13 @@ builder.Services
     {
         opts.Filters.Add<TraceContextFilter>();
     })
+    .AddJsonOptions(opts =>
+    {
+        // Accept + emit enum values as strings (e.g. "House" instead of 0).
+        // Far friendlier for hand-crafted curl/Postman calls + matches what the
+        // OpenAPI schema advertises.
+        opts.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    })
     .ConfigureApiBehaviorOptions(opts =>
     {
         // Let ProblemDetails middleware build the 400 envelope from model state.
