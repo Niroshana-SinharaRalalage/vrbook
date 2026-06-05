@@ -61,7 +61,14 @@ internal sealed class PropertyConfiguration : IEntityTypeConfiguration<Property>
         b.Property(p => p.CreatedBy).HasColumnName("created_by");
         b.Property(p => p.UpdatedAt).HasColumnName("updated_at");
         b.Property(p => p.UpdatedBy).HasColumnName("updated_by");
-        b.Property(p => p.RowVersion).HasColumnName("row_version");
+        // Override the BaseDbContext-applied IsConcurrencyToken on row_version.
+        // The aggregate is single-actor (the owner) for now; we can re-enable
+        // when collaborative editing actually exists. Keeping it on caused
+        // single-request UPDATEs to throw DbUpdateConcurrencyException with
+        // the auto-increment logic in BaseDbContext.ApplyAudit on staging
+        // Postgres - to be re-investigated alongside the rest of optimistic
+        // concurrency story in A6/A7.
+        b.Property(p => p.RowVersion).HasColumnName("row_version").IsConcurrencyToken(false);
         b.Property(p => p.DeletedAt).HasColumnName("deleted_at");
         b.Property(p => p.DeletedBy).HasColumnName("deleted_by");
 
