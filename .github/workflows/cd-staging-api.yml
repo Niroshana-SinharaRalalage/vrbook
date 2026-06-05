@@ -443,18 +443,29 @@ jobs:
           echo "fqdn=$FQDN" >> "$GITHUB_OUTPUT"
           echo "API FQDN: https://$FQDN"
 
-      - name: Wait for new revision to start serving (max 90s)
+      - name: Wait for active revision to match deployed image (max 3 min)
         env:
-          API: https://${{ steps.fqdn.outputs.fqdn }}
+          EXPECTED_IMAGE: ${{ vars.ACR_NAME }}.azurecr.io/vrbook-api:${{ github.sha }}
         run: |
           set -euo pipefail
-          for i in $(seq 1 18); do
-            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "$API/health/live" || echo "000")
-            echo "[$i/18] /health/live -> $STATUS"
-            if [ "$STATUS" = "200" ]; then exit 0; fi
+          # Don't trust /health/live alone — the OLD revision can serve 200
+          # while traffic is still shifting. Poll the platform until the active
+          # revision is running the image we just pushed.
+          for i in $(seq 1 36); do
+            ACTIVE=$(az containerapp revision list \
+              -n ca-vrbook-api-staging \
+              -g ${{ env.RESOURCE_GROUP }} \
+              --query "[?properties.active].{name:name, image:properties.template.containers[0].image, state:properties.runningState, health:properties.healthState}" \
+              -o json)
+            echo "[$i/36] active revisions: $ACTIVE"
+            MATCH=$(echo "$ACTIVE" | jq -r --arg img "$EXPECTED_IMAGE" '.[] | select(.image==$img and .state=="Running" and .health=="Healthy") | .name' | head -1)
+            if [ -n "$MATCH" ]; then
+              echo "Active revision $MATCH is serving the expected image"
+              exit 0
+            fi
             sleep 5
           done
-          echo "::error::API didn't return 200 on /health/live within 90s"
+          echo "::error::Active revision did not converge on $EXPECTED_IMAGE within 3 min"
           exit 1
 
       - name: Smoke endpoints
