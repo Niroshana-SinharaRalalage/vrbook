@@ -414,3 +414,91 @@ jobs:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  # ---- Smoke: post-deploy curl sweep of the live API ---------------------
+  # Hits the actually-rolled FQDN with DevAuth (staging has
+  # DevAuth__AllowAnonymous=true), checks that every implemented endpoint
+  # responds with the expected status code. Fails the run if any check fails
+  # so the team sees red instead of a silently-broken staging.
+  smoke:
+    name: smoke (api)
+    needs: deploy-api
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Discover API FQDN
+        id: fqdn
+        run: |
+          set -euo pipefail
+          FQDN=$(az containerapp show \
+            -n ca-vrbook-api-staging \
+            -g ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "fqdn=$FQDN" >> "$GITHUB_OUTPUT"
+          echo "API FQDN: https://$FQDN"
+
+      - name: Wait for new revision to start serving (max 90s)
+        env:
+          API: https://${{ steps.fqdn.outputs.fqdn }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 18); do
+            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "$API/health/live" || echo "000")
+            echo "[$i/18] /health/live -> $STATUS"
+            if [ "$STATUS" = "200" ]; then exit 0; fi
+            sleep 5
+          done
+          echo "::error::API didn't return 200 on /health/live within 90s"
+          exit 1
+
+      - name: Smoke endpoints
+        env:
+          API: https://${{ steps.fqdn.outputs.fqdn }}
+        run: |
+          set -euo pipefail
+
+          assert() {
+            local name=$1 expected=$2 actual=$3
+            if [ "$actual" != "$expected" ]; then
+              echo "::error::$name expected HTTP $expected, got $actual"
+              exit 1
+            fi
+            echo "  $name -> $actual  OK"
+          }
+
+          curl_status() { curl -sS -o /dev/null -w "%{http_code}" --max-time 15 "$@"; }
+
+          echo "=== Health ==="
+          assert "/health/live"  200 "$(curl_status "$API/health/live")"
+          # /health/ready is currently Degraded (Redis disabled in staging);
+          # it still returns 200 so we accept that. Tighten when Redis lands.
+          assert "/health/ready" 200 "$(curl_status "$API/health/ready")"
+
+          echo "=== Identity (DevAuth path) ==="
+          # DevAuth__AllowAnonymous=true on staging - GET /me must succeed with no header.
+          assert "GET  /api/v1/me"            200 "$(curl_status "$API/api/v1/me")"
+          assert "GET  /api/v1/admin/users"   200 "$(curl_status "$API/api/v1/admin/users")"
+
+          # Verify the body of /me actually has an id - guards against the
+          # API returning a stub or empty object even if the status is 200.
+          BODY=$(curl -sS --max-time 15 "$API/api/v1/me")
+          echo "  /me body: $BODY"
+          echo "$BODY" | jq -e '.id and (.email | length > 0)' > /dev/null \
+            || { echo "::error::/api/v1/me did not return a valid user object"; exit 1; }
+          echo "  /me body shape  OK"
+
+          echo "=== Swagger (enabled via Swagger__EnableInProduction) ==="
+          assert "GET  /swagger/v1/swagger.json" 200 "$(curl_status "$API/swagger/v1/swagger.json")"
+
+          # NOTE(A2+): when Catalog / Pricing / Booking endpoints ship,
+          # add their smoke calls here so every new agent's path is covered
+          # by every post-deploy run.
+
+          echo ""
+          echo "Smoke OK on $API"

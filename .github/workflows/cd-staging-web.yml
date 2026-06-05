@@ -160,3 +160,72 @@ jobs:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  # ---- Smoke: post-deploy curl sweep of the live web app ----------------
+  smoke:
+    name: smoke (web)
+    needs: deploy-web
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Discover web FQDN
+        id: fqdn
+        run: |
+          set -euo pipefail
+          FQDN=$(az containerapp show \
+            -n ca-vrbook-web-staging \
+            -g ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "fqdn=$FQDN" >> "$GITHUB_OUTPUT"
+          echo "Web FQDN: https://$FQDN"
+
+      - name: Wait for new revision (max 90s)
+        env:
+          WEB: https://${{ steps.fqdn.outputs.fqdn }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 18); do
+            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "$WEB/api/health" || echo "000")
+            echo "[$i/18] /api/health -> $STATUS"
+            if [ "$STATUS" = "200" ]; then exit 0; fi
+            sleep 5
+          done
+          echo "::error::Web didn't return 200 on /api/health within 90s"
+          exit 1
+
+      - name: Smoke routes
+        env:
+          WEB: https://${{ steps.fqdn.outputs.fqdn }}
+        run: |
+          set -euo pipefail
+
+          assert() {
+            local name=$1 expected=$2 actual=$3
+            if [ "$actual" != "$expected" ]; then
+              echo "::error::$name expected HTTP $expected, got $actual"
+              exit 1
+            fi
+            echo "  $name -> $actual  OK"
+          }
+
+          curl_status() { curl -sS -o /dev/null -w "%{http_code}" --max-time 15 "$@"; }
+
+          assert "GET /api/health"     200 "$(curl_status "$WEB/api/health")"
+          assert "GET /"               200 "$(curl_status "$WEB/")"
+          assert "GET /properties"     200 "$(curl_status "$WEB/properties")"
+          assert "GET /account/bookings" 200 "$(curl_status "$WEB/account/bookings")"
+
+          BODY=$(curl -sS --max-time 15 "$WEB/api/health")
+          echo "  /api/health body: $BODY"
+          echo "$BODY" | jq -e '.status == "ok"' > /dev/null \
+            || { echo "::error::/api/health did not report ok"; exit 1; }
+          echo "  /api/health shape  OK"
+
+          echo ""
+          echo "Smoke OK on $WEB"
