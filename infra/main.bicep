@@ -247,6 +247,9 @@ var apiEnvVars = [
   // DevAuth enabled in dev + staging (first-deploy validation path); disabled in prod.
   // Switch staging back to 'false' before exposing to anyone outside the eng team.
   { name: 'DevAuth__AllowAnonymous', value: isProd ? 'false' : 'true' }
+  // Swagger UI exposed in dev + staging for engineering convenience.
+  // Prod never serves the spec - clients use the published OpenAPI artifact.
+  { name: 'Swagger__EnableInProduction', value: isProd ? 'false' : 'true' }
   { name: 'Blob__AccountUrl', value: storage.outputs.blobEndpoint }
   { name: 'Blob__PropertyImagesContainer', value: 'property-images' }
   { name: 'Blob__MessageAttachmentsContainer', value: 'message-attachments' }
