@@ -9,6 +9,9 @@ name: cd-staging-api
 on:
   push:
     branches: [develop]
+    # paths + paths-ignore are mutually exclusive in GH Actions - use
+    # negative patterns ("!") inside paths instead. Negative patterns
+    # must come AFTER the positive include they're excluding from.
     paths:
       - "src/**"
       - "tests/**"
@@ -22,9 +25,8 @@ on:
       - "**/VrBook.sln"
       - ".github/workflows/cd-staging-api.yml"
       - ".github/workflows/_deploy-container-app.yml"
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
+      - "!**/*.md"
+      - "!docs/**"
   workflow_dispatch:
 
 permissions:

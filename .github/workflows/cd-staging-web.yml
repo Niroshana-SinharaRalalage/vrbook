@@ -9,13 +9,13 @@ name: cd-staging-web
 on:
   push:
     branches: [develop]
+    # paths + paths-ignore are mutually exclusive in GH Actions - use
+    # negative patterns ("!") inside paths instead.
     paths:
       - "web/**"
       - ".github/workflows/cd-staging-web.yml"
       - ".github/workflows/_deploy-container-app.yml"
-    paths-ignore:
-      - "web/**/*.md"
-      - "web/README.md"
+      - "!web/**/*.md"
   workflow_dispatch:
 
 permissions:
