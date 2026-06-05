@@ -86,7 +86,11 @@ public sealed class Property : AggregateRoot
         var i = 0;
         foreach (var r in houseRules)
         {
-            if (string.IsNullOrWhiteSpace(r)) continue;
+            if (string.IsNullOrWhiteSpace(r))
+            {
+                continue;
+            }
+
             p._houseRules.Add(new HouseRule(p.Id, r, i++));
         }
         foreach (var aid in amenityIds.Distinct())
@@ -127,7 +131,11 @@ public sealed class Property : AggregateRoot
         var i = 0;
         foreach (var r in rules)
         {
-            if (string.IsNullOrWhiteSpace(r)) continue;
+            if (string.IsNullOrWhiteSpace(r))
+            {
+                continue;
+            }
+
             _houseRules.Add(new HouseRule(Id, r, i++));
         }
     }
