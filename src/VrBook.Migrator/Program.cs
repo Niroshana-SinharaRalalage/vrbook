@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Serilog;
 using VrBook.Modules.Catalog;
 using VrBook.Modules.Identity;
+using VrBook.Modules.Pricing;
 
 // =================================================================================
 // VrBook.Migrator — one-shot console app run as a Container App Job before every
@@ -35,6 +36,7 @@ try
     // AddXxxModule so the migrator isn't pulling in MediatR / API / middleware services).
     builder.Services.AddIdentityDbContextForMigrator(builder.Configuration);
     builder.Services.AddCatalogDbContextForMigrator(builder.Configuration);
+    builder.Services.AddPricingDbContextForMigrator(builder.Configuration);
     // TODO(A3..): one per module-DbContext as they ship.
 
     using var host = builder.Build();

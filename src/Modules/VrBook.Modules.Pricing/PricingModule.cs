@@ -1,26 +1,27 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using VrBook.Application.Common;
+using VrBook.Contracts.Interfaces;
+using VrBook.Modules.Pricing.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Pricing;
 
-/// <summary>
-/// Module bootstrap for the <c>Pricing</c> bounded context. The Api host calls
-/// <c>services.AddPricingModule(configuration)</c> from Program.cs. This A0 stub
-/// registers nothing meaningful — downstream agents replace it with the real
-/// implementation. See proposal §20.2 for the per-agent scope.
-/// </summary>
 public sealed class PricingModule : IModuleRegistration
 {
     public string Name => "pricing";
 
     public IServiceCollection AddModule(IServiceCollection services, IConfiguration configuration)
     {
-        // TODO(agent): register the module's DbContext, MediatR handlers, validators, and
-        // context-specific services. To pick up MediatR handlers + FluentValidation
-        // validators from this assembly, call:
-        //
-        //   services.AddModuleAssembly(typeof(PricingModule).Assembly);
+        services.AddDbContext<PricingDbContext>(opts =>
+            opts.UseNpgsql(
+                configuration.GetConnectionString("Postgres") ?? string.Empty,
+                npg => npg.MigrationsHistoryTable("__ef_migrations_history", PricingDbContext.SchemaName)));
+
+        services.AddScoped<IPricingPlanRepository, PricingPlanRepository>();
+        services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<PricingDbContext>());
+
+        services.AddModuleAssembly(typeof(PricingModule).Assembly);
         return services;
     }
 }
@@ -30,4 +31,18 @@ public static class PricingModuleRegistration
     public static IServiceCollection AddPricingModule(
         this IServiceCollection services, IConfiguration configuration) =>
         new PricingModule().AddModule(services, configuration);
+
+    public static IServiceCollection AddPricingDbContextForMigrator(
+        this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddDbContext<PricingDbContext>(opts =>
+            opts.UseNpgsql(
+                configuration.GetConnectionString("Postgres") ?? string.Empty,
+                npg => npg.MigrationsHistoryTable("__ef_migrations_history", PricingDbContext.SchemaName)));
+        services.AddScoped<DbContext>(sp => sp.GetRequiredService<PricingDbContext>());
+
+        services.AddSingleton<IDateTimeProvider, VrBook.Infrastructure.Common.SystemClock>();
+        services.AddSingleton<ICurrentUser, VrBook.Infrastructure.Common.AnonymousCurrentUser>();
+        return services;
+    }
 }
