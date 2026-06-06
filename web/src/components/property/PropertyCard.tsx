@@ -8,7 +8,7 @@ export interface PropertyCardModel {
   readonly slug: string;
   readonly title: string;
   readonly location: string;
-  readonly nightlyRate: number;
+  readonly nightlyRate: number | null;
   readonly currency: string;
   readonly ratingAvg: number | null;
   readonly ratingCount: number;
@@ -58,10 +58,16 @@ export const PropertyCard = ({ property, className }: PropertyCardProps) => {
         </div>
         <p className="line-clamp-1 text-xs text-muted-foreground">{property.location}</p>
         <p className="pt-1 text-sm">
-          <span className="font-semibold text-foreground">
-            {formatCurrency(property.nightlyRate, property.currency)}
-          </span>
-          <span className="text-muted-foreground"> / night</span>
+          {property.nightlyRate !== null ? (
+            <>
+              <span className="font-semibold text-foreground">
+                {formatCurrency(property.nightlyRate, property.currency)}
+              </span>
+              <span className="text-muted-foreground"> / night</span>
+            </>
+          ) : (
+            <span className="text-muted-foreground">Pricing coming soon</span>
+          )}
         </p>
       </div>
     </Link>

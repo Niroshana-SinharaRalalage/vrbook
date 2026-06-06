@@ -4,8 +4,11 @@ import type { Metadata } from 'next';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { PropertyCard, type PropertyCardModel } from '@/components/property/PropertyCard';
+import { searchProperties, type PropertySummary } from '@/lib/api/catalog';
 
 // Server-rendered search results (proposal §3.5 — SSR is revenue-critical for SEO).
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Browse stays',
@@ -17,6 +20,8 @@ interface SearchParams {
   readonly checkin?: string;
   readonly checkout?: string;
   readonly guests?: string;
+  readonly amenityCodes?: string | readonly string[];
+  readonly sort?: string;
 }
 
 interface PropertiesPageProps {
@@ -31,25 +36,59 @@ const ResultsSkeleton = () => (
   </div>
 );
 
-const Results = async ({ searchParams: _searchParams }: { searchParams: SearchParams }) => {
-  // F1: wire to `apiFetch<PagedResult<PropertyCardModel>>('/properties', { query: ... })`.
-  const stub: PropertyCardModel[] = [];
-  if (stub.length === 0) {
+const toCardModel = (p: PropertySummary): PropertyCardModel => ({
+  slug: p.slug,
+  title: p.title,
+  location: [p.city, p.country].filter(Boolean).join(', '),
+  nightlyRate: p.fromNightlyRate,
+  currency: p.currency,
+  ratingAvg: p.averageRating,
+  ratingCount: p.ratingCount,
+  coverImageUrl: p.primaryImageUrl,
+});
+
+const Results = async ({ searchParams }: { searchParams: SearchParams }) => {
+  const amenityCodes = Array.isArray(searchParams.amenityCodes)
+    ? searchParams.amenityCodes
+    : searchParams.amenityCodes
+      ? [searchParams.amenityCodes]
+      : undefined;
+
+  try {
+    const page = await searchProperties({
+      destination: searchParams.destination,
+      checkin: searchParams.checkin,
+      checkout: searchParams.checkout,
+      guests: searchParams.guests ? Number(searchParams.guests) : undefined,
+      amenityCodes,
+      sort: searchParams.sort,
+      limit: 24,
+    });
+
+    if (page.items.length === 0) {
+      return (
+        <div className="rounded-xl border border-dashed border-border p-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            No properties match those filters yet. Try widening your search.
+          </p>
+        </div>
+      );
+    }
     return (
-      <div className="rounded-xl border border-dashed border-border p-12 text-center">
-        <p className="text-sm text-muted-foreground">
-          Search wiring lands here — implemented by Agent F1 (proposal §6.2 — Catalog: GET /properties).
-        </p>
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {page.items.map((p) => (
+          <PropertyCard key={p.slug} property={toCardModel(p)} />
+        ))}
+      </div>
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Request failed';
+    return (
+      <div className="rounded-xl border border-dashed border-destructive/30 bg-destructive/5 p-12 text-center">
+        <p className="text-sm text-destructive">Unable to load properties: {message}</p>
       </div>
     );
   }
-  return (
-    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {stub.map((p) => (
-        <PropertyCard key={p.slug} property={p} />
-      ))}
-    </div>
-  );
 };
 
 const PropertiesPage = ({ searchParams }: PropertiesPageProps) => {
