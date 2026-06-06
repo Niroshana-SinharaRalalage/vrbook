@@ -503,6 +503,12 @@ jobs:
             echo "  (no seeded property to test pricing route; skipping)"
           fi
 
+          echo "=== Availability (A2.1) ==="
+          if [ -n "$KNOWN" ]; then
+            assert "GET /availability" 200 "$(curl_status \
+              "$API/api/v1/properties/$KNOWN/availability?from=2026-07-01&to=2026-08-01")"
+          fi
+
           # Amenity seed should have produced 25 rows on first deploy. Drop
           # this assertion as new seeds land - codes are stable but count
           # will grow.

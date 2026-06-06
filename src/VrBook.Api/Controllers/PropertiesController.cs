@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
+using VrBook.Modules.Booking.Application.Queries;
 using VrBook.Modules.Catalog.Application.Properties.Commands;
 using VrBook.Modules.Catalog.Application.Properties.Queries;
 
@@ -37,15 +38,11 @@ public sealed class PropertiesController(IMediator mediator) : ControllerBase
 
     [HttpGet("{id:guid}/availability")]
     [AllowAnonymous]
-    [SwaggerOperation(Summary = "Day-by-day availability for a property.")]
-    [ProducesResponseType(typeof(IReadOnlyList<AvailabilityDayDto>), StatusCodes.Status200OK)]
-    public IActionResult Availability(Guid id, [FromQuery] DateOnly from, [FromQuery] DateOnly to) =>
-        StatusCode(StatusCodes.Status501NotImplemented, new
-        {
-            type = "https://httpstatuses.io/501",
-            title = "Not implemented yet",
-            detail = "Backed by IBookingAvailabilityReader, owned by Agent A4 (Booking).",
-        });
+    [SwaggerOperation(Summary = "Blocked date ranges for a property in [from, to).")]
+    [ProducesResponseType(typeof(AvailabilityDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<AvailabilityDto>> Availability(
+        Guid id, [FromQuery] DateOnly from, [FromQuery] DateOnly to, CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(new GetPropertyAvailabilityQuery(id, from, to), cancellationToken));
 
     [HttpPost]
     [Authorize(Roles = "Owner,Admin")]

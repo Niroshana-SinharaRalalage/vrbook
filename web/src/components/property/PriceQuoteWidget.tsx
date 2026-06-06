@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { computeQuote, type Quote } from '@/lib/api/pricing';
 import { placeBooking } from '@/lib/api/booking';
+import { getAvailability, type BlockedRange } from '@/lib/api/catalog';
 import { ApiProblemError } from '@/lib/api/client';
 import { formatCurrency } from '@/lib/utils/currency';
 
@@ -12,6 +13,13 @@ const addDays = (yyyymmdd: string, days: number): string => {
   const d = new Date(yyyymmdd + 'T00:00:00Z');
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+};
+
+const isRangeBlocked = (checkin: string, checkout: string, blocked: readonly BlockedRange[]): BlockedRange | null => {
+  for (const b of blocked) {
+    if (b.start < checkout && checkin < b.end) return b;
+  }
+  return null;
 };
 
 interface PriceQuoteWidgetProps {
@@ -29,6 +37,9 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [booking, setBooking] = useState(false);
+  const [blocked, setBlocked] = useState<readonly BlockedRange[]>([]);
+
+  const conflict = isRangeBlocked(checkin, checkout, blocked);
 
   const fetchQuote = async () => {
     setLoading(true);
@@ -75,6 +86,18 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
 
   useEffect(() => {
     void fetchQuote();
+    // Fetch a year of availability so the picker can warn before the user hits Book.
+    void (async () => {
+      try {
+        const from = today();
+        const to = addDays(from, 365);
+        const a = await getAvailability(propertyId, from, to);
+        setBlocked(a.blocked);
+      } catch {
+        // Non-fatal: a missing availability check still leaves the server-side
+        // overlap guard as the final safety net (booking.dates_unavailable 422).
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propertyId]);
 
@@ -126,6 +149,12 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
         {loading ? 'Calculating…' : 'Get quote'}
       </button>
 
+      {conflict && !error && (
+        <div className="rounded-md border border-yellow-500/40 bg-yellow-50 p-3 text-xs text-yellow-900 dark:bg-yellow-900/20 dark:text-yellow-200">
+          These dates overlap with an existing booking ({conflict.start} to {conflict.end}). Please pick different dates.
+        </div>
+      )}
+
       {error && (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
           {error}
@@ -166,10 +195,10 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
           <button
             type="button"
             onClick={() => void onBook()}
-            disabled={booking || !agreed}
+            disabled={booking || !agreed || conflict !== null}
             className="w-full rounded-md bg-brand-maroon-700 px-3 py-2 text-sm font-medium text-white hover:bg-brand-maroon-800 disabled:opacity-50"
           >
-            {booking ? 'Booking…' : 'Book this stay'}
+            {booking ? 'Booking…' : conflict ? 'Dates unavailable' : 'Book this stay'}
           </button>
 
           <p className="text-xs text-muted-foreground">

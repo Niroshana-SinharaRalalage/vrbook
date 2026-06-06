@@ -118,3 +118,21 @@ export const getPropertyBySlug = (slug: string): Promise<PropertyDetail> =>
 
 export const listAmenities = (): Promise<readonly Amenity[]> =>
   apiFetch<readonly Amenity[]>('/api/v1/amenities', { anonymous: true });
+
+export interface BlockedRange {
+  readonly start: string;   // YYYY-MM-DD
+  readonly end: string;     // YYYY-MM-DD (exclusive)
+}
+
+export interface Availability {
+  readonly propertyId: string;
+  readonly from: string;
+  readonly to: string;
+  readonly blocked: readonly BlockedRange[];
+}
+
+export const getAvailability = (propertyId: string, from: string, to: string): Promise<Availability> =>
+  apiFetch<Availability>(`/api/v1/properties/${encodeURIComponent(propertyId)}/availability`, {
+    query: { from, to },
+    anonymous: true,
+  });

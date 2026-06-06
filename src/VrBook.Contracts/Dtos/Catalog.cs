@@ -63,6 +63,15 @@ public sealed record AvailabilityDayDto(
     bool Available,
     string? BlockReason);
 
+/// <summary>One contiguous range that is NOT available to be booked. Half-open [start, end).</summary>
+public sealed record BlockedRangeDto(DateOnly Start, DateOnly End);
+
+public sealed record AvailabilityDto(
+    Guid PropertyId,
+    DateOnly From,
+    DateOnly To,
+    IReadOnlyList<BlockedRangeDto> Blocked);
+
 public sealed record CreatePropertyRequest(
     string Title,
     string Description,
