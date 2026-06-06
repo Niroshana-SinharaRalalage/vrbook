@@ -6,6 +6,7 @@ import { Star, MapPin, Users, BedDouble, Bath, Clock } from 'lucide-react';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { PropertyGallery } from '@/components/property/PropertyGallery';
+import { PriceQuoteWidget } from '@/components/property/PriceQuoteWidget';
 import { ApiProblemError } from '@/lib/api/client';
 import { getPropertyBySlug, type PropertyDetail } from '@/lib/api/catalog';
 
@@ -201,10 +202,7 @@ const PropertyDetailView = async ({ slug }: { slug: string }) => {
           </article>
 
           <aside className="rounded-xl border border-border bg-card p-6 lg:sticky lg:top-24 lg:self-start">
-            <p className="text-sm font-medium">Pricing &amp; availability</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Wires up to POST /api/v1/properties/{'{id}'}/quotes and POST /api/v1/bookings/holds in Agent A3 (Pricing) and A4 (Booking).
-            </p>
+            <PriceQuoteWidget propertyId={data.id} maxGuests={data.maxGuests} />
           </aside>
         </div>
       </div>
