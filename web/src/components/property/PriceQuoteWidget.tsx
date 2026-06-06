@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { computeQuote, type Quote } from '@/lib/api/pricing';
+import { placeBooking } from '@/lib/api/booking';
 import { ApiProblemError } from '@/lib/api/client';
 import { formatCurrency } from '@/lib/utils/currency';
 
@@ -18,12 +20,15 @@ interface PriceQuoteWidgetProps {
 }
 
 export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProps) => {
+  const router = useRouter();
   const [checkin, setCheckin] = useState(() => addDays(today(), 14));
   const [checkout, setCheckout] = useState(() => addDays(today(), 17));
   const [guests, setGuests] = useState(2);
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [booking, setBooking] = useState(false);
 
   const fetchQuote = async () => {
     setLoading(true);
@@ -40,6 +45,31 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const onBook = async () => {
+    setBooking(true);
+    setError(null);
+    try {
+      const result = await placeBooking({
+        propertyId,
+        checkinDate: checkin,
+        checkoutDate: checkout,
+        guestCount: guests,
+        guests: [{ fullName: 'Primary guest', isPrimary: true }],
+        agreedToHouseRules: true,
+        applyLoyaltyDiscount: false,
+      });
+      router.push(`/bookings/${result.id}`);
+    } catch (err) {
+      if (err instanceof ApiProblemError) {
+        setError(err.problem.detail ?? err.message);
+      } else {
+        setError(err instanceof Error ? err.message : 'Booking failed');
+      }
+    } finally {
+      setBooking(false);
     }
   };
 
@@ -90,8 +120,8 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
       <button
         type="button"
         onClick={() => void fetchQuote()}
-        disabled={loading}
-        className="w-full rounded-md bg-brand-maroon-700 px-3 py-2 text-sm font-medium text-white hover:bg-brand-maroon-800 disabled:opacity-50"
+        disabled={loading || booking}
+        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm hover:bg-accent disabled:opacity-50"
       >
         {loading ? 'Calculating…' : 'Get quote'}
       </button>
@@ -103,27 +133,47 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
       )}
 
       {quote && !error && (
-        <div className="space-y-2 border-t border-border pt-3 text-sm">
-          <div className="flex justify-between text-muted-foreground">
-            <span>
-              {quote.nightly.length} nights × {formatCurrency(quote.subtotal.amount / Math.max(1, quote.nightly.length), quote.subtotal.currency)}
-            </span>
-            <span>{formatCurrency(quote.subtotal.amount, quote.subtotal.currency)}</span>
-          </div>
-          {quote.fees.map((f) => (
-            <div key={f.label} className="flex justify-between text-muted-foreground">
-              <span>{f.label}</span>
-              <span>{formatCurrency(f.amount.amount, f.amount.currency)}</span>
+        <div className="space-y-3 border-t border-border pt-3 text-sm">
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-muted-foreground">
+              <span>
+                {quote.nightly.length} nights × {formatCurrency(quote.subtotal.amount / Math.max(1, quote.nightly.length), quote.subtotal.currency)}
+              </span>
+              <span>{formatCurrency(quote.subtotal.amount, quote.subtotal.currency)}</span>
             </div>
-          ))}
-          <div className="flex justify-between border-t border-border pt-2 font-medium">
-            <span>Total</span>
-            <span>{formatCurrency(quote.total.amount, quote.total.currency)}</span>
+            {quote.fees.map((f) => (
+              <div key={f.label} className="flex justify-between text-muted-foreground">
+                <span>{f.label}</span>
+                <span>{formatCurrency(f.amount.amount, f.amount.currency)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between border-t border-border pt-2 font-medium">
+              <span>Total</span>
+              <span>{formatCurrency(quote.total.amount, quote.total.currency)}</span>
+            </div>
           </div>
+
+          <label className="flex items-start gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-border"
+            />
+            <span className="text-muted-foreground">I agree to the house rules.</span>
+          </label>
+
+          <button
+            type="button"
+            onClick={() => void onBook()}
+            disabled={booking || !agreed}
+            className="w-full rounded-md bg-brand-maroon-700 px-3 py-2 text-sm font-medium text-white hover:bg-brand-maroon-800 disabled:opacity-50"
+          >
+            {booking ? 'Booking…' : 'Book this stay'}
+          </button>
+
           <p className="text-xs text-muted-foreground">
-            Quote valid until{' '}
-            {new Date(quote.expiresAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}.
-            Booking lands in A4.
+            You won&apos;t be charged yet. Payment integration lands in Agent A5.
           </p>
         </div>
       )}
