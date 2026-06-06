@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
+using VrBook.Modules.Booking;
 using VrBook.Modules.Catalog;
 using VrBook.Modules.Identity;
 using VrBook.Modules.Pricing;
@@ -37,6 +38,7 @@ try
     builder.Services.AddIdentityDbContextForMigrator(builder.Configuration);
     builder.Services.AddCatalogDbContextForMigrator(builder.Configuration);
     builder.Services.AddPricingDbContextForMigrator(builder.Configuration);
+    builder.Services.AddBookingDbContextForMigrator(builder.Configuration);
     // TODO(A3..): one per module-DbContext as they ship.
 
     using var host = builder.Build();

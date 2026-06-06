@@ -12,6 +12,9 @@
     <ProjectReference Include="..\..\VrBook.Application\VrBook.Application.csproj" />
     <ProjectReference Include="..\..\VrBook.Infrastructure\VrBook.Infrastructure.csproj" />
     <ProjectReference Include="..\..\VrBook.Contracts\VrBook.Contracts.csproj" />
+    <!-- Cross-module reads + price computation. Booking depends on Catalog + Pricing. -->
+    <ProjectReference Include="..\VrBook.Modules.Catalog\VrBook.Modules.Catalog.csproj" />
+    <ProjectReference Include="..\VrBook.Modules.Pricing\VrBook.Modules.Pricing.csproj" />
   </ItemGroup>
 
   <ItemGroup>

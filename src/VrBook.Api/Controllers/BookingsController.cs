@@ -1,8 +1,11 @@
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
+using VrBook.Modules.Booking.Application.Commands;
+using VrBook.Modules.Booking.Application.Queries;
 
 namespace VrBook.Api.Controllers;
 
@@ -10,77 +13,92 @@ namespace VrBook.Api.Controllers;
 [Route("api/v1/bookings")]
 [Tags("Booking")]
 [Authorize]
-public sealed class BookingsController : StubController
+public sealed class BookingsController(IMediator mediator) : ControllerBase
 {
+    // ---- Hold flow deferred to A4.1 ----
     [HttpPost("holds")]
-    [SwaggerOperation(Summary = "Create a 15-minute Redis hold on dates during checkout. Idempotent.")]
+    [SwaggerOperation(Summary = "Create a 15-minute hold on dates during checkout.")]
     [ProducesResponseType(typeof(HoldDto), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public IActionResult CreateHold([FromBody] CreateHoldRequest request) => NotImplementedYet("A4");
+    public IActionResult CreateHold([FromBody] CreateHoldRequest request) =>
+        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Hold flow lands in A4.1." });
 
     [HttpDelete("holds/{holdId:guid}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public IActionResult ReleaseHold(Guid holdId) => NotImplementedYet("A4");
+    public IActionResult ReleaseHold(Guid holdId) =>
+        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Hold flow lands in A4.1." });
 
     [HttpPost]
-    [SwaggerOperation(Summary = "Place a booking: Draft -> Tentative on successful payment authorization.")]
-    [ProducesResponseType(typeof(PlaceBookingResponse), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public IActionResult Place([FromBody] PlaceBookingRequest request) => NotImplementedYet("A4");
+    [SwaggerOperation(Summary = "Place a booking: Draft -> Tentative.")]
+    [ProducesResponseType(typeof(BookingDto), StatusCodes.Status201Created)]
+    public async Task<ActionResult<BookingDto>> Place([FromBody] PlaceBookingRequest request, CancellationToken cancellationToken)
+    {
+        var dto = await mediator.Send(new PlaceBookingCommand(request), cancellationToken);
+        return CreatedAtAction(nameof(Get), new { id = dto.Id }, dto);
+    }
 
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(BookingDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public IActionResult Get(Guid id) => NotImplementedYet("A4");
+    public async Task<ActionResult<BookingDto>> Get(Guid id, CancellationToken cancellationToken)
+    {
+        var dto = await mediator.Send(new GetBookingQuery(id), cancellationToken);
+        return Ok(dto);
+    }
 
     [HttpGet]
     [SwaggerOperation(Summary = "List the caller's bookings (cursor-paginated).")]
     [ProducesResponseType(typeof(PagedResult<BookingSummaryDto>), StatusCodes.Status200OK)]
-    public IActionResult MyBookings([FromQuery] string? cursor, [FromQuery] int limit = 20) =>
-        NotImplementedYet("A4");
+    public async Task<ActionResult<PagedResult<BookingSummaryDto>>> MyBookings(
+        [FromQuery] string? cursor, [FromQuery] int limit, CancellationToken cancellationToken)
+    {
+        var page = await mediator.Send(new MyBookingsQuery(cursor, limit == 0 ? 20 : limit), cancellationToken);
+        return Ok(page);
+    }
 
     [HttpPost("{id:guid}/cancel")]
-    [SwaggerOperation(Summary = "Guest cancellation. Computes refund per cancellation policy.")]
-    public IActionResult Cancel(Guid id, [FromBody] CancelBookingRequest request) =>
-        NotImplementedYet("A4");
+    [SwaggerOperation(Summary = "Guest cancellation. Tentative or Confirmed -> Cancelled.")]
+    public async Task<ActionResult<BookingDto>> Cancel(Guid id, [FromBody] CancelBookingRequest request, CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(new CancelBookingCommand(id, request.Reason ?? string.Empty), cancellationToken));
 
     [HttpPost("{id:guid}/confirm")]
     [Authorize(Roles = "Owner,Admin")]
     [SwaggerOperation(Summary = "Owner manual confirmation. Tentative -> Confirmed.")]
-    public IActionResult Confirm(Guid id) => NotImplementedYet("A4");
+    public async Task<ActionResult<BookingDto>> Confirm(Guid id, CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(new ConfirmBookingCommand(id), cancellationToken));
 
     [HttpPost("{id:guid}/reject")]
     [Authorize(Roles = "Owner,Admin")]
-    [SwaggerOperation(Summary = "Owner rejection of a Tentative booking. Triggers refund.")]
-    public IActionResult Reject(Guid id, [FromBody] RejectBookingRequest request) =>
-        NotImplementedYet("A4");
+    [SwaggerOperation(Summary = "Owner rejection of a Tentative booking.")]
+    public async Task<ActionResult<BookingDto>> Reject(Guid id, [FromBody] RejectBookingRequest request, CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(new RejectBookingCommand(id, request.Reason ?? string.Empty), cancellationToken));
 
     [HttpPost("{id:guid}/check-in")]
     [Authorize(Roles = "Owner,Admin")]
-    public IActionResult CheckIn(Guid id) => NotImplementedYet("A4");
+    public async Task<ActionResult<BookingDto>> CheckIn(Guid id, CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(new CheckInBookingCommand(id), cancellationToken));
 
     [HttpPost("{id:guid}/check-out")]
     [Authorize(Roles = "Owner,Admin")]
-    public IActionResult CheckOut(Guid id) => NotImplementedYet("A4");
+    public async Task<ActionResult<BookingDto>> CheckOut(Guid id, CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(new CheckOutBookingCommand(id), cancellationToken));
 
     [HttpPost("{id:guid}/review")]
     [SwaggerOperation(Summary = "Submit a post-stay review. Only after CheckedOut.")]
     public IActionResult SubmitReview(Guid id, [FromBody] SubmitReviewRequest request) =>
-        NotImplementedYet("A8");
+        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Reviews land in Agent A6." });
 }
 
 [Route("api/v1/admin/bookings")]
 [Tags("Booking — Admin")]
 [Authorize(Roles = "Owner,Admin")]
-public sealed class BookingAdminController : StubController
+public sealed class BookingAdminController : ControllerBase
 {
     [HttpGet("queue")]
     [SwaggerOperation(Summary = "Tentative-bookings queue awaiting owner action.")]
-    [ProducesResponseType(typeof(IReadOnlyList<BookingQueueRowDto>), StatusCodes.Status200OK)]
-    public IActionResult Queue() => NotImplementedYet("A4");
+    public IActionResult Queue() =>
+        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Owner queue projection lands in A4.1." });
 
     [HttpPost("manual")]
     [SwaggerOperation(Summary = "Walk-in / phone booking, manually entered by owner.")]
-    [ProducesResponseType(typeof(BookingDto), StatusCodes.Status201Created)]
-    public IActionResult Manual([FromBody] ManualBookingRequest request) => NotImplementedYet("A4");
+    public IActionResult Manual([FromBody] ManualBookingRequest request) =>
+        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Manual bookings land in A4.1." });
 }

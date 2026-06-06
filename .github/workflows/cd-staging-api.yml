@@ -483,6 +483,11 @@ jobs:
           assert "GET  /api/v1/properties?limit=5" 200 "$(curl_status "$API/api/v1/properties?limit=5")"
           assert "GET  /api/v1/amenities"         200 "$(curl_status "$API/api/v1/amenities")"
 
+          echo "=== Booking (A4) ==="
+          # DevAuth user is Dev Owner - they own all properties so cannot
+          # book their own. Just sanity-check the GET-list endpoint exists.
+          assert "GET  /api/v1/bookings" 200 "$(curl_status "$API/api/v1/bookings")"
+
           echo "=== Pricing (A3) ==="
           # GET /pricing on a property with no plan -> 404 (expected for staging seed).
           # We test the route exists by asserting it returns 4xx not 5xx.
