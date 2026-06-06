@@ -99,7 +99,7 @@ SET street = {address.Street},
     checkin_from = {checkIn.CheckinFrom},
     checkin_to = {checkIn.CheckinTo},
     checkout_by = {checkIn.CheckoutBy}
-WHERE id = {request.Id}", cancellationToken);
+WHERE "Id" = {request.Id}", cancellationToken);
 
         // Replace house rules (DELETE + INSERT) via raw SQL.
         await db.Database.ExecuteSqlInterpolatedAsync(
