@@ -235,6 +235,7 @@ var apiEnvVars = [
   { name: 'SignalR__ConnectionString', secretRef: 'signalr-cs' }
   { name: 'Stripe__SecretKey', secretRef: 'stripe-secret' }
   { name: 'Stripe__WebhookSecret', secretRef: 'stripe-webhook-secret' }
+  { name: 'Stripe__PublishableKey', secretRef: 'stripe-publishable-key' }
   // Email — Azure Communication Services (ADR-0011 supersedes SendGrid).
   // Connection string is seeded out-of-band into KV (or provisioned by a future
   // acs-email.bicep module). A9 reads Acs__* in lieu of SendGrid__*.
@@ -272,6 +273,7 @@ var apiSecrets = [
   { name: 'signalr-cs', keyVaultSecretName: 'signalr-cs' }
   { name: 'stripe-secret', keyVaultSecretName: 'stripe-secret' }
   { name: 'stripe-webhook-secret', keyVaultSecretName: 'stripe-webhook-secret' }
+  { name: 'stripe-publishable-key', keyVaultSecretName: 'stripe-publishable-key' }
   { name: 'acs-connection-string', keyVaultSecretName: 'acs-connection-string' }
   { name: 'entra-instance', keyVaultSecretName: 'entra-instance' }
   { name: 'entra-tenant-id', keyVaultSecretName: 'entra-tenant-id' }

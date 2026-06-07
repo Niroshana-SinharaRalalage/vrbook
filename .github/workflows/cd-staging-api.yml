@@ -509,6 +509,21 @@ jobs:
               "$API/api/v1/properties/$KNOWN/availability?from=2026-07-01&to=2026-08-01")"
           fi
 
+          echo "=== Payment (A5) ==="
+          # /intents/by-booking returns 404 for a random GUID (no PI yet) - 404 = healthy route.
+          STATUS=$(curl_status "$API/api/v1/payments/intents/by-booking/00000000-0000-0000-0000-000000000001")
+          case "$STATUS" in
+            404) echo "  GET /intents/by-booking -> 404 OK" ;;
+            *)   echo "::error::/intents/by-booking expected 404, got $STATUS"; exit 1 ;;
+          esac
+          # Webhook returns 400 without a valid signature - 400 = handler running, signature check engaged.
+          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" \
+            --max-time 15 --data "{}" "$API/api/v1/payments/webhooks/stripe")
+          case "$STATUS" in
+            400|200) echo "  POST /webhooks/stripe -> $STATUS OK" ;;
+            *)       echo "::error::/webhooks/stripe expected 400, got $STATUS"; exit 1 ;;
+          esac
+
           # Amenity seed should have produced 25 rows on first deploy. Drop
           # this assertion as new seeds land - codes are stable but count
           # will grow.

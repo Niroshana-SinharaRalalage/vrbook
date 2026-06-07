@@ -6,6 +6,7 @@ using Serilog;
 using VrBook.Modules.Booking;
 using VrBook.Modules.Catalog;
 using VrBook.Modules.Identity;
+using VrBook.Modules.Payment;
 using VrBook.Modules.Pricing;
 
 // =================================================================================
@@ -39,7 +40,8 @@ try
     builder.Services.AddCatalogDbContextForMigrator(builder.Configuration);
     builder.Services.AddPricingDbContextForMigrator(builder.Configuration);
     builder.Services.AddBookingDbContextForMigrator(builder.Configuration);
-    // TODO(A3..): one per module-DbContext as they ship.
+    builder.Services.AddPaymentDbContextForMigrator(builder.Configuration);
+    // TODO(A6..): one per module-DbContext as they ship.
 
     using var host = builder.Build();
 

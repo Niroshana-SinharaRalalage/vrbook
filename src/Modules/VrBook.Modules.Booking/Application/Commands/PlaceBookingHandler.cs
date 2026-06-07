@@ -1,4 +1,5 @@
 using MediatR;
+using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
@@ -6,6 +7,7 @@ using VrBook.Modules.Booking.Application.Common;
 using VrBook.Modules.Booking.Domain;
 using VrBook.Modules.Booking.Infrastructure.Persistence;
 using VrBook.Modules.Catalog.Application.Properties.Queries;
+using VrBook.Modules.Payment.Application.Commands;
 using VrBook.Modules.Pricing.Application.Quotes.Commands;
 using DomainBooking = VrBook.Modules.Booking.Domain.Booking;
 
@@ -94,6 +96,16 @@ internal sealed class PlaceBookingHandler(
 
         await bookings.AddAsync(booking, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+
+        // Create the Stripe PaymentIntent (manual capture). No-op when Stripe is
+        // unconfigured - the booking still persists, just without a payment path.
+        // The guest can complete payment from /bookings/[id] using the client secret.
+        await mediator.Send(
+            new CreatePaymentIntentForBookingCommand(
+                booking.Id,
+                new Money(booking.Total, booking.Currency)),
+            cancellationToken);
+
         return booking.ToDto();
     }
 }

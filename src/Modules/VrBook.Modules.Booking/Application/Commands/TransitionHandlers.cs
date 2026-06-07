@@ -5,11 +5,13 @@ using VrBook.Domain.Common;
 using VrBook.Modules.Booking.Application.Common;
 using VrBook.Modules.Booking.Infrastructure.Persistence;
 using VrBook.Modules.Catalog.Application.Properties.Queries;
+using VrBook.Modules.Payment.Application.Commands;
 
 namespace VrBook.Modules.Booking.Application.Commands;
 
 internal sealed class CancelBookingHandler(
     ICurrentUser currentUser,
+    IMediator mediator,
     IBookingRepository bookings,
     BookingDbContext db) : IRequestHandler<CancelBookingCommand, BookingDto>
 {
@@ -28,6 +30,10 @@ internal sealed class CancelBookingHandler(
         }
         booking.CancelByGuest(request.Reason);
         await db.SaveChangesAsync(cancellationToken);
+
+        // Issue Stripe refund (cancels uncaptured PI; full refund if captured).
+        // v1: full refund only. Cancellation-policy partial refunds land in A5.1.
+        await mediator.Send(new RefundForBookingCommand(booking.Id, null, request.Reason), cancellationToken);
         return booking.ToDto();
     }
 }
@@ -38,6 +44,8 @@ internal abstract class OwnerActionHandler(
     IBookingRepository bookings,
     BookingDbContext db)
 {
+    protected IMediator Mediator => mediator;
+
     protected async Task<BookingDto> TransitionAsync(Guid bookingId, Action<Domain.Booking> transition, CancellationToken cancellationToken)
     {
         if (currentUser.UserId is null)
@@ -66,16 +74,26 @@ internal sealed class ConfirmBookingHandler(
     ICurrentUser currentUser, IMediator mediator, IBookingRepository bookings, BookingDbContext db)
     : OwnerActionHandler(currentUser, mediator, bookings, db), IRequestHandler<ConfirmBookingCommand, BookingDto>
 {
-    public Task<BookingDto> Handle(ConfirmBookingCommand request, CancellationToken cancellationToken) =>
-        TransitionAsync(request.Id, b => b.Confirm(), cancellationToken);
+    public async Task<BookingDto> Handle(ConfirmBookingCommand request, CancellationToken cancellationToken)
+    {
+        var dto = await TransitionAsync(request.Id, b => b.Confirm(), cancellationToken);
+        // Capture the held funds. No-op when Stripe is unconfigured.
+        await Mediator.Send(new CapturePaymentIntentForBookingCommand(request.Id), cancellationToken);
+        return dto;
+    }
 }
 
 internal sealed class RejectBookingHandler(
     ICurrentUser currentUser, IMediator mediator, IBookingRepository bookings, BookingDbContext db)
     : OwnerActionHandler(currentUser, mediator, bookings, db), IRequestHandler<RejectBookingCommand, BookingDto>
 {
-    public Task<BookingDto> Handle(RejectBookingCommand request, CancellationToken cancellationToken) =>
-        TransitionAsync(request.Id, b => b.Reject(request.Reason), cancellationToken);
+    public async Task<BookingDto> Handle(RejectBookingCommand request, CancellationToken cancellationToken)
+    {
+        var dto = await TransitionAsync(request.Id, b => b.Reject(request.Reason), cancellationToken);
+        // Release the auth-hold (or refund if already captured).
+        await Mediator.Send(new RefundForBookingCommand(request.Id, null, request.Reason), cancellationToken);
+        return dto;
+    }
 }
 
 internal sealed class CheckInBookingHandler(
