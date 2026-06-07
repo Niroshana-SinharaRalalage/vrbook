@@ -47,6 +47,17 @@ internal sealed class PlaceBookingHandler(
                 "You can't book your own property.");
         }
 
+        // Availability check (A2.1). Anything not Cancelled / Rejected occupies the
+        // calendar. Race window vs SaveChangesAsync is acceptable for v1 - A5 will
+        // harden via a transactional pre-charge guard.
+        var overlaps = await bookings.FindOverlapsAsync(property.Id, r.CheckinDate, r.CheckoutDate, cancellationToken);
+        if (overlaps.Count > 0)
+        {
+            throw new BusinessRuleViolationException(
+                "booking.dates_unavailable",
+                "These dates are already booked. Please choose different dates.");
+        }
+
         // Compute the quote via Pricing (in-process MediatR; not Service Bus).
         var quoteReq = new QuoteRequest(r.CheckinDate, r.CheckoutDate, r.GuestCount, r.ApplyLoyaltyDiscount);
         var quote = await mediator.Send(new ComputeQuoteCommand(r.PropertyId, quoteReq), cancellationToken);
