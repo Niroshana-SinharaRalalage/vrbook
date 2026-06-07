@@ -36,9 +36,11 @@ internal sealed class BookingRepository(BookingDbContext db) : IBookingRepositor
         await db.Bookings
             .AsNoTracking()
             .Where(b => b.PropertyId == propertyId
-                && (b.Status == BookingStatus.Tentative
-                    || b.Status == BookingStatus.Confirmed
-                    || b.Status == BookingStatus.CheckedIn)
+                // Anything but Cancelled / Rejected blocks the calendar. CheckedOut /
+                // Completed are kept because their stay may still be in the future
+                // (test-only timing, but also defensive in prod).
+                && b.Status != BookingStatus.Cancelled
+                && b.Status != BookingStatus.Rejected
                 && b.Stay.CheckinDate < checkout
                 && checkin < b.Stay.CheckoutDate)
             .ToListAsync(cancellationToken);

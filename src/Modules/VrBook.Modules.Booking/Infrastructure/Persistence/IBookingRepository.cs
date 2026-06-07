@@ -11,8 +11,9 @@ public interface IBookingRepository
 
     /// <summary>
     /// Returns bookings on the given property that overlap [checkin, checkout) AND
-    /// occupy the calendar (Tentative + Confirmed + CheckedIn). Cancelled / Rejected
-    /// bookings free the dates.
+    /// occupy the calendar. Anything except Cancelled / Rejected counts as occupying.
+    /// Must agree with <see cref="ListBlockedRangesAsync"/> so the placement guard
+    /// rejects every range the availability endpoint reports as blocked.
     /// </summary>
     Task<IReadOnlyList<DomainBooking>> FindOverlapsAsync(Guid propertyId, DateOnly checkin, DateOnly checkout, CancellationToken cancellationToken = default);
 
