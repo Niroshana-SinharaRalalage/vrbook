@@ -106,6 +106,8 @@ jobs:
           tags: ${{ env.IMAGE }}
           push: false
           load: true
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=https://ca-vrbook-api-staging.icydesert-abf3fa4e.eastus2.azurecontainerapps.io
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max
 
