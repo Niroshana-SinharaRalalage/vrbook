@@ -115,3 +115,23 @@ export const cancelBooking = (id: string, reason: string): Promise<Booking> =>
     method: 'POST',
     body: { reason },
   });
+
+// ---- Payment ------------------------------------------------------------
+export interface PaymentIntent {
+  readonly id: string;
+  readonly bookingId: string;
+  readonly stripePaymentIntentId: string;
+  readonly amount: Money;
+  readonly status: string;
+  readonly captureMethod: string;
+  readonly createdAt: string;
+}
+
+export interface PaymentIntentForBooking {
+  readonly paymentIntent: PaymentIntent;
+  readonly clientSecret: string;
+  readonly publishableKey: string;
+}
+
+export const getPaymentIntentForBooking = (bookingId: string): Promise<PaymentIntentForBooking> =>
+  apiFetch<PaymentIntentForBooking>(`/api/v1/payments/intents/by-booking/${encodeURIComponent(bookingId)}`);
