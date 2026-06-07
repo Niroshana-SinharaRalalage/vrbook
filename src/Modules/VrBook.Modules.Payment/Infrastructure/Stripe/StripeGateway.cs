@@ -102,7 +102,12 @@ internal sealed class StripeGateway : IStripeGateway
         }
         try
         {
-            var evt = EventUtility.ConstructEvent(payload, signatureHeader, options.WebhookSecret);
+            // Stripe accounts are routinely on a newer API version than the SDK release we ship.
+            // ConstructEvent throws on version mismatch by default; we use only the top-level
+            // event metadata + a few known PaymentIntent fields, which are stable across versions.
+            // Bigger SDK upgrades happen in their own commits.
+            var evt = EventUtility.ConstructEvent(payload, signatureHeader, options.WebhookSecret,
+                throwOnApiVersionMismatch: false);
             eventType = evt.Type;
             rawEventJson = payload;
             return true;
