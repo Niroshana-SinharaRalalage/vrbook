@@ -15,6 +15,11 @@ RUN npm ci --no-audit --no-fund
 COPY . .
 
 # Build Next.js in standalone mode (next.config.mjs sets output: 'standalone').
+# NEXT_PUBLIC_* vars are inlined into the BROWSER bundle at build time -
+# the Container App runtime env never reaches hydrated client components.
+# CI passes --build-arg NEXT_PUBLIC_API_BASE_URL=https://... per environment.
+ARG NEXT_PUBLIC_API_BASE_URL=""
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
