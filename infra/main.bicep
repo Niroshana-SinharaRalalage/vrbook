@@ -248,6 +248,10 @@ var apiEnvVars = [
   // DevAuth enabled in dev + staging (first-deploy validation path); disabled in prod.
   // Switch staging back to 'false' before exposing to anyone outside the eng team.
   { name: 'DevAuth__AllowAnonymous', value: isProd ? 'false' : 'true' }
+  // CORS - allow the deployed web Container App + localhost for dev. Same-cluster
+  // ingress means we know the FQDN deterministically: ca-vrbook-web-{env}.{caeDomain}.
+  { name: 'Cors__AllowedOrigins__0', value: 'http://localhost:3000' }
+  { name: 'Cors__AllowedOrigins__1', value: 'https://ca-vrbook-web-${env}.${cae.outputs.defaultDomain}' }
   // Swagger UI exposed in dev + staging for engineering convenience.
   // Prod never serves the spec - clients use the published OpenAPI artifact.
   { name: 'Swagger__EnableInProduction', value: isProd ? 'false' : 'true' }
