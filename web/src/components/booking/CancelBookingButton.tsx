@@ -29,9 +29,13 @@ export const CancelBookingButton = ({ booking }: Props) => {
     setError(null);
     try {
       await cancelBooking(booking.id, reason || 'Cancelled by guest');
-      router.refresh();
-      setOpen(false);
+      // Navigate away from the now-Cancelled booking detail rather than relying on
+      // router.refresh() (Next.js App Router caches the server fetch heavily, the
+      // status pill keeps showing the old value). /account/bookings re-fetches
+      // fresh and shows the cancellation in context with the user's other trips.
+      router.push('/account/bookings');
     } catch (err) {
+      setBusy(false);
       setError(
         err instanceof ApiProblemError
           ? err.problem.detail ?? err.message
@@ -39,8 +43,6 @@ export const CancelBookingButton = ({ booking }: Props) => {
             ? err.message
             : 'Cancel failed',
       );
-    } finally {
-      setBusy(false);
     }
   };
 
