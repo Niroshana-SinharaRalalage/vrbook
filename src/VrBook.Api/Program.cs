@@ -28,11 +28,17 @@ using VrBook.Modules.Sync;
 var builder = WebApplication.CreateBuilder(args);
 
 // ---- Serilog (configured from appsettings.json under "Serilog") ----
+// PiiRedactingEnricher runs LAST so it sees the final property bag (after
+// FromLogContext + custom WithProperty have populated it). Any property whose
+// key matches the sensitive list in PiiRedactingEnricher is replaced with
+// [REDACTED] before the sink writes the JSON line. See docs/EXECUTION_PLAN.md
+// section 4.2 for the standard.
 builder.Host.UseSerilog((ctx, sp, lc) => lc
     .ReadFrom.Configuration(ctx.Configuration)
     .ReadFrom.Services(sp)
     .Enrich.FromLogContext()
-    .Enrich.WithProperty("Application", "VrBook.Api"));
+    .Enrich.WithProperty("Application", "VrBook.Api")
+    .Enrich.With<VrBook.Api.Observability.PiiRedactingEnricher>());
 
 // ---- ASP.NET Core core services ----
 builder.Services.AddHttpContextAccessor();
