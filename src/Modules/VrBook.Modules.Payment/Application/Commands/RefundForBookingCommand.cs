@@ -34,12 +34,19 @@ internal sealed class RefundForBookingHandler(
         {
             return false; // No payment was taken; nothing to refund.
         }
-        if (pi.Status != PaymentStatus.Succeeded && pi.Status != PaymentStatus.RequiresCapture)
+        if (pi.Status != PaymentStatus.Succeeded)
         {
-            // Uncaptured PI - cancel rather than refund. No fee retention (nothing was charged).
+            // PI is either RequiresPaymentMethod (no card attached -> nothing happened)
+            // or RequiresCapture (auth-hold placed but not captured). Stripe refuses to
+            // "refund" an uncaptured charge - you must cancel the PI so the auth-hold
+            // is released to the cardholder. No service fee retention - we never had
+            // the money in the first place.
             var cancelled = await stripe.CancelPaymentIntentAsync(pi.StripePaymentIntentId, cancellationToken);
             pi.UpdateStatus(cancelled.Status, cancelled.ChargeId);
             await db.SaveChangesAsync(cancellationToken);
+            logger.LogInformation(
+                "Cancelled uncaptured PI {Pi} for booking {BookingId} (was {Was})",
+                pi.StripePaymentIntentId, cmd.BookingId, pi.Status);
             return true;
         }
 
