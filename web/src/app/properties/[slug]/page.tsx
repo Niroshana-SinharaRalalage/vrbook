@@ -7,6 +7,7 @@ import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { PropertyGallery } from '@/components/property/PropertyGallery';
 import { PriceQuoteWidget } from '@/components/property/PriceQuoteWidget';
+import { PropertyReviewsList } from '@/components/property/PropertyReviewsList';
 import { ApiProblemError } from '@/lib/api/client';
 import { getPropertyBySlug, type PropertyDetail } from '@/lib/api/catalog';
 
@@ -199,6 +200,15 @@ const PropertyDetailView = async ({ slug }: { slug: string }) => {
                 </ul>
               </section>
             )}
+
+            <section>
+              <h2 className="mb-3 text-xl font-semibold tracking-tight">
+                Reviews{data.ratingCount > 0 && ` (${data.ratingCount})`}
+              </h2>
+              <Suspense fallback={<div className="h-24 animate-pulse rounded-md bg-muted" />}>
+                <PropertyReviewsList propertyId={data.id} />
+              </Suspense>
+            </section>
           </article>
 
           <aside className="rounded-xl border border-border bg-card p-6 lg:sticky lg:top-24 lg:self-start">

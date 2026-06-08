@@ -7,6 +7,7 @@ import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { StripePaymentForm } from '@/components/booking/StripePaymentForm';
 import { CancelBookingButton } from '@/components/booking/CancelBookingButton';
+import { ReviewSubmitForm } from '@/components/booking/ReviewSubmitForm';
 import { ApiProblemError } from '@/lib/api/client';
 import { getBooking, type Booking, type BookingStatus } from '@/lib/api/booking';
 import { formatCurrency } from '@/lib/utils/currency';
@@ -169,6 +170,12 @@ const BookingDetail = async ({ id }: { id: string }) => {
             <section className="rounded-xl border border-border bg-card p-5">
               <h2 className="mb-3 text-sm font-medium">Cancel</h2>
               <CancelBookingButton booking={b} />
+            </section>
+          )}
+          {(b.status === 'CheckedOut' || b.status === 'Completed') && (
+            <section className="rounded-xl border border-border bg-card p-5">
+              <h2 className="mb-3 text-sm font-medium">Leave a review</h2>
+              <ReviewSubmitForm bookingId={b.id} />
             </section>
           )}
           <section className="rounded-xl border border-border bg-card p-5">
