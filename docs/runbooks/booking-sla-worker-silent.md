@@ -12,14 +12,30 @@ bookings hit the threshold, or (b) the worker is dead/wedged.
 ## Diagnostic queries
 
 ```kusto
-// Worker heartbeat
-traces
-| where timestamp > ago(8h)
-| where cloud_RoleName == "vrbook-workers-booking"
-| summarize last_seen=max(timestamp)
+// Booking Worker heartbeat — Container Apps stamps ContainerAppName_s
+ContainerAppConsoleLogs_CL
+| where TimeGenerated > ago(8h)
+| where ContainerAppName_s == "ca-vrbook-bookingworker-staging"
+   or ContainerAppName_s == "ca-vrbook-bookingworker-prod"
+| summarize last_seen = max(TimeGenerated), count_ = count() by ContainerAppName_s
 
-// Tentative bookings past SLA but still Tentative
-// (run against booking schema, via az postgres flexible-server execute)
+// Same worker via handler trace (after A4.1 ships the SLA sweep)
+let parsed = ContainerAppConsoleLogs_CL
+  | where TimeGenerated > ago(8h)
+  | where Log_s startswith '{"@t"'
+  | extend e = parse_json(Log_s);
+parsed
+| where tostring(e.SourceContext) startswith "VrBook.Workers.Booking"
+| summarize count_ = count() by bin(TimeGenerated, 30m)
+| render timechart
+```
+
+```sql
+-- Tentative bookings past SLA but still Tentative
+SELECT id, reference, property_id, tentative_until
+FROM booking.bookings
+WHERE status = 'Tentative' AND tentative_until < now() - interval '1 hour'
+ORDER BY tentative_until;
 ```
 
 ```sql

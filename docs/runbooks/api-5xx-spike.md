@@ -1,6 +1,14 @@
 # Runbook — API 5xx spike
 
-> Alert: API 5xx rate > 1% over 10 min. Severity: **Sev2** → on-call.
+> Alert: `alert-vrbook-{env}-5xx-spike` — API 5xx rate > 1% over 10 min.
+> Severity: **Sev2** → on-call.
+
+## Symptom
+
+API container is returning 5xx responses at > 1% of total volume sustained for 10
+minutes. The browser may show "Internal Server Error" or "Failed to fetch" toasts.
+Health checks (`/health/live`, `/health/ready`) may still pass since they bypass
+most middleware.
 
 ## First 5 minutes
 
@@ -10,12 +18,32 @@
 
 ## Diagnostic queries
 
+Use `docs/observability/queries.kql` → `api-failures-by-endpoint` and
+`api-5xx-last-15m`. Inline versions for direct paste:
+
 ```kusto
-requests
-| where timestamp > ago(15m) and resultCode startswith "5"
-| summarize count() by tostring(customDimensions.endpoint), bin(timestamp, 1m)
+// Which endpoints are failing right now
+AppRequests
+| where TimeGenerated > ago(15m) and ResultCode startswith "5"
+| summarize count_=count() by Url, bin(TimeGenerated, 1m)
 | render timechart
+
+// Drill into a specific failing endpoint with exception details
+let parsed = ContainerAppConsoleLogs_CL
+  | where TimeGenerated > ago(15m)
+  | where Log_s startswith '{"@t"'
+  | extend e = parse_json(Log_s);
+parsed
+| where tostring(e['@l']) == "Error"
+| extend handler = tostring(e.RequestName), msg = tostring(e['@m']),
+         source = tostring(e.SourceContext), trace = tostring(e.TraceId)
+| project TimeGenerated, handler, source, trace, msg
+| order by TimeGenerated desc
 ```
+
+Reminder: `DomainExceptionLogFilter` suppresses framework-level Error logs for
+known domain exceptions (BRV / NotFound / Forbidden / Conflict / FluentValidation).
+If the alert fires, every line above is a *real* unhandled exception worth chasing.
 
 ## Likely causes & fixes
 

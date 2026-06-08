@@ -18,21 +18,34 @@ Stripe is retrying with exponential backoff. Bookings may stall in `Draft` becau
 
 ## Diagnostic queries
 
-```kusto
-// App Insights — failed webhook executions
-requests
-| where timestamp > ago(30m)
-| where url endswith "/payments/webhooks/stripe"
-| where resultCode startswith "5"
-| project timestamp, resultCode, duration, customDimensions.stripe_event_id, customDimensions.stripe_event_type
-| order by timestamp desc
+See `docs/observability/queries.kql` → `webhook-deliveries-last-hour`. Inline:
 
-// App Insights — exceptions in webhook scope
-exceptions
-| where timestamp > ago(30m)
-| where customDimensions.RequestName == "StripeWebhookHandler"
-| project timestamp, type, outerMessage, customDimensions
+```kusto
+// Failed webhook executions in the last 30m
+AppRequests
+| where TimeGenerated > ago(30m)
+| where Url endswith "/payments/webhooks/stripe"
+| where ResultCode startswith "5"
+| project TimeGenerated, ResultCode, DurationMs, OperationId
+| order by TimeGenerated desc
+
+// Our handler-level trace of webhook processing (JSON Serilog)
+let parsed = ContainerAppConsoleLogs_CL
+  | where TimeGenerated > ago(30m)
+  | where Log_s startswith '{"@t"'
+  | extend e = parse_json(Log_s);
+parsed
+| where tostring(e.RequestPath) == "/api/v1/payments/webhooks/stripe"
+| project TimeGenerated,
+          level = tostring(e['@l']),
+          msg = tostring(e['@m']),
+          handler = tostring(e.RequestName),
+          trace = tostring(e.TraceId)
+| order by TimeGenerated desc
 ```
+
+Pair with Stripe Dashboard → Webhooks → destination → Recent events for the
+sender-side view.
 
 ## Likely causes
 
