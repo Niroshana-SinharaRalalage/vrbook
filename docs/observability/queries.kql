@@ -1,0 +1,189 @@
+// VrBook Saved Log Analytics Queries
+//
+// All queries operate against the law-vrbook-{env} workspace. Container Apps
+// stdout lands in ContainerAppConsoleLogs_CL as JSON (Serilog CompactJsonFormatter,
+// see EXECUTION_PLAN.md §4.2 A0.1.2). The first three lines of each query parse
+// the JSON payload from Log_s into queryable columns. App Insights HTTP request
+// telemetry lands in AppRequests.
+//
+// Open in Azure Portal: Log Analytics workspace → Logs → paste a section into the
+// query tab. Each named section between // === markers is independently runnable.
+
+// =============================================================================
+// === slow-handlers-p95
+// Slowest MediatR handlers over the last hour, P95 + P99 by handler name.
+// Use to spot a regression after a deploy or a query that's gotten lazy.
+// =============================================================================
+let parsed =
+    ContainerAppConsoleLogs_CL
+    | where TimeGenerated > ago(1h)
+    | where Log_s startswith '{"@t"'
+    | extend e = parse_json(Log_s);
+parsed
+| where tostring(e['@mt']) startswith "Handled "
+| extend handler = tostring(e.RequestName), elapsed = toint(e.ElapsedMs)
+| where isnotempty(handler)
+| summarize
+    p50 = percentile(elapsed, 50),
+    p95 = percentile(elapsed, 95),
+    p99 = percentile(elapsed, 99),
+    count_ = count()
+  by handler
+| order by p95 desc
+| take 25
+
+// =============================================================================
+// === api-5xx-last-15m
+// Every 5xx response over the last 15 minutes with the URL and a sample message.
+// =============================================================================
+AppRequests
+| where TimeGenerated > ago(15m)
+| where ResultCode startswith "5"
+| project TimeGenerated, Url, ResultCode, DurationMs, OperationId, Properties
+| order by TimeGenerated desc
+| take 50
+
+// =============================================================================
+// === api-failures-by-endpoint
+// Failure rate per endpoint over the last hour. Quick triage of "what's broken".
+// =============================================================================
+AppRequests
+| where TimeGenerated > ago(1h)
+| extend path = tostring(parse_url(Url).Path)
+| summarize
+    total = count(),
+    failures = countif(Success == false),
+    failure_pct = round(100.0 * countif(Success == false) / count(), 2),
+    p95_ms = percentile(DurationMs, 95)
+  by path
+| where total > 5
+| order by failure_pct desc
+
+// =============================================================================
+// === webhook-deliveries-last-hour
+// Stripe webhook handling — what came in, what we processed, what failed.
+// Pair with Stripe Dashboard → Webhooks → destination → recent attempts.
+// =============================================================================
+let parsed =
+    ContainerAppConsoleLogs_CL
+    | where TimeGenerated > ago(1h)
+    | where Log_s startswith '{"@t"'
+    | extend e = parse_json(Log_s);
+parsed
+| where tostring(e.RequestPath) == "/api/v1/payments/webhooks/stripe"
+| extend
+    level = tostring(e['@l']),
+    msg = tostring(e['@m']),
+    trace = tostring(e.TraceId),
+    elapsed = toint(e.ElapsedMs)
+| project TimeGenerated, level, msg, trace, elapsed
+| order by TimeGenerated desc
+| take 50
+
+// =============================================================================
+// === booking-funnel-today
+// Counts of placed / confirmed / cancelled / checked-in today (UTC).
+// Useful as a sanity dashboard tile.
+// =============================================================================
+let parsed =
+    ContainerAppConsoleLogs_CL
+    | where TimeGenerated > startofday(now())
+    | where Log_s startswith '{"@t"'
+    | extend e = parse_json(Log_s);
+parsed
+| where tostring(e['@mt']) startswith "Handled "
+| extend handler = tostring(e.RequestName)
+| where handler in (
+    "PlaceBookingCommand", "ConfirmBookingCommand",
+    "CancelBookingCommand", "CheckInBookingCommand",
+    "CheckOutBookingCommand", "RejectBookingCommand")
+| summarize count_ = count() by handler
+| order by handler asc
+
+// =============================================================================
+// === payment-failures-last-day
+// Failed payment attempts (PI auth failures, refund rejections, webhook 4xx/5xx).
+// =============================================================================
+let parsed =
+    ContainerAppConsoleLogs_CL
+    | where TimeGenerated > ago(1d)
+    | where Log_s startswith '{"@t"'
+    | extend e = parse_json(Log_s);
+parsed
+| where tostring(e.RequestPath) startswith "/api/v1/payments"
+    or tostring(e.RequestName) in ("CreatePaymentIntentForBookingCommand",
+                                    "CapturePaymentIntentForBookingCommand",
+                                    "RefundForBookingCommand")
+| where tostring(e['@l']) in ("Warning", "Error")
+| extend handler = tostring(e.RequestName), msg = tostring(e['@m'])
+| project TimeGenerated, level = e['@l'], handler, msg
+| order by TimeGenerated desc
+| take 50
+
+// =============================================================================
+// === errors-grouped
+// Error log lines grouped by source + message template. Fast scan of "what's
+// breaking most often" across a window.
+// =============================================================================
+let parsed =
+    ContainerAppConsoleLogs_CL
+    | where TimeGenerated > ago(1h)
+    | where Log_s startswith '{"@t"'
+    | extend e = parse_json(Log_s);
+parsed
+| where tostring(e['@l']) == "Error"
+| extend source = tostring(e.SourceContext), template = tostring(e['@mt'])
+| summarize count_ = count(), latest = max(TimeGenerated) by source, template
+| order by count_ desc
+
+// =============================================================================
+// === trace-by-trace-id
+// One request end-to-end. Replace {TRACE_ID} with the W3C trace ID you want to
+// follow (visible as `traceId` in any ProblemDetails 4xx/5xx body).
+// =============================================================================
+let parsed =
+    ContainerAppConsoleLogs_CL
+    | where TimeGenerated > ago(2h)
+    | where Log_s startswith '{"@t"'
+    | extend e = parse_json(Log_s);
+parsed
+| where tostring(e.TraceId) == "{TRACE_ID}" or tostring(e['@tr']) == "{TRACE_ID}"
+| project TimeGenerated,
+          level = tostring(e['@l']),
+          msg = tostring(e['@m']),
+          handler = tostring(e.RequestName),
+          elapsed = toint(e.ElapsedMs),
+          source = tostring(e.SourceContext)
+| order by TimeGenerated asc
+
+// =============================================================================
+// === pii-leak-detector
+// Defensive check — if the PiiRedactingEnricher ever stops working we'd see
+// recognizable PII patterns in Log_s. Should return zero rows. If it ever
+// returns rows, treat as Sev2 — change leaked PII to logs.
+// =============================================================================
+ContainerAppConsoleLogs_CL
+| where TimeGenerated > ago(1d)
+| where Log_s matches regex @"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
+| where Log_s !contains "vrbook.example.com" and Log_s !contains "dev@vrbook.local"
+    and Log_s !contains "guest@vrbook.test" and Log_s !contains "noreply@"
+| take 10
+
+// =============================================================================
+// === sync-feed-health (placeholder for A6)
+// Sync worker liveness, last successful poll per feed, failure runs.
+// Activate after A6 ships and `sync.*` metrics are being emitted.
+// =============================================================================
+// let parsed = ContainerAppConsoleLogs_CL | where TimeGenerated > ago(2h)
+//   | where Log_s startswith '{"@t"' | extend e = parse_json(Log_s);
+// parsed
+// | where tostring(e.SourceContext) startswith "VrBook.Modules.Sync"
+// | summarize last_seen = max(TimeGenerated), count_ = count() by tostring(e.FeedId)
+// | order by last_seen asc
+
+// =============================================================================
+// === messaging-connections (placeholder for A7)
+// Active SignalR connections + offline-fallback events published.
+// Activate after A7 ships.
+// =============================================================================
+// (TBD by A7)
