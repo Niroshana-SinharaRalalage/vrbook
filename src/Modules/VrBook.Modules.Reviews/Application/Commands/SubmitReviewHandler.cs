@@ -58,8 +58,10 @@ internal sealed class SubmitReviewHandler(
         // Recompute aggregate + push to Catalog. Cross-context update intentionally
         // separate transaction - rolling avg eventual-consistency is fine for v1.
         var (avg, count) = await reviews.AggregateForPropertyAsync(booking.PropertyId, cancellationToken);
+        // PropertyConfiguration maps RatingAvg/RatingCount to snake_case columns,
+        // while Id keeps EF's default Pascal-quoted form. Match the actual table schema.
         await catalogDb.Database.ExecuteSqlInterpolatedAsync(
-            $"""UPDATE catalog.properties SET "RatingAvg" = {avg}, "RatingCount" = {count} WHERE "Id" = {booking.PropertyId}""",
+            $"""UPDATE catalog.properties SET rating_avg = {avg}, rating_count = {count} WHERE "Id" = {booking.PropertyId}""",
             cancellationToken);
 
         return review.ToDto();
