@@ -471,6 +471,18 @@ module fd 'modules/front-door.bicep' = if (frontDoorEnabled) {
   }
 }
 
+// ---------- Observability Workbook ----------
+// VrBook Operations dashboard. See infra/modules/workbook.bicep + docs/observability/queries.kql.
+module workbook 'modules/workbook.bicep' = {
+  name: 'workbook'
+  params: {
+    env: env
+    location: location
+    tags: tags
+    workspaceId: law.outputs.id
+  }
+}
+
 // ---------- Outputs ----------
 output apiFqdn string = apiApp.outputs.fqdn
 output webFqdn string = webApp.outputs.fqdn
