@@ -483,6 +483,28 @@ module workbook 'modules/workbook.bicep' = {
   }
 }
 
+// ---------- Action Group + Alert Rules (ADR 0010, EXECUTION_PLAN.md A0.1.7) ----------
+module actionGroup 'modules/action-group.bicep' = {
+  name: 'actionGroup'
+  params: {
+    env: env
+    tags: tags
+  }
+}
+
+module alerts 'modules/alerts.bicep' = {
+  name: 'alerts'
+  params: {
+    env: env
+    location: location
+    tags: tags
+    workspaceId: law.outputs.id
+    postgresId: pg.outputs.id
+    redisId: deployRedis ? redis.outputs.id : ''
+    actionGroupId: actionGroup.outputs.id
+  }
+}
+
 // ---------- Outputs ----------
 output apiFqdn string = apiApp.outputs.fqdn
 output webFqdn string = webApp.outputs.fqdn
