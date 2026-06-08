@@ -74,7 +74,9 @@ resource alertP95Latency 'Microsoft.Insights/scheduledQueryRules@2023-03-15-prev
     criteria: {
       allOf: [
         {
-          query: 'ContainerAppConsoleLogs_CL | where Log_s startswith \'{"@t"\' | extend e = parse_json(Log_s) | where tostring(e[\'@mt\']) startswith "Handled " | extend handler = tostring(e.RequestName), elapsed = toint(e.ElapsedMs) | where isnotempty(handler) | summarize p95 = percentile(elapsed, 95) by handler | where p95 > 1000'
+          // For numberOfEvaluationPeriods > 1, Azure requires the query to project
+          // a TimeGenerated column. We bin by 5m so the summarize keeps it.
+          query: 'ContainerAppConsoleLogs_CL | where Log_s startswith \'{"@t"\' | extend e = parse_json(Log_s) | where tostring(e[\'@mt\']) startswith "Handled " | extend handler = tostring(e.RequestName), elapsed = toint(e.ElapsedMs) | where isnotempty(handler) | summarize p95 = percentile(elapsed, 95) by handler, bin(TimeGenerated, 5m) | where p95 > 1000'
           timeAggregation: 'Count'
           operator: 'GreaterThan'
           threshold: 0
