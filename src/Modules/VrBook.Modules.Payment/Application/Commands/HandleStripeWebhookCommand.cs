@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using VrBook.Contracts.Enums;
 using VrBook.Modules.Payment.Domain;
@@ -27,9 +28,11 @@ internal sealed class HandleStripeWebhookHandler(
         var doc = JsonDocument.Parse(rawJson!);
         var stripeEventId = doc.RootElement.GetProperty("id").GetString()!;
 
-        // Idempotency: have we seen this Stripe event id before?
-        var seen = await db.WebhookEvents.FindAsync(new object[] { stripeEventId }, cancellationToken);
-        if (seen is not null)
+        // Idempotency: have we seen this Stripe event id before? (Stripe event id is a
+        // string like evt_... — not our Guid Id, so query the unique index, not Find.)
+        var seen = await db.WebhookEvents
+            .AnyAsync(w => w.StripeEventId == stripeEventId, cancellationToken);
+        if (seen)
         {
             logger.LogDebug("Stripe webhook {EventId} already processed.", stripeEventId);
             return true;
