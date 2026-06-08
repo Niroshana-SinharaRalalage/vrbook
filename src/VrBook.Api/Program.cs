@@ -38,7 +38,11 @@ builder.Host.UseSerilog((ctx, sp, lc) => lc
     .ReadFrom.Services(sp)
     .Enrich.FromLogContext()
     .Enrich.WithProperty("Application", "VrBook.Api")
-    .Enrich.With<VrBook.Api.Observability.PiiRedactingEnricher>());
+    .Enrich.With<VrBook.Api.Observability.PiiRedactingEnricher>()
+    // Suppresses the misleading "responded 500" framework log line when a domain
+    // exception (BRV / NotFound / Conflict / Forbidden / FluentValidation) is
+    // actually being remapped to 422/404/409/403/400 by ProblemDetailsMiddleware.
+    .Filter.ByIncludingOnly(VrBook.Api.Observability.DomainExceptionLogFilter.ShouldLog));
 
 // ---- ASP.NET Core core services ----
 builder.Services.AddHttpContextAccessor();
