@@ -263,6 +263,9 @@ var apiEnvVars = [
   { name: 'Sync__StaleAlertHours', value: '2' }
   { name: 'Booking__TentativeSlaHours', value: '24' }
   { name: 'Booking__HoldDurationMinutes', value: '15' }
+  // Platform-wide service fee retained on refunds for captured bookings (0..100).
+  // Set to 0 to issue full refunds. Per-property fees land in A5.1.
+  { name: 'Refund__ServiceFeePercent', value: '0' }
   { name: 'Loyalty__BronzeThreshold', value: '1' }
   { name: 'Loyalty__SilverThreshold', value: '3' }
   { name: 'Loyalty__GoldThreshold', value: '6' }

@@ -12,6 +12,10 @@
     <ProjectReference Include="..\..\VrBook.Application\VrBook.Application.csproj" />
     <ProjectReference Include="..\..\VrBook.Infrastructure\VrBook.Infrastructure.csproj" />
     <ProjectReference Include="..\..\VrBook.Contracts\VrBook.Contracts.csproj" />
+    <!-- Cross-module reads. Reviews verifies booking eligibility (CheckedOut) via
+         the Booking module and writes RatingAvg / RatingCount back to Catalog. -->
+    <ProjectReference Include="..\VrBook.Modules.Booking\VrBook.Modules.Booking.csproj" />
+    <ProjectReference Include="..\VrBook.Modules.Catalog\VrBook.Modules.Catalog.csproj" />
   </ItemGroup>
 
   <ItemGroup>

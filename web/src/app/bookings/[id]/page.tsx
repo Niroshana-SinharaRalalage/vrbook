@@ -6,6 +6,7 @@ import { CheckCircle2, Clock, XCircle, ArrowRight } from 'lucide-react';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { StripePaymentForm } from '@/components/booking/StripePaymentForm';
+import { CancelBookingButton } from '@/components/booking/CancelBookingButton';
 import { ApiProblemError } from '@/lib/api/client';
 import { getBooking, type Booking, type BookingStatus } from '@/lib/api/booking';
 import { formatCurrency } from '@/lib/utils/currency';
@@ -162,6 +163,12 @@ const BookingDetail = async ({ id }: { id: string }) => {
             <section className="rounded-xl border border-border bg-card p-5">
               <h2 className="mb-3 text-sm font-medium">Payment</h2>
               <StripePaymentForm bookingId={b.id} />
+            </section>
+          )}
+          {(b.status === 'Tentative' || b.status === 'Confirmed') && (
+            <section className="rounded-xl border border-border bg-card p-5">
+              <h2 className="mb-3 text-sm font-medium">Cancel</h2>
+              <CancelBookingButton booking={b} />
             </section>
           )}
           <section className="rounded-xl border border-border bg-card p-5">

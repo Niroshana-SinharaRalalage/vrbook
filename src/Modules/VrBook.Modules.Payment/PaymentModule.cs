@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
+using VrBook.Modules.Payment.Application;
 using VrBook.Modules.Payment.Infrastructure.Persistence;
 using VrBook.Modules.Payment.Infrastructure.Stripe;
 
@@ -20,6 +21,7 @@ public sealed class PaymentModule : IModuleRegistration
                 npg => npg.MigrationsHistoryTable("__ef_migrations_history", PaymentDbContext.SchemaName)));
 
         services.Configure<StripeOptions>(configuration.GetSection(StripeOptions.SectionName));
+        services.Configure<RefundOptions>(configuration.GetSection(RefundOptions.SectionName));
         services.AddSingleton<IStripeGateway, StripeGateway>();
 
         services.AddScoped<IPaymentIntentRepository, PaymentIntentRepository>();

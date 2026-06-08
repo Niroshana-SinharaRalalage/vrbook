@@ -8,6 +8,7 @@ using VrBook.Modules.Catalog;
 using VrBook.Modules.Identity;
 using VrBook.Modules.Payment;
 using VrBook.Modules.Pricing;
+using VrBook.Modules.Reviews;
 
 // =================================================================================
 // VrBook.Migrator — one-shot console app run as a Container App Job before every
@@ -41,7 +42,7 @@ try
     builder.Services.AddPricingDbContextForMigrator(builder.Configuration);
     builder.Services.AddBookingDbContextForMigrator(builder.Configuration);
     builder.Services.AddPaymentDbContextForMigrator(builder.Configuration);
-    // TODO(A6..): one per module-DbContext as they ship.
+    builder.Services.AddReviewsDbContextForMigrator(builder.Configuration);
 
     using var host = builder.Build();
 

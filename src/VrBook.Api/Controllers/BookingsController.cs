@@ -83,8 +83,15 @@ public sealed class BookingsController(IMediator mediator) : ControllerBase
 
     [HttpPost("{id:guid}/review")]
     [SwaggerOperation(Summary = "Submit a post-stay review. Only after CheckedOut.")]
-    public IActionResult SubmitReview(Guid id, [FromBody] SubmitReviewRequest request) =>
-        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Reviews land in Agent A6." });
+    [ProducesResponseType(typeof(ReviewDto), StatusCodes.Status201Created)]
+    public async Task<ActionResult<ReviewDto>> SubmitReview(
+        Guid id, [FromBody] SubmitReviewRequest request, CancellationToken cancellationToken)
+    {
+        var dto = await mediator.Send(
+            new VrBook.Modules.Reviews.Application.Commands.SubmitReviewCommand(id, request.Rating, request.Body),
+            cancellationToken);
+        return CreatedAtAction(null, dto);
+    }
 }
 
 [Route("api/v1/admin/bookings")]
