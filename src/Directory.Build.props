@@ -66,4 +66,11 @@
 
   <!-- Test projects opt in via <IsPackable>false</IsPackable> + <IsTestProject>true</IsTestProject> -->
 
+  <!-- Module + Application assemblies expose internals to the unit-test project so we can
+       test internal sealed MediatR handlers without making them public (modular-monolith
+       boundaries kept; only the test assembly gets to peek). See EXECUTION_PLAN.md A0.2.2. -->
+  <ItemGroup Condition="$(MSBuildProjectName.StartsWith('VrBook.Modules.')) Or '$(MSBuildProjectName)' == 'VrBook.Application'">
+    <InternalsVisibleTo Include="VrBook.Api.IntegrationTests" />
+  </ItemGroup>
+
 </Project>

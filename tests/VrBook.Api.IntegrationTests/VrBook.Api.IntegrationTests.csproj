@@ -12,6 +12,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\VrBook.Api\VrBook.Api.csproj" />
+    <!-- Module ProjectReferences for the unit tests under [Trait("Category","Unit")]
+         that exercise domain code directly without going through the API host. -->
+    <ProjectReference Include="..\..\src\Modules\VrBook.Modules.Booking\VrBook.Modules.Booking.csproj" />
+    <ProjectReference Include="..\..\src\Modules\VrBook.Modules.Pricing\VrBook.Modules.Pricing.csproj" />
+    <ProjectReference Include="..\..\src\Modules\VrBook.Modules.Payment\VrBook.Modules.Payment.csproj" />
+    <ProjectReference Include="..\..\src\Modules\VrBook.Modules.Reviews\VrBook.Modules.Reviews.csproj" />
+    <ProjectReference Include="..\..\src\Modules\VrBook.Modules.Catalog\VrBook.Modules.Catalog.csproj" />
   </ItemGroup>
 
   <ItemGroup>
