@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, Pencil, Plus, X } from 'lucide-react';
+import { Pencil, Plus, Trash2, X } from 'lucide-react';
 import {
   adminCreateAmenity,
+  adminDeleteAmenity,
   adminDisableAmenity,
   adminEnableAmenity,
   adminListAmenities,
@@ -67,6 +68,20 @@ const AdminAmenitiesPage = () => {
       setAmenities((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
     } catch (err) {
       setError(err instanceof ApiProblemError ? err.problem.detail ?? err.message : err instanceof Error ? err.message : 'Toggle failed');
+    }
+  };
+
+  const onDelete = async (a: Amenity) => {
+    // Per A2.2 the backend refuses with 409 if any property still uses this amenity —
+    // surface that message in the same banner the rest of the page uses.
+    if (!window.confirm(`Delete "${a.name}"? This cannot be undone.\n\nIf any property still uses this amenity the delete will be refused — disable it first.`)) {
+      return;
+    }
+    try {
+      await adminDeleteAmenity(a.id);
+      setAmenities((prev) => prev.filter((x) => x.id !== a.id));
+    } catch (err) {
+      setError(err instanceof ApiProblemError ? err.problem.detail ?? err.message : err instanceof Error ? err.message : 'Delete failed');
     }
   };
 
@@ -154,18 +169,31 @@ const AdminAmenitiesPage = () => {
                         <button
                           type="button"
                           onClick={() => setEditingId(a.id)}
-                          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
                           title="Edit"
                         >
-                          <Pencil className="h-4 w-4" />
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
                         </button>
                         <button
                           type="button"
                           onClick={() => void onToggle(a)}
-                          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                          title={a.isActive ? 'Disable' : 'Enable'}
+                          className={
+                            a.isActive
+                              ? 'inline-flex items-center rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200'
+                              : 'inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200'
+                          }
                         >
-                          {a.isActive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                          {a.isActive ? 'Disable' : 'Enable'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void onDelete(a)}
+                          className="inline-flex items-center gap-1 rounded-md border border-destructive/40 px-2.5 py-1 text-xs font-medium text-destructive hover:bg-destructive/10"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
                         </button>
                       </>
                     )}

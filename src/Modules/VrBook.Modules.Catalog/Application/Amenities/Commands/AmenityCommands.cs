@@ -16,3 +16,10 @@ public sealed record DisableAmenityCommand(Guid Id) : IRequest<AmenityDto>;
 
 /// <summary>Admin: restore to public catalog.</summary>
 public sealed record EnableAmenityCommand(Guid Id) : IRequest<AmenityDto>;
+
+/// <summary>
+/// Admin: hard-delete an amenity. Refused with 409 if any property is still attached
+/// (would break the property_amenities FK). For "hide from catalog but keep attachments
+/// valid", use <see cref="DisableAmenityCommand"/> instead.
+/// </summary>
+public sealed record DeleteAmenityCommand(Guid Id) : IRequest;

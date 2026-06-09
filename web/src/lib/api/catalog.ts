@@ -176,3 +176,8 @@ export const adminEnableAmenity = (id: string): Promise<Amenity> =>
   apiFetch<Amenity>(`/api/v1/admin/amenities/${encodeURIComponent(id)}/enable`, {
     method: 'POST',
   });
+
+export const adminDeleteAmenity = (id: string): Promise<void> =>
+  apiFetch<void>(`/api/v1/admin/amenities/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });

@@ -65,3 +65,24 @@ internal sealed class EnableAmenityHandler(CatalogDbContext db)
         return amenity.ToDto();
     }
 }
+
+internal sealed class DeleteAmenityHandler(CatalogDbContext db)
+    : IRequestHandler<DeleteAmenityCommand>
+{
+    public async Task Handle(DeleteAmenityCommand cmd, CancellationToken cancellationToken)
+    {
+        var amenity = await db.Amenities.FirstOrDefaultAsync(a => a.Id == cmd.Id, cancellationToken)
+            ?? throw new NotFoundException("Amenity", cmd.Id);
+
+        // Count properties currently attached to this amenity via the join table.
+        var usage = await db.Set<Dictionary<string, object>>("property_amenities")
+            .CountAsync(j => (Guid)j["amenity_id"] == cmd.Id, cancellationToken);
+        if (usage > 0)
+        {
+            throw new ConflictException(
+                $"Cannot delete amenity '{amenity.Code}' — it is attached to {usage} propert{(usage == 1 ? "y" : "ies")}. Disable it instead, or detach it from those properties first.");
+        }
+        db.Amenities.Remove(amenity);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+}

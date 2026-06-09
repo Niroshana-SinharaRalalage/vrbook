@@ -128,3 +128,83 @@ public sealed class AmenityAggregateTests
         a.IsActive.Should().BeTrue();
     }
 }
+
+/// <summary>
+/// Unit tests for the Delete handler logic. Deleting an amenity that any
+/// property is currently attached to must throw ConflictException — otherwise
+/// the property_amenities FK would break. Admin must disable instead, or
+/// remove the attachment first.
+/// </summary>
+[Trait("Category", "Unit")]
+public sealed class DeleteAmenityHandlerTests
+{
+    [Fact]
+    public async Task Refuses_to_delete_when_any_property_references_the_amenity()
+    {
+        var amenityId = Guid.NewGuid();
+        var handler = new TestableDeleteAmenityHandler(
+            getAmenity: id => id == amenityId
+                ? new VrBook.Modules.Catalog.Domain.Amenity(amenityId, "wifi", "Wi-Fi", null, "Essentials")
+                : null,
+            usageCount: id => id == amenityId ? 3 : 0,
+            deleteAction: _ => throw new InvalidOperationException("Delete must not be called when in use."));
+
+        var act = () => handler.Handle(amenityId, default);
+
+        await act.Should().ThrowAsync<VrBook.Domain.Common.ConflictException>()
+            .Where(e => e.Message.Contains("3", StringComparison.Ordinal) ||
+                        e.Message.Contains("propert", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Throws_NotFound_when_amenity_does_not_exist()
+    {
+        var handler = new TestableDeleteAmenityHandler(
+            getAmenity: _ => null,
+            usageCount: _ => 0,
+            deleteAction: _ => { });
+
+        var act = () => handler.Handle(Guid.NewGuid(), default);
+
+        await act.Should().ThrowAsync<VrBook.Domain.Common.NotFoundException>();
+    }
+
+    [Fact]
+    public async Task Deletes_when_amenity_exists_and_is_unused()
+    {
+        var amenityId = Guid.NewGuid();
+        var deleted = new List<Guid>();
+        var handler = new TestableDeleteAmenityHandler(
+            getAmenity: id => id == amenityId
+                ? new VrBook.Modules.Catalog.Domain.Amenity(amenityId, "wifi", "Wi-Fi", null, "Essentials")
+                : null,
+            usageCount: _ => 0,
+            deleteAction: a => deleted.Add(a.Id));
+
+        await handler.Handle(amenityId, default);
+
+        deleted.Should().ContainSingle().Which.Should().Be(amenityId);
+    }
+}
+
+/// <summary>Hand-rolled handler over the same delete-logic for unit-test purposes.
+/// Mirrors what DeleteAmenityHandler does in production, minus the DbContext binding.</summary>
+internal sealed class TestableDeleteAmenityHandler(
+    Func<Guid, VrBook.Modules.Catalog.Domain.Amenity?> getAmenity,
+    Func<Guid, int> usageCount,
+    Action<VrBook.Modules.Catalog.Domain.Amenity> deleteAction)
+{
+    public Task Handle(Guid id, CancellationToken ct)
+    {
+        var amenity = getAmenity(id)
+            ?? throw new VrBook.Domain.Common.NotFoundException("Amenity", id);
+        var usage = usageCount(id);
+        if (usage > 0)
+        {
+            throw new VrBook.Domain.Common.ConflictException(
+                $"Cannot delete amenity '{amenity.Code}' — it is attached to {usage} propert{(usage == 1 ? "y" : "ies")}. Disable it instead, or detach it from those properties first.");
+        }
+        deleteAction(amenity);
+        return Task.CompletedTask;
+    }
+}

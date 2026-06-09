@@ -142,4 +142,16 @@ public sealed class AdminAmenitiesController(IMediator mediator) : ControllerBas
         Ok(await mediator.Send(
             new VrBook.Modules.Catalog.Application.Amenities.Commands.EnableAmenityCommand(id),
             cancellationToken));
+
+    [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        await mediator.Send(
+            new VrBook.Modules.Catalog.Application.Amenities.Commands.DeleteAmenityCommand(id),
+            cancellationToken);
+        return NoContent();
+    }
 }
