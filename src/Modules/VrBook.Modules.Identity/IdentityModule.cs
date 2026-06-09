@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
+using VrBook.Infrastructure.Outbox;
 using VrBook.Modules.Identity.Application.Behaviors;
 using VrBook.Modules.Identity.Infrastructure.Auth;
 using VrBook.Modules.Identity.Infrastructure.Persistence;
@@ -19,10 +20,11 @@ public sealed class IdentityModule : IModuleRegistration
     public IServiceCollection AddModule(IServiceCollection services, IConfiguration configuration)
     {
         // DbContext — module owns its schema.
-        services.AddDbContext<IdentityDbContext>(opts =>
+        services.AddDbContext<IdentityDbContext>((sp, opts) =>
             opts.UseNpgsql(
                 configuration.GetConnectionString("Postgres") ?? string.Empty,
-                npg => npg.MigrationsHistoryTable("__ef_migrations_history", IdentityDbContext.SchemaName)));
+                npg => npg.MigrationsHistoryTable("__ef_migrations_history", IdentityDbContext.SchemaName))
+                .UseOutbox(sp));
 
         services.AddScoped<IUserRepository, UserRepository>();
 

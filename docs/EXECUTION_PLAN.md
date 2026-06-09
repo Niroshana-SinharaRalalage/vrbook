@@ -38,8 +38,8 @@ The **single most load-bearing engineering constraint** is *zero double-bookings
 
 **Cross-cutting amendments to A0 (because foundation work continues to surface):**
 
-- **`A0.1`** Observability + exception handling hardening — to be done now, blocks downstream debugging quality
-- **`A0.2`** Test debt paydown + TDD discipline + CI gate — to be done now, blocks confident delivery
+- **`A0.1`** Observability + exception handling hardening — ✅ COMPLETE 2026-06-08 (all 8 subtasks, 7 commits, 21 unit tests passing)
+- **`A0.2`** Test debt paydown + TDD discipline + CI gate — IN PROGRESS
 
 ---
 
@@ -150,14 +150,17 @@ This is the order. I do not skip ahead. If a new request from the user doesn't f
 | 1 | **A0.1** | Observability + exception handling hardening | Every downstream debug session depends on this |
 | 2 | **A0.2** | Test debt paydown (TDD retroactive) + CI gate | Confident delivery requires this before more features |
 | 3 | **A2.2** | Amenity catalog expansion (~70 items) + admin CRUD | User-requested; small scope to practice 0A/0B discipline |
-| 4 | **A6** | Sync (AirBnB iCal) — zero double-bookings | The single most load-bearing safety constraint |
-| 5 | **A7** | Messaging + SignalR | First REAL event consumer (`BookingConfirmed` → auto-thread); proves the bus works |
-| 6 | **A8.1** | Loyalty + Reviews moderation polish | Plug into A3 (real discount), unlock retention |
-| 7 | **A9** | Notifications + Templates (ACS email) | Final consumer; wires up emails for every event A4 emits |
-| 8 | **A3.1** | Full 5-rule pricing engine | After A9 so dynamic-pricing emails are also covered |
-| 9 | **A4.1** | Hold flow (Redis NX) + Owner SLA queue | Pre-launch polish; requires all consumers live |
-| 10 | **O1** | Admin dashboard polish (reports, conflict modal, toggles, alerts banner) | Requires data from A6/A7/A8.1/A9 to populate |
-| 11 | **OPS** | Operational hardening (see §8) | Pre-launch readiness |
+| 4 | **A0.3** | Event bus wiring (in-process MediatR + outbox table; no Service Bus yet) | A6/A7/A9 all need this; without it `BookingConfirmed` is silently dropped. Service Bus relay deferred to A11. |
+| 5 | **A6** | Sync (AirBnB iCal) — zero double-bookings | The single most load-bearing safety constraint |
+| 6 | **A7** | Messaging + SignalR | First REAL event consumer (`BookingConfirmed` → auto-thread); proves the bus works |
+| 7 | **A8.1** | Loyalty + Reviews moderation polish | Plug into A3 (real discount), unlock retention |
+| 8 | **A9** | Notifications + Templates (ACS email) | Final consumer; wires up emails for every event A4 emits |
+| 9 | **A3.1** | Full 5-rule pricing engine | After A9 so dynamic-pricing emails are also covered |
+| 10 | **A4.1** | Hold flow (Redis NX) + Owner SLA queue | Pre-launch polish; requires all consumers live |
+| 11 | **O1** | Admin dashboard polish (reports, conflict modal, toggles, alerts banner) | Requires data from A6/A7/A8.1/A9 to populate |
+| 12 | **A10** | Functional completeness sweep | Final pass — every endpoint has UI, every event has a consumer, every feature row in proposal is ticked |
+| 13 | **A11** | Observability + exception handling completeness audit + outbox→ServiceBus relay | Re-walk every handler shipped since A0.1; verify alerts/runbooks/KQL still match; wire the relay deferred from A0.3 |
+| 14 | **OPS** | Operational hardening (see §8) | Pre-launch readiness |
 
 Subtasks of each item are detailed in §7.
 
@@ -166,6 +169,23 @@ Subtasks of each item are detailed in §7.
 ## 7. A-number breakdowns
 
 Each item below ends in the §5 DoD. Subtask numbering is `A0.1.1`, `A0.1.2`, etc. — no parallel scheme.
+
+### A0.3 — Event Bus Wiring (in-process MediatR + outbox table)
+
+Closes the gap surfaced 2026-06-09: `IDomainEventPublisher` was declared in
+Contracts but never implemented; `DequeueEvents()` was never called by any
+caller — so every domain event raised so far has been silently discarded.
+
+- **A0.3.1** Failing unit tests first: publisher publishes single event, publisher publishes batch, EF interceptor drains events from changed aggregates, outbox row written in same txn
+- **A0.3.2** `MediatRDomainEventPublisher` implementing `IDomainEventPublisher` — delegates to `IPublisher.Publish` so any registered `INotificationHandler<TEvent>` fires
+- **A0.3.3** `DomainEventOutboxInterceptor` (EF `SaveChangesInterceptor`) — on SavingChanges scans `ChangeTracker` for `IAggregateRoot` entries, calls `DequeueEvents()`, persists each to the outbox table, holds them; on SavedChanges calls `IDomainEventPublisher.PublishAsync` to fire in-process handlers
+- **A0.3.4** `outbox_messages` table per module schema (Catalog/Booking/Payment/Reviews/Identity) — columns: id, event_id, event_type, payload (jsonb), occurred_at, dispatched_at (nullable), retry_count, last_error. Migration per module.
+- **A0.3.5** DI registration in `IModuleRegistration.AddModuleServices` — register the interceptor on each module's DbContext + register publisher singleton
+- **A0.3.6** Integration test: raise `BookingPlaced`, assert outbox row exists with payload, assert MediatR notification handler observed it
+- **A0.3.7** Deploy + verify staging — make a real booking, query `booking.outbox_messages` for the `BookingPlaced` row
+- **A0.3.8** Smoke updated — assert outbox row count increments after a booking POST
+
+Service Bus relay (outbox → topic) is **NOT** in A0.3 scope; that lands in A11 once consumers exist and we know which topics they need.
 
 ### A0.1 — Observability + Exception Handling Hardening
 
@@ -283,9 +303,45 @@ Same work as A0.2.1; tracked there to avoid duplication.
 
 ### O1 — Admin Dashboard polish
 
-- **O1.1** Reports: occupancy, revenue, ADR, source — projection tables via event consumers
-- **O1.2** Feature toggle CRUD UI
-- **O1.3** `/admin/alerts` endpoint + alerts banner
+The cross-cutting admin sweep AFTER A6/A7/A8.1/A9/A3.1/A4.1 ship their own
+per-feature admin screens. Each individual feature ships its admin view
+inside its own A-number; O1 ties them together and fills the gaps that
+don't belong to any single feature vertical.
+
+- **O1.1** Admin Dashboard (`/admin`) — landing page with KPI tiles fed from O1.2 reports
+- **O1.2** Reports (`/admin/reports`) — occupancy, revenue, ADR, source — projection tables via event consumers
+- **O1.3** Properties admin (`/admin/properties`) — owner CRUD list + create/edit drawer + image upload (currently stub: web/src/app/admin/properties/page.tsx)
+- **O1.4** Bookings admin (`/admin/bookings`) — queue with filter + manual entry + detail tabs (Overview/Payments/Messages/Timeline) (currently stub: web/src/app/admin/bookings/page.tsx)
+- **O1.5** Calendar (`/admin/calendar`) — multi-property month view + drag-to-block
+- **O1.6** Guests (`/admin/guests`) — guest list + booking history per guest
+- **O1.7** Feature-toggle CRUD UI (`/admin/settings`)
+- **O1.8** `/admin/alerts` endpoint + alerts banner
+
+### A10 — Functional Completeness Sweep
+
+Audit pass over the entire system AFTER O1. Walks every proposal feature
+row, every OpenAPI endpoint, every domain event, and confirms a working
+end-to-end surface exists. Generates `POLISH.N` items for gaps that
+should slip; closes A10 only when nothing material remains.
+
+- **A10.1** Walk `contracts/openapi.yaml` — every endpoint has a guest, owner, or admin UI surface that exercises it
+- **A10.2** Walk every domain event raised across modules — confirm at least one consumer wired through Service Bus (or A11-pending if relay hasn't shipped)
+- **A10.3** Walk every proposal §X feature row — tick implemented / tested / smoked / no gap
+- **A10.4** Manual smoke matrix against deployed staging — visit every screen, run every flow, record red/green
+- **A10.5** File POLISH.N for any cosmetic / non-critical gaps; close A10 when no material gaps remain
+
+### A11 — Observability + Exception Handling Completeness Audit + Outbox Relay
+
+Re-walks A0.1 + A0.3 conclusions against everything shipped between then
+and now. Closes the Service Bus piece that A0.3 deferred.
+
+- **A11.1** Audit every handler shipped since A0.1 — has `ILogger<T>` with `userId`, `traceId`, business key
+- **A11.2** Confirm every handler throws from `DomainException` hierarchy; verify ProblemDetailsConfig still maps correctly
+- **A11.3** New failure modes since A0.1 (sync conflict, message delivery failure, template render failure, hold expiry) — each has an alert rule + saved KQL query + runbook
+- **A11.4** Re-verify `PiiRedactingEnricher` covers fields added since A0.1 (message bodies, review bodies, sync feed URLs)
+- **A11.5** Re-verify 10 saved KQL queries still match deployed schema
+- **A11.6** Wire **outbox → Service Bus relay** deferred from A0.3 — background worker reads `outbox_messages` where `dispatched_at IS NULL`, publishes to topic per event type, marks dispatched, retries with backoff on failure
+- **A11.7** Cross-module event consumers (if any landed via direct MediatR INotificationHandler in A6-A9) — migrate to Service Bus subscription where appropriate (in-process is fine when consumer is in same process; cross-process needs the relay)
 
 ### F1.1 — Playwright E2E suite (cross-cutting frontend deliverable)
 

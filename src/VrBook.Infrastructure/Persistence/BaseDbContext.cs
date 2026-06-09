@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
+using VrBook.Infrastructure.Outbox;
 
 namespace VrBook.Infrastructure.Persistence;
 
@@ -22,10 +23,20 @@ public abstract class BaseDbContext(
     /// <summary>The Postgres schema this context owns (e.g., "catalog", "booking").</summary>
     protected abstract string Schema { get; }
 
+    /// <summary>
+    /// The outbox table for this DbContext's schema. Populated by
+    /// <see cref="DomainEventOutboxInterceptor"/> on SaveChanges; drained by the
+    /// A11 outbox→Service-Bus relay worker.
+    /// </summary>
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.HasDefaultSchema(Schema);
+
+        // A0.3: every module's DbContext gets an outbox_messages table in its own schema.
+        modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {

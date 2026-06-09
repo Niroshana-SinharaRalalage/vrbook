@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
+using VrBook.Infrastructure.Outbox;
 using VrBook.Modules.Pricing.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Pricing;
@@ -13,10 +14,11 @@ public sealed class PricingModule : IModuleRegistration
 
     public IServiceCollection AddModule(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<PricingDbContext>(opts =>
+        services.AddDbContext<PricingDbContext>((sp, opts) =>
             opts.UseNpgsql(
                 configuration.GetConnectionString("Postgres") ?? string.Empty,
-                npg => npg.MigrationsHistoryTable("__ef_migrations_history", PricingDbContext.SchemaName)));
+                npg => npg.MigrationsHistoryTable("__ef_migrations_history", PricingDbContext.SchemaName))
+                .UseOutbox(sp));
 
         services.AddScoped<IPricingPlanRepository, PricingPlanRepository>();
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<PricingDbContext>());

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
+using VrBook.Infrastructure.Outbox;
 using VrBook.Modules.Catalog.Application.Common;
 using VrBook.Modules.Catalog.Infrastructure.Persistence;
 using VrBook.Modules.Catalog.Infrastructure.Storage;
@@ -15,10 +16,11 @@ public sealed class CatalogModule : IModuleRegistration
 
     public IServiceCollection AddModule(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<CatalogDbContext>(opts =>
+        services.AddDbContext<CatalogDbContext>((sp, opts) =>
             opts.UseNpgsql(
                 configuration.GetConnectionString("Postgres") ?? string.Empty,
-                npg => npg.MigrationsHistoryTable("__ef_migrations_history", CatalogDbContext.SchemaName)));
+                npg => npg.MigrationsHistoryTable("__ef_migrations_history", CatalogDbContext.SchemaName))
+                .UseOutbox(sp));
 
         services.AddScoped<IPropertyRepository, PropertyRepository>();
         services.AddScoped<IAmenityRepository, AmenityRepository>();

@@ -7,6 +7,7 @@ using VrBook.Application.Common;
 using VrBook.Contracts.Common;
 using VrBook.Domain.Common;
 using VrBook.Infrastructure;
+using VrBook.Infrastructure.Outbox;
 using VrBook.Modules.Admin;
 using VrBook.Modules.Booking;
 using VrBook.Modules.Catalog;
@@ -95,6 +96,11 @@ builder.Services.AddVrBookAuthentication(builder.Configuration);
 // ---- App + infra cores ----
 builder.Services.AddApplicationCore();
 builder.Services.AddInfrastructureCore(builder.Configuration);
+
+// A0.3: domain-event publisher + SaveChanges outbox interceptor. Each module
+// opts in by chaining .UseOutbox(sp) in its AddDbContext call. Without this
+// every domain event raised by every aggregate is silently discarded.
+builder.Services.AddOutbox();
 
 // ---- Modules (each is a no-op stub in A0; agents replace per §20.2) ----
 builder.Services

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
+using VrBook.Infrastructure.Outbox;
 using VrBook.Modules.Payment.Application;
 using VrBook.Modules.Payment.Infrastructure.Persistence;
 using VrBook.Modules.Payment.Infrastructure.Stripe;
@@ -15,10 +16,11 @@ public sealed class PaymentModule : IModuleRegistration
 
     public IServiceCollection AddModule(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<PaymentDbContext>(opts =>
+        services.AddDbContext<PaymentDbContext>((sp, opts) =>
             opts.UseNpgsql(
                 configuration.GetConnectionString("Postgres") ?? string.Empty,
-                npg => npg.MigrationsHistoryTable("__ef_migrations_history", PaymentDbContext.SchemaName)));
+                npg => npg.MigrationsHistoryTable("__ef_migrations_history", PaymentDbContext.SchemaName))
+                .UseOutbox(sp));
 
         services.Configure<StripeOptions>(configuration.GetSection(StripeOptions.SectionName));
         services.Configure<RefundOptions>(configuration.GetSection(RefundOptions.SectionName));

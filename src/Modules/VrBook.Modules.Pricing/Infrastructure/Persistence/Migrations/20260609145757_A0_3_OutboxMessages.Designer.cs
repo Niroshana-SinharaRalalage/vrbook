@@ -2,22 +2,25 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using VrBook.Modules.Reviews.Infrastructure.Persistence;
+using VrBook.Modules.Pricing.Infrastructure.Persistence;
 
 #nullable disable
 
-namespace VrBook.Modules.Reviews.Infrastructure.Persistence.Migrations
+namespace VrBook.Modules.Pricing.Infrastructure.Persistence.Migrations
 {
-    [DbContext(typeof(ReviewsDbContext))]
-    partial class ReviewsDbContextModelSnapshot : ModelSnapshot
+    [DbContext(typeof(PricingDbContext))]
+    [Migration("20260609145757_A0_3_OutboxMessages")]
+    partial class A0_3_OutboxMessages
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("reviews")
+                .HasDefaultSchema("pricing")
                 .HasAnnotation("ProductVersion", "8.0.10")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -73,23 +76,61 @@ namespace VrBook.Modules.Reviews.Infrastructure.Persistence.Migrations
                     b.HasIndex("EventId")
                         .IsUnique();
 
-                    b.ToTable("outbox_messages", "reviews");
+                    b.ToTable("outbox_messages", "pricing");
                 });
 
-            modelBuilder.Entity("VrBook.Modules.Reviews.Domain.Review", b =>
+            modelBuilder.Entity("VrBook.Modules.Pricing.Domain.Fee", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Body")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("body");
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("amount");
 
-                    b.Property<Guid>("BookingId")
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("basis");
+
+                    b.Property<int?>("FreeThreshold")
+                        .HasColumnType("integer")
+                        .HasColumnName("free_threshold");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("label");
+
+                    b.Property<Guid>("PricingPlanId")
                         .HasColumnType("uuid")
-                        .HasColumnName("booking_id");
+                        .HasColumnName("pricing_plan_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PricingPlanId");
+
+                    b.ToTable("fees", "pricing");
+                });
+
+            modelBuilder.Entity("VrBook.Modules.Pricing.Domain.PricingPlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("BaseNightlyRate")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("base_nightly_rate");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -99,6 +140,12 @@ namespace VrBook.Modules.Reviews.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
@@ -107,45 +154,31 @@ namespace VrBook.Modules.Reviews.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("deleted_by");
 
-                    b.Property<string>("GuestDisplayName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("guest_display_name");
+                    b.Property<bool>("DynamicEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("dynamic_enabled");
 
-                    b.Property<Guid>("GuestUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("guest_user_id");
+                    b.Property<int>("MaxStayNights")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(30)
+                        .HasColumnName("max_stay_nights");
+
+                    b.Property<int>("MinStayNights")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("min_stay_nights");
 
                     b.Property<Guid>("PropertyId")
                         .HasColumnType("uuid")
                         .HasColumnName("property_id");
 
-                    b.Property<DateTimeOffset?>("PublishedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("published_at");
-
-                    b.Property<int>("Rating")
-                        .HasColumnType("integer")
-                        .HasColumnName("rating");
-
-                    b.Property<DateTimeOffset?>("ResponseAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("response_at");
-
-                    b.Property<string>("ResponseBody")
-                        .HasColumnType("text")
-                        .HasColumnName("response_body");
-
                     b.Property<long>("RowVersion")
                         .HasColumnType("bigint")
                         .HasColumnName("row_version");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("status");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -155,16 +188,30 @@ namespace VrBook.Modules.Reviews.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
 
+                    b.Property<decimal>("WeekendRate")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("weekend_rate");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("BookingId")
+                    b.HasIndex("PropertyId")
                         .IsUnique();
 
-                    b.HasIndex("GuestUserId");
+                    b.ToTable("pricing_plans", "pricing");
+                });
 
-                    b.HasIndex("PropertyId");
+            modelBuilder.Entity("VrBook.Modules.Pricing.Domain.Fee", b =>
+                {
+                    b.HasOne("VrBook.Modules.Pricing.Domain.PricingPlan", null)
+                        .WithMany("Fees")
+                        .HasForeignKey("PricingPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
 
-                    b.ToTable("reviews", "reviews");
+            modelBuilder.Entity("VrBook.Modules.Pricing.Domain.PricingPlan", b =>
+                {
+                    b.Navigation("Fees");
                 });
 #pragma warning restore 612, 618
         }

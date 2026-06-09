@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
+using VrBook.Infrastructure.Outbox;
 using VrBook.Modules.Reviews.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Reviews;
@@ -13,10 +14,11 @@ public sealed class ReviewsModule : IModuleRegistration
 
     public IServiceCollection AddModule(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<ReviewsDbContext>(opts =>
+        services.AddDbContext<ReviewsDbContext>((sp, opts) =>
             opts.UseNpgsql(
                 configuration.GetConnectionString("Postgres") ?? string.Empty,
-                npg => npg.MigrationsHistoryTable("__ef_migrations_history", ReviewsDbContext.SchemaName)));
+                npg => npg.MigrationsHistoryTable("__ef_migrations_history", ReviewsDbContext.SchemaName))
+                .UseOutbox(sp));
 
         services.AddScoped<IReviewRepository, ReviewRepository>();
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<ReviewsDbContext>());
