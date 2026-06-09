@@ -31,6 +31,7 @@ export interface Amenity {
   readonly name: string;
   readonly icon: string | null;
   readonly category: string;
+  readonly isActive: boolean;
 }
 
 export interface PropertyAddress {
@@ -135,4 +136,43 @@ export const getAvailability = (propertyId: string, from: string, to: string): P
   apiFetch<Availability>(`/api/v1/properties/${encodeURIComponent(propertyId)}/availability`, {
     query: { from, to },
     anonymous: true,
+  });
+
+// ---- Admin amenity CRUD (A2.2) -----------------------------------------
+export interface CreateAmenityBody {
+  readonly code: string;
+  readonly name: string;
+  readonly icon: string | null;
+  readonly category: string;
+}
+
+export interface UpdateAmenityBody {
+  readonly name: string;
+  readonly icon: string | null;
+  readonly category: string;
+}
+
+export const adminListAmenities = (): Promise<readonly Amenity[]> =>
+  apiFetch<readonly Amenity[]>('/api/v1/admin/amenities');
+
+export const adminCreateAmenity = (body: CreateAmenityBody): Promise<Amenity> =>
+  apiFetch<Amenity>('/api/v1/admin/amenities', {
+    method: 'POST',
+    body,
+  });
+
+export const adminUpdateAmenity = (id: string, body: UpdateAmenityBody): Promise<Amenity> =>
+  apiFetch<Amenity>(`/api/v1/admin/amenities/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body,
+  });
+
+export const adminDisableAmenity = (id: string): Promise<Amenity> =>
+  apiFetch<Amenity>(`/api/v1/admin/amenities/${encodeURIComponent(id)}/disable`, {
+    method: 'POST',
+  });
+
+export const adminEnableAmenity = (id: string): Promise<Amenity> =>
+  apiFetch<Amenity>(`/api/v1/admin/amenities/${encodeURIComponent(id)}/enable`, {
+    method: 'POST',
   });
