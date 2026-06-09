@@ -59,9 +59,10 @@ public sealed class DomainEventOutboxInterceptor(
         }
 
         _pending = events;
-        logger.LogDebug(
-            "Queued {EventCount} domain event(s) into outbox; will publish in-process after commit.",
-            events.Count);
+        logger.LogInformation(
+            "Queued {EventCount} domain event(s) into outbox for {DbContext}; will publish in-process after commit.",
+            events.Count,
+            ctx.GetType().Name);
 
         return ValueTask.FromResult(result);
     }
