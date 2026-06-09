@@ -56,7 +56,12 @@ public sealed record AmenityDto(
     string Code,
     string Name,
     string? Icon,
-    string Category);
+    string Category,
+    bool IsActive = true);
+
+public sealed record CreateAmenityRequest(string Code, string Name, string? Icon, string Category);
+
+public sealed record UpdateAmenityRequest(string Name, string? Icon, string Category);
 
 public sealed record AvailabilityDayDto(
     DateOnly Date,

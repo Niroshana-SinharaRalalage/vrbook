@@ -15,6 +15,7 @@ internal sealed class AmenityConfiguration : IEntityTypeConfiguration<Amenity>
         b.Property(a => a.Name).HasColumnName("name").HasMaxLength(120).IsRequired();
         b.Property(a => a.Icon).HasColumnName("icon").HasMaxLength(80);
         b.Property(a => a.Category).HasColumnName("category").HasMaxLength(60).IsRequired();
+        b.Property(a => a.IsActive).HasColumnName("is_active").HasDefaultValue(true).IsRequired();
 
         b.Property(a => a.CreatedAt).HasColumnName("created_at");
         b.Property(a => a.CreatedBy).HasColumnName("created_by");

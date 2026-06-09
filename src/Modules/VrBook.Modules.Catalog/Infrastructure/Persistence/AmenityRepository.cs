@@ -6,6 +6,14 @@ namespace VrBook.Modules.Catalog.Infrastructure.Persistence;
 internal sealed class AmenityRepository(CatalogDbContext db) : IAmenityRepository
 {
     public async Task<IReadOnlyList<Amenity>> ListAsync(CancellationToken ct = default) =>
+        // A2.2: public catalog excludes disabled amenities. Admin uses ListAllAsync.
+        await db.Amenities
+            .Where(a => a.IsActive)
+            .OrderBy(a => a.Category)
+            .ThenBy(a => a.Name)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Amenity>> ListAllAsync(CancellationToken ct = default) =>
         await db.Amenities.OrderBy(a => a.Category).ThenBy(a => a.Name).ToListAsync(ct);
 
     public async Task<IReadOnlyList<Amenity>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken ct = default)

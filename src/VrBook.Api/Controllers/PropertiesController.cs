@@ -92,3 +92,54 @@ public sealed class AmenitiesController(IMediator mediator) : ControllerBase
     public async Task<ActionResult<IReadOnlyList<AmenityDto>>> List(CancellationToken cancellationToken) =>
         Ok(await mediator.Send(new VrBook.Modules.Catalog.Application.Amenities.Queries.ListAmenitiesQuery(), cancellationToken));
 }
+
+/// <summary>Admin CRUD for the amenity catalog (A2.2).</summary>
+[Route("api/v1/admin/amenities")]
+[Tags("Catalog — Admin")]
+[Authorize(Roles = "Admin")]
+public sealed class AdminAmenitiesController(IMediator mediator) : ControllerBase
+{
+    [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<AmenityDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<AmenityDto>>> ListAll(CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(
+            new VrBook.Modules.Catalog.Application.Amenities.Queries.ListAllAmenitiesQuery(),
+            cancellationToken));
+
+    [HttpPost]
+    [ProducesResponseType(typeof(AmenityDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AmenityDto>> Create(
+        [FromBody] CreateAmenityRequest request, CancellationToken cancellationToken)
+    {
+        var dto = await mediator.Send(
+            new VrBook.Modules.Catalog.Application.Amenities.Commands.CreateAmenityCommand(
+                request.Code, request.Name, request.Icon, request.Category),
+            cancellationToken);
+        return CreatedAtAction(nameof(ListAll), new { id = dto.Id }, dto);
+    }
+
+    [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(AmenityDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AmenityDto>> Update(
+        Guid id, [FromBody] UpdateAmenityRequest request, CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(
+            new VrBook.Modules.Catalog.Application.Amenities.Commands.UpdateAmenityCommand(
+                id, request.Name, request.Icon, request.Category),
+            cancellationToken));
+
+    [HttpPost("{id:guid}/disable")]
+    [ProducesResponseType(typeof(AmenityDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<AmenityDto>> Disable(Guid id, CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(
+            new VrBook.Modules.Catalog.Application.Amenities.Commands.DisableAmenityCommand(id),
+            cancellationToken));
+
+    [HttpPost("{id:guid}/enable")]
+    [ProducesResponseType(typeof(AmenityDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<AmenityDto>> Enable(Guid id, CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(
+            new VrBook.Modules.Catalog.Application.Amenities.Commands.EnableAmenityCommand(id),
+            cancellationToken));
+}

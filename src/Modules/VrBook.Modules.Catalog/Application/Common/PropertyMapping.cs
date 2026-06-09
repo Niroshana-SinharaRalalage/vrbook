@@ -42,7 +42,7 @@ internal static class PropertyMapping
             HouseRules: p.HouseRules.OrderBy(h => h.SortOrder).Select(h => h.RuleText).ToArray());
 
     public static AmenityDto ToDto(this Amenity a) =>
-        new(a.Id, a.Code, a.Name, a.Icon, a.Category);
+        new(a.Id, a.Code, a.Name, a.Icon, a.Category, a.IsActive);
 
     public static PropertySummaryDto ToSummary(this Property p, Func<string, string> blobToUrl)
     {

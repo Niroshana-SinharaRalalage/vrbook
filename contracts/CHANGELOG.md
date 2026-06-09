@@ -11,6 +11,25 @@ Versioning: **independent semver** for the contract surface, distinct from the a
 
 ---
 
+## [0.4.0] — 2026-06-09
+
+### Added (MINOR)
+
+- `AmenityDto.IsActive` — defaulted `true` so existing clients are unaffected.
+- `CreateAmenityRequest` (Code, Name, Icon, Category) and `UpdateAmenityRequest`
+  (Name, Icon, Category) DTOs.
+- `POST /api/v1/admin/amenities`, `PUT /api/v1/admin/amenities/{id}`,
+  `POST /api/v1/admin/amenities/{id}/disable`, `POST /api/v1/admin/amenities/{id}/enable`
+  endpoints. Admin role required (`[Authorize(Roles = "Admin")]`).
+- `GET /api/v1/admin/amenities` (includes disabled rows) sister to the public
+  `GET /api/v1/amenities` (active rows only).
+
+A2.2 also expands the seed catalog from 25 → ~70 amenities across 12 categories
+matching Airbnb/VRBO/Booking.com conventions. Catalog-content changes don't
+affect the contract surface.
+
+---
+
 ## [0.3.0] — 2026-05-26
 
 ### Changed (BREAKING for unreleased clients only)
