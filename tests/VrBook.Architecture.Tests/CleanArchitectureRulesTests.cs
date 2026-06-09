@@ -29,14 +29,13 @@ public sealed class CleanArchitectureRulesTests
     {
         var result = Types.InAssembly(DomainAssembly)
             .Should()
-            .NotHaveDependencyOnAny([
+            .NotHaveDependencyOnAny(
                 "VrBook.Application",
                 "VrBook.Infrastructure",
                 "VrBook.Api",
                 "Microsoft.AspNetCore",
                 "Microsoft.EntityFrameworkCore",
-                "MediatR",
-            ])
+                "MediatR")
             .GetResult();
 
         result.IsSuccessful.Should().BeTrue(
@@ -51,13 +50,12 @@ public sealed class CleanArchitectureRulesTests
         // Coupling it to Domain types would force every client to mirror domain mutations.
         var result = Types.InAssembly(ContractsAssembly)
             .Should()
-            .NotHaveDependencyOnAny([
+            .NotHaveDependencyOnAny(
                 "VrBook.Domain",
                 "VrBook.Application",
                 "VrBook.Infrastructure",
                 "VrBook.Api",
-                "Microsoft.EntityFrameworkCore",
-            ])
+                "Microsoft.EntityFrameworkCore")
             .GetResult();
 
         result.IsSuccessful.Should().BeTrue(
@@ -72,13 +70,12 @@ public sealed class CleanArchitectureRulesTests
         // not the other way around — the dependency inversion principle.
         var result = Types.InAssembly(ApplicationAssembly)
             .Should()
-            .NotHaveDependencyOnAny([
+            .NotHaveDependencyOnAny(
                 "VrBook.Infrastructure",
                 "VrBook.Api",
                 "Microsoft.AspNetCore",
                 "Microsoft.EntityFrameworkCore.Relational",
-                "Npgsql",
-            ])
+                "Npgsql")
             .GetResult();
 
         result.IsSuccessful.Should().BeTrue(

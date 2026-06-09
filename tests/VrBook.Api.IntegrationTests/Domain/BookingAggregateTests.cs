@@ -117,7 +117,7 @@ public sealed class BookingAggregateTests
             specialRequests: null);
 
         booking.Guests.Should().HaveCount(2);
-        booking.Guests.Select(g => g.FullName).Should().BeEquivalentTo(["Alice", "Bob"]);
+        booking.Guests.Select(g => g.FullName).Should().BeEquivalentTo("Alice", "Bob");
     }
 
     // ----- Confirm -----
