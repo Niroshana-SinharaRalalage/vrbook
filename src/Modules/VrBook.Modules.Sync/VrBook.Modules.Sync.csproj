@@ -21,6 +21,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Mapster" />
+    <PackageReference Include="Ical.Net" />
   </ItemGroup>
 
 </Project>

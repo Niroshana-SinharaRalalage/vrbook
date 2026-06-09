@@ -21,10 +21,13 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Serilog.Extensions.Hosting" />
     <PackageReference Include="Serilog.Sinks.Console" />
     <PackageReference Include="Serilog.Settings.Configuration" />
+    <PackageReference Include="Serilog.Formatting.Compact" />
     <PackageReference Include="Azure.Messaging.ServiceBus" />
+    <PackageReference Include="MediatR" />
   </ItemGroup>
 
 </Project>

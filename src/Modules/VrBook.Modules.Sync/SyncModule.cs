@@ -6,6 +6,7 @@ using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
 using VrBook.Infrastructure.Outbox;
 using VrBook.Modules.Sync.Infrastructure;
+using VrBook.Modules.Sync.Infrastructure.Channels;
 using VrBook.Modules.Sync.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Sync;
@@ -30,6 +31,16 @@ public sealed class SyncModule : IModuleRegistration
         // backed by sync.external_reservations. Replace (not just add) so the DI
         // container resolves the real one.
         services.Replace(ServiceDescriptor.Scoped<IExternalChannelConflictChecker, RealExternalChannelConflictChecker>());
+
+        // A6 channel adapters. Each implements IExternalChannel for one ChannelKind.
+        // The worker iterates the IEnumerable<IExternalChannel> resolved from DI.
+        services.AddHttpClient(AirBnBICalChannel.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(15);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd("VrBook-Sync/1.0 (+https://vrbook.example.com)");
+            c.DefaultRequestHeaders.Accept.ParseAdd("text/calendar, text/plain;q=0.9, */*;q=0.5");
+        });
+        services.AddScoped<IExternalChannel, AirBnBICalChannel>();
 
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<SyncDbContext>());
 
