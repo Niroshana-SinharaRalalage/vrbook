@@ -249,7 +249,7 @@ public sealed class ExternalReservationAggregateTests
             checkin: new DateOnly(2026, 7, 10),
             checkout: new DateOnly(2026, 7, 14));
 
-        var actual = er.OverlapsWith(DateOnly.Parse(otherInStr), DateOnly.Parse(otherOutStr));
+        var actual = er.OverlapsWith(DateOnly.Parse(otherInStr, System.Globalization.CultureInfo.InvariantCulture), DateOnly.Parse(otherOutStr, System.Globalization.CultureInfo.InvariantCulture));
 
         actual.Should().Be(expected,
             $"reservation [2026-07-10, 2026-07-14) vs other [{otherInStr}, {otherOutStr})");

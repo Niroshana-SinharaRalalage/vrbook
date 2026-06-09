@@ -102,6 +102,11 @@ builder.Services.AddInfrastructureCore(builder.Configuration);
 // every domain event raised by every aggregate is silently discarded.
 builder.Services.AddOutbox();
 
+// A6: feed-URL builder for /feeds/{token}.ics — uses the request scheme/host
+// so outbound feed URLs match whatever ingress the admin is hitting.
+builder.Services.AddScoped<VrBook.Modules.Sync.Application.ChannelFeeds.Commands.IFeedUrlBuilder,
+                           VrBook.Api.Sync.HttpFeedUrlBuilder>();
+
 // ---- Modules (each is a no-op stub in A0; agents replace per §20.2) ----
 builder.Services
     .AddIdentityModule(builder.Configuration)
