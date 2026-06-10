@@ -27,6 +27,10 @@ public sealed class BookingModule : IModuleRegistration
         services.AddScoped<VrBook.Contracts.Interfaces.IConfirmedBookingLookup,
                            VrBook.Modules.Booking.Infrastructure.Persistence.ConfirmedBookingLookup>();
 
+        // A7.4: cross-module read for Messaging thread bootstrap on BookingConfirmed.
+        services.AddScoped<VrBook.Contracts.Interfaces.IBookingMessagingContext,
+                           VrBook.Modules.Booking.Infrastructure.Persistence.BookingMessagingContext>();
+
         services.AddModuleAssembly(typeof(BookingModule).Assembly);
         return services;
     }

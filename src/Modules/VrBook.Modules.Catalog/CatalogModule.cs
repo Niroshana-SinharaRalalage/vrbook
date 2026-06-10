@@ -24,6 +24,8 @@ public sealed class CatalogModule : IModuleRegistration
 
         services.AddScoped<IPropertyRepository, PropertyRepository>();
         services.AddScoped<IAmenityRepository, AmenityRepository>();
+        services.AddScoped<VrBook.Contracts.Interfaces.IPropertyOwnerLookup,
+                           VrBook.Modules.Catalog.Infrastructure.Persistence.PropertyOwnerLookup>();
 
         // The Catalog DbContext doubles as the module's IUnitOfWork. Each module
         // saves its own context; we don't span transactions across schemas here.
