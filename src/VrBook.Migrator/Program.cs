@@ -8,6 +8,7 @@ using VrBook.Modules.Catalog;
 using VrBook.Modules.Identity;
 using VrBook.Modules.Loyalty;
 using VrBook.Modules.Messaging;
+using VrBook.Modules.Notifications;
 using VrBook.Modules.Payment;
 using VrBook.Modules.Pricing;
 using VrBook.Modules.Reviews;
@@ -49,6 +50,7 @@ try
     builder.Services.AddSyncDbContextForMigrator(builder.Configuration);
     builder.Services.AddMessagingDbContextForMigrator(builder.Configuration);
     builder.Services.AddLoyaltyDbContextForMigrator(builder.Configuration);
+    builder.Services.AddNotificationsDbContextForMigrator(builder.Configuration);
 
     using var host = builder.Build();
 
