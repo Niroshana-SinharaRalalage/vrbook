@@ -221,7 +221,7 @@ After both my analysis and the architect consult, the recommendation is unambigu
 **Backend gaps**:
 - `IEmailSender` ACS implementation using `Azure.Communication.Email` SDK (per ADR-0011, port pattern from LankaConnect's `AzureEmailService.cs`).
 - `NotificationDispatchWorker` (Container App Job, cron `*/2 * * * *`) — drains Queued rows, renders Mustache, calls ACS, updates status to Sent/Failed with 3-retry exponential backoff (2s/4s/8s).
-- **6 Mustache templates** (not 18): booking.received, booking.confirmed, booking.rejected, booking.cancelled.guest, owner.tentative_received, owner.action_required_24h_reminder. Templates in `Notifications/Templates/*.mustache`. Shared header/footer layout.
+- **10 Mustache templates** (user-approved stretch from initial 6): booking.received, booking.confirmed, booking.rejected, booking.cancelled.guest, booking.cancelled.owner_notice, owner.tentative_received, owner.action_required_24h_reminder, owner.auto_confirmed, owner.cancellation_alert, owner.sync_conflict. Templates in `Notifications/Templates/*.mustache`. Shared header/footer layout. The remaining 8 from §13 (pre-arrival reminders, lockbox code, dispute/refund/loyalty milestones, admin sync_failure) land in Slice 5 backfill or Phase 2.
 - Custom domain DKIM/SPF wiring (OPS task — out of scope for this slice; ACS default sender works for demo).
 
 **UI deliverables**:
@@ -374,7 +374,7 @@ After both my analysis and the architect consult, the recommendation is unambigu
 | **Entra External ID cutover (OPS.7)** | Defer to OPS-only phase | DevAuth covers Phase 1 demo and pilot. Real auth is an Ops project. |
 | **5-rule pricing engine (full)** | Reduce to **3 rules** | Base + Weekend already exist. Slice 6 adds Seasonal + Last-minute + Length-of-stay. Gap-night and Occupancy are revenue optimization for power users; not funnel-critical. |
 | **SignalR realtime everywhere** | Slice 7 only | 30s polling ships and is acceptable. SignalR Serverless provisioning is real Ops work — isolate. |
-| **18 notification templates** | Ship **6 in Slice 4**, 2 more in Slice 5 | Catalog completeness is documentation. Deliver the funnel-critical templates first. Phase 2 backfills (pre-arrival reminders, dispute alerts, etc.). |
+| **18 notification templates** | Ship **10 in Slice 4** (user-approved stretch), 2 more in Slice 5 | Catalog completeness is documentation. Funnel-critical 10 deliver the moment-of-truth touches; pre-arrival reminders, lockbox code, dispute alerts, loyalty milestones land in Slice 5 or Phase 2. |
 | **Auto evidence submission on disputes** | Out of scope | Confirmed Phase 2 per proposal §9.6. Manual via Stripe dashboard. |
 | **Pact contract tests, k6 load, ZAP scan** | Keep in CI but don't block slices | Test bar is policy; slices ship behind feature flags if pact diff appears. |
 | **Photo CDN/optimization** | Defer to Slice 6 polish | Basic upload in Slice 1 is enough. ImageSharp pipeline can wait. |
@@ -436,10 +436,14 @@ If you approve this plan, the next concrete actions are:
 
 ---
 
-## 9. Open questions for the user
+## 9. Decisions locked in by user (2026-06-10)
 
-1. **Slice 0 race fixes are intrusive.** They touch payment timing (auto → manual capture) which inverts the cost trade-off in §9.4. Comfortable with the change?
-2. **Tentative window: 6h or 24h?** Architect recommended 6h to shrink the AirBnB lag exposure. §7 wrote 24h. The shorter window means owners must be more responsive — but the SLA worker auto-confirms if they're not. OK with 6h?
-3. **Slice 6 pricing rules: 3 or 5?** Recommend 3 (Seasonal, Last-minute, LOS). 5 adds Gap-night + Occupancy. Phase 2 acceptable for the latter two?
-4. **Notification template count for Slice 4: 6 or 10?** Recommend 6 (funnel-critical). The other 12 from §13 (pre-arrival reminders, lockbox code email, dispute alert, etc.) can fold into Slice 5 backfill or Phase 2.
-5. **Demo audience.** Who watches Slice 2 demo? If it's a real prospective client, we should add 1 day to Slice 2 for polish.
+1. ✅ **Manual capture for Phase 1.** Authorize at Tentative, capture on Confirm, cancel on Reject. §9.4 cost trade-off accepted.
+2. ✅ **6h tentative window.** Default value; config-overridable per property.
+3. ✅ **3 pricing rules** (Seasonal + Last-minute + LOS). Gap-night + Occupancy deferred to Phase 2.
+4. ✅ **10 notification templates** in Slice 4 (stretch from initial 6). Remaining 8 from §13 deferred to Slice 5 backfill or Phase 2.
+5. ✅ **No external demo audience.** Standard polish bar applies.
+
+Housekeeping:
+- A9 backend code committed (`ab3a685`) for future Slice 4 to fold into.
+- `docs/EXECUTION_PLAN.md` left in place for history; this document is the active plan.
