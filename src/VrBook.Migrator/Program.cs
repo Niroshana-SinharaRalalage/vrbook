@@ -6,6 +6,7 @@ using Serilog;
 using VrBook.Modules.Booking;
 using VrBook.Modules.Catalog;
 using VrBook.Modules.Identity;
+using VrBook.Modules.Loyalty;
 using VrBook.Modules.Messaging;
 using VrBook.Modules.Payment;
 using VrBook.Modules.Pricing;
@@ -47,6 +48,7 @@ try
     builder.Services.AddReviewsDbContextForMigrator(builder.Configuration);
     builder.Services.AddSyncDbContextForMigrator(builder.Configuration);
     builder.Services.AddMessagingDbContextForMigrator(builder.Configuration);
+    builder.Services.AddLoyaltyDbContextForMigrator(builder.Configuration);
 
     using var host = builder.Build();
 

@@ -278,7 +278,12 @@ public sealed class BookingAggregateTests
 
         b.Status.Should().Be(BookingStatus.CheckedOut);
         b.CheckedOutAt.Should().NotBeNull();
-        b.DequeueEvents().Should().ContainSingle().Which.Should().BeOfType<BookingCheckedOut>();
+        // A8.1: CheckOut now raises BOTH BookingCheckedOut (lifecycle) AND BookingCompleted
+        // (business event consumed by Loyalty to increment stay count).
+        var events = b.DequeueEvents();
+        events.Select(e => e.GetType().Name).Should().Equal(
+            nameof(BookingCheckedOut),
+            nameof(BookingCompleted));
     }
 
     [Fact]
@@ -304,7 +309,8 @@ public sealed class BookingAggregateTests
             nameof(BookingPlaced),
             nameof(BookingConfirmed),
             nameof(BookingCheckedIn),
-            nameof(BookingCheckedOut));
+            nameof(BookingCheckedOut),
+            nameof(BookingCompleted));
         b.Status.Should().Be(BookingStatus.CheckedOut);
     }
 

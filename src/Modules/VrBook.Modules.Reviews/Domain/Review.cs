@@ -66,4 +66,24 @@ public sealed class Review : AggregateRoot
         ResponseBody = body.Trim();
         ResponseAt = DateTimeOffset.UtcNow;
     }
+
+    // ---- A8.1 moderation ----
+    /// <summary>Hide from the public listing without deleting. Reversible via <see cref="Restore"/>.</summary>
+    public void Hide()
+    {
+        Status = ReviewStatus.Hidden;
+    }
+
+    /// <summary>Reverse a Hide / Reject. Restores to Approved + publishes if not already.</summary>
+    public void Restore()
+    {
+        Status = ReviewStatus.Approved;
+        PublishedAt ??= DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>Admin-side rejection. Permanent in admin UX but reversible in code.</summary>
+    public void Reject()
+    {
+        Status = ReviewStatus.Rejected;
+    }
 }

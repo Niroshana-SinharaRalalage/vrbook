@@ -153,6 +153,9 @@ public sealed class Booking : AggregateRoot
         Status = BookingStatus.CheckedOut;
         CheckedOutAt = DateTimeOffset.UtcNow;
         Raise(new BookingCheckedOut(Id, Reference));
+        // A8.1: BookingCompleted is the business event Loyalty consumes to
+        // increment the guest's completed-stay count and recompute their tier.
+        Raise(new BookingCompleted(Id, Reference, GuestUserId));
     }
 
     private void Require(BookingStatus expected)

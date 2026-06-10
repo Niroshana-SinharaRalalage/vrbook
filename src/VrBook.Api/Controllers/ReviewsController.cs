@@ -4,22 +4,31 @@ using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
+using VrBook.Contracts.Enums;
+using VrBook.Modules.Reviews.Application.Moderation.Commands;
+using VrBook.Modules.Reviews.Application.Moderation.Queries;
 using VrBook.Modules.Reviews.Application.Queries;
 
 namespace VrBook.Api.Controllers;
 
-/// <summary>Reviews — proposal §6.2 + §11.1.</summary>
+/// <summary>Reviews — A8.1. Owner-response endpoint + moderation queue land here.</summary>
 [Route("api/v1/reviews")]
 [Tags("Reviews")]
 [Authorize]
-public sealed class ReviewsController : ControllerBase
+public sealed class ReviewsController(IMediator mediator) : ControllerBase
 {
     [HttpPost("{id:guid}/response")]
     [Authorize(Roles = "Owner,Admin")]
-    [SwaggerOperation(Summary = "Owner replies to a review (1:1). Lands in A6.1.")]
-    [ProducesResponseType(typeof(ReviewResponseDto), StatusCodes.Status201Created)]
-    public IActionResult Respond(Guid id, [FromBody] SubmitReviewResponseRequest request) =>
-        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Owner response lands in A6.1." });
+    [SwaggerOperation(Summary = "Owner replies to a review (1:1).")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> Respond(
+        Guid id, [FromBody] SubmitReviewResponseRequest request, CancellationToken cancellationToken)
+    {
+        await mediator.Send(new RespondToReviewCommand(id, request.Body), cancellationToken);
+        return NoContent();
+    }
 }
 
 [Route("api/v1/properties/{propertyId:guid}/reviews")]
@@ -43,20 +52,55 @@ public sealed class PropertyReviewsController(IMediator mediator) : ControllerBa
     }
 }
 
+/// <summary>A8.1 admin moderation surface for reviews.</summary>
 [Route("api/v1/admin/reviews")]
 [Tags("Reviews — Admin")]
-[Authorize(Roles = "Owner,Admin")]
-public sealed class ReviewsAdminController : ControllerBase
+[Authorize(Roles = "Admin")]
+public sealed class ReviewsAdminController(IMediator mediator) : ControllerBase
 {
-    [HttpGet("moderation")]
-    public IActionResult Pending() =>
-        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Moderation queue lands in A6.1." });
+    [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<ReviewDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<ReviewDto>>> List(
+        [FromQuery] ReviewStatus? status, CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(new ListReviewsForAdminQuery(status), cancellationToken));
 
-    [HttpPost("{id:guid}/approve")]
-    public IActionResult Approve(Guid id, [FromBody] ModerateReviewRequest request) =>
-        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Moderation queue lands in A6.1." });
+    [HttpPost("{id:guid}/hide")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Hide(Guid id, CancellationToken cancellationToken)
+    {
+        await mediator.Send(new HideReviewCommand(id), cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPost("{id:guid}/restore")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Restore(Guid id, CancellationToken cancellationToken)
+    {
+        await mediator.Send(new RestoreReviewCommand(id), cancellationToken);
+        return NoContent();
+    }
 
     [HttpPost("{id:guid}/reject")]
-    public IActionResult Reject(Guid id, [FromBody] ModerateReviewRequest request) =>
-        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Moderation queue lands in A6.1." });
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Reject(Guid id, CancellationToken cancellationToken)
+    {
+        await mediator.Send(new RejectReviewCommand(id), cancellationToken);
+        return NoContent();
+    }
+}
+
+/// <summary>A8.1 — guest-facing loyalty status endpoint.</summary>
+[Route("api/v1/me/loyalty")]
+[Tags("Loyalty")]
+[Authorize]
+public sealed class MyLoyaltyController(IMediator mediator) : ControllerBase
+{
+    [HttpGet]
+    [SwaggerOperation(Summary = "Get the current user's loyalty tier + discount + stays-to-next-tier.")]
+    [ProducesResponseType(typeof(LoyaltyAccountDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<LoyaltyAccountDto>> Get(CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(new VrBook.Modules.Loyalty.Application.Accounts.Queries.GetMyLoyaltyQuery(), cancellationToken));
 }
