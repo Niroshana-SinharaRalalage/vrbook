@@ -11,4 +11,8 @@ public sealed class StubExternalChannelConflictChecker : IExternalChannelConflic
     public Task<bool> HasOverlapAsync(
         Guid propertyId, DateOnly checkin, DateOnly checkout, CancellationToken ct = default)
         => Task.FromResult(false);
+
+    public Task<IReadOnlyList<ExternalReservationOverlap>> FindOverlappingAsync(
+        Guid propertyId, DateOnly checkin, DateOnly checkout, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ExternalReservationOverlap>>(Array.Empty<ExternalReservationOverlap>());
 }

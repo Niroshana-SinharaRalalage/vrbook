@@ -23,6 +23,10 @@ public sealed class BookingModule : IModuleRegistration
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<BookingDbContext>());
 
+        // A6 stage 5: cross-module read for Sync conflict detection.
+        services.AddScoped<VrBook.Contracts.Interfaces.IConfirmedBookingLookup,
+                           VrBook.Modules.Booking.Infrastructure.Persistence.ConfirmedBookingLookup>();
+
         services.AddModuleAssembly(typeof(BookingModule).Assembly);
         return services;
     }

@@ -21,10 +21,20 @@ internal sealed class SyncConflictConfiguration : IEntityTypeConfiguration<SyncC
         builder.Property(x => x.ResolvedAt).HasColumnName("resolved_at");
 
         // Each (booking, external_reservation) pair only conflicts ONCE — workflows
-        // re-running on the same pair should update, not insert.
+        // re-running on the same pair should update, not insert. Plain non-unique
+        // index (kept for the dedupe lookup); the unique partial index below
+        // enforces "at most one PENDING conflict per pair" at the storage layer.
+        builder.HasIndex(x => new { x.BookingId, x.ExternalReservationId })
+            .HasDatabaseName("ix_sync_conflicts_booking_external");
+
+        // A6 stage 5: partial unique index. Defends against the in-process race when
+        // both ExternalReservationImported and BookingConfirmed handlers fire for
+        // the same (booking, external_reservation) at the same time. Only applies to
+        // unresolved rows so a resolved-then-recurring conflict can create a fresh row.
         builder.HasIndex(x => new { x.BookingId, x.ExternalReservationId })
             .IsUnique()
-            .HasDatabaseName("ix_sync_conflicts_booking_external");
+            .HasFilter("resolved_at IS NULL")
+            .HasDatabaseName("ux_sync_conflicts_booking_external_pending");
 
         // Dashboard scan: unresolved conflicts per property.
         builder.HasIndex(x => new { x.PropertyId, x.Resolution })

@@ -45,6 +45,10 @@ public sealed record OutboundReservation(
 /// <summary>
 /// Booking → Sync boundary. Booking asks "is there a conflict?" before transitioning
 /// to <c>Confirmed</c>. Implementation lives in the Sync module.
+///
+/// A6 stage 5: also exposes a list-returning method used by Sync's conflict-detection
+/// handler (when <c>BookingConfirmed</c> fires we need the actual
+/// <c>ExternalReservationId</c>(s) to write conflict rows, not just a bool).
 /// </summary>
 public interface IExternalChannelConflictChecker
 {
@@ -53,4 +57,20 @@ public interface IExternalChannelConflictChecker
         DateOnly checkin,
         DateOnly checkout,
         CancellationToken ct = default);
+
+    /// <summary>Returns active external reservations overlapping the window. Sync's
+    /// own handlers use this to record SyncConflict rows.</summary>
+    Task<IReadOnlyList<ExternalReservationOverlap>> FindOverlappingAsync(
+        Guid propertyId,
+        DateOnly checkin,
+        DateOnly checkout,
+        CancellationToken ct = default);
 }
+
+/// <summary>Compact projection of an external reservation that overlaps a window.</summary>
+public sealed record ExternalReservationOverlap(
+    Guid ExternalReservationId,
+    ChannelKind Channel,
+    DateOnly Checkin,
+    DateOnly Checkout,
+    string? Summary);

@@ -22,4 +22,16 @@ internal sealed class RealExternalChannelConflictChecker(IExternalReservationRep
         var overlapping = await reservations.ListOverlappingAsync(propertyId, checkin, checkout, ct);
         return overlapping.Count > 0;
     }
+
+    public async Task<IReadOnlyList<ExternalReservationOverlap>> FindOverlappingAsync(
+        Guid propertyId,
+        DateOnly checkin,
+        DateOnly checkout,
+        CancellationToken ct = default)
+    {
+        var overlapping = await reservations.ListOverlappingAsync(propertyId, checkin, checkout, ct);
+        return overlapping
+            .Select(r => new ExternalReservationOverlap(r.Id, r.Channel, r.Checkin, r.Checkout, r.Summary))
+            .ToArray();
+    }
 }
