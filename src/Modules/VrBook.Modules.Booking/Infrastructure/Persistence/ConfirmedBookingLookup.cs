@@ -40,4 +40,29 @@ internal sealed class ConfirmedBookingLookup(BookingDbContext db) : IConfirmedBo
             .ToListAsync(ct);
         return rows;
     }
+
+    public async Task<IReadOnlyList<OutboundFeedBooking>> ListForOutboundFeedAsync(
+        Guid propertyId,
+        DateOnly from,
+        CancellationToken ct = default)
+    {
+        // Tentative + Confirmed + CheckedIn — anything still actively reserved or
+        // pending owner action. CheckedOut is excluded (stay completed).
+        var rows = await db.Bookings
+            .AsNoTracking()
+            .Where(b => b.PropertyId == propertyId)
+            .Where(b => b.Stay.CheckoutDate >= from)
+            .Where(b => b.Status == BookingStatus.Tentative
+                     || b.Status == BookingStatus.Confirmed
+                     || b.Status == BookingStatus.CheckedIn)
+            .Select(b => new OutboundFeedBooking(
+                b.Id,
+                b.Reference,
+                b.Stay.CheckinDate,
+                b.Stay.CheckoutDate,
+                b.Status == BookingStatus.Tentative,
+                b.UpdatedAt))
+            .ToListAsync(ct);
+        return rows;
+    }
 }

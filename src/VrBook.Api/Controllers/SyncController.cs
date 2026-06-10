@@ -9,17 +9,25 @@ using VrBook.Modules.Sync.Application.Conflicts.Queries;
 
 namespace VrBook.Api.Controllers;
 
-/// <summary>Outbound iCal feed served publicly with a per-feed secret token.
-/// Implementation lands in A6 stage 7 (cached render). Until then returns 501.</summary>
+/// <summary>Outbound iCal feed served publicly. The opaque OutboundToken
+/// (set when the ChannelFeed was created) is the only credential — owners can
+/// share this URL with their AirBnB / VRBO / Booking.com or with Google Calendar.</summary>
 [Route("api/v1/feeds")]
 [Tags("Sync — Public Feed")]
 [AllowAnonymous]
-public sealed class FeedsController : StubController
+public sealed class FeedsController(IMediator mediator) : ControllerBase
 {
     [HttpGet("{outboundToken}.ics")]
     [Produces("text/calendar")]
-    public IActionResult Get(string outboundToken) => NotImplementedYet("A6",
-        "Outbound feed renders confirmed + tentative bookings as VEVENTs (A6 stage 7).");
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Get(string outboundToken, CancellationToken cancellationToken)
+    {
+        var ics = await mediator.Send(
+            new VrBook.Modules.Sync.Application.Feeds.Queries.GetOutboundFeedQuery(outboundToken),
+            cancellationToken);
+        return Content(ics, "text/calendar; charset=utf-8");
+    }
 }
 
 /// <summary>Admin CRUD for inbound iCal channel feeds (A6 stages 2+3).</summary>

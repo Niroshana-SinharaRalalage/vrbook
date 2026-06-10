@@ -16,6 +16,17 @@ public interface IConfirmedBookingLookup
         DateOnly checkin,
         DateOnly checkout,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns Confirmed AND Tentative bookings for the property that haven't
+    /// ended yet, suitable for the outbound iCal feed at /feeds/{token}.ics.
+    /// Tentative bookings are rendered with STATUS:TENTATIVE so subscribers
+    /// can differentiate.
+    /// </summary>
+    Task<IReadOnlyList<OutboundFeedBooking>> ListForOutboundFeedAsync(
+        Guid propertyId,
+        DateOnly from,
+        CancellationToken ct = default);
 }
 
 /// <summary>Compact projection of an overlapping direct booking — just enough
@@ -26,3 +37,14 @@ public sealed record ConfirmedBookingOverlap(
     DateOnly Checkout,
     string GuestDisplayName,
     string Reference);
+
+/// <summary>Projection of a direct booking for the outbound iCal feed. The
+/// <c>IsTentative</c> flag drives <c>STATUS:TENTATIVE</c> vs
+/// <c>STATUS:CONFIRMED</c> in the rendered VEVENT.</summary>
+public sealed record OutboundFeedBooking(
+    Guid BookingId,
+    string Reference,
+    DateOnly Checkin,
+    DateOnly Checkout,
+    bool IsTentative,
+    DateTimeOffset LastModified);
