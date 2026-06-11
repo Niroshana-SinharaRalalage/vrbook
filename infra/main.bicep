@@ -400,6 +400,32 @@ module syncJob 'modules/container-app-job.bicep' = {
   }
 }
 
+// ---------- Booking SLA expiry sweep (scheduled job, */10 * * * *) ----------
+// Slice 0.4: scans Tentative bookings whose 6h window has elapsed. Auto-confirms
+// when no iCal conflict; auto-cancels (and cancels the Stripe auth-hold) when one
+// exists. See docs/REPLAN.md slice 0.4.
+module bookingExpiryJob 'modules/container-app-job.bicep' = {
+  name: 'booking-expiry-job'
+  params: {
+    name: 'caj-vrbook-bookingexpiry-${env}'
+    location: location
+    tags: tags
+    environmentId: cae.outputs.id
+    containerImage: bookingWorkerImage
+    registryServer: acr.outputs.loginServer
+    userAssignedIdentityId: mi.outputs.id
+    workloadProfileName: 'Consumption'
+    triggerType: 'Schedule'
+    cronExpression: '*/10 * * * *'
+    replicaTimeoutSeconds: 600
+    cpu: '0.5'
+    memory: '1Gi'
+    envVars: apiEnvVars
+    secrets: apiSecrets
+    keyVaultName: kv.outputs.name
+  }
+}
+
 // ---------- DB migrator (manual-trigger job) ----------
 module migratorJob 'modules/container-app-job.bicep' = {
   name: 'migrator-job'

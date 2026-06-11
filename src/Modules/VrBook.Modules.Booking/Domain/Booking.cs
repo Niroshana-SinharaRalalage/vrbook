@@ -117,6 +117,31 @@ public sealed class Booking : AggregateRoot
             Stay.CheckinDate, Stay.CheckoutDate, "owner"));
     }
 
+    /// <summary>Slice 0.4: SLA worker auto-confirms when the tentative window
+    /// expires AND no iCal conflict was detected. Same state transition as
+    /// <see cref="Confirm"/> but the event Trigger field is "sla" instead of "owner".</summary>
+    public void AutoConfirm()
+    {
+        Require(BookingStatus.Tentative);
+        Status = BookingStatus.Confirmed;
+        ConfirmedAt = DateTimeOffset.UtcNow;
+        TentativeUntil = null;
+        Raise(new BookingConfirmed(Id, Reference, PropertyId, GuestUserId,
+            Stay.CheckinDate, Stay.CheckoutDate, "sla"));
+    }
+
+    /// <summary>Slice 0.4: SLA worker auto-cancels when the tentative window
+    /// expires AND a conflict was detected (or auth-hold lapsed). Transitions to
+    /// Cancelled (not Rejected) because it isn't the owner's choice.</summary>
+    public void AutoExpire(string reason)
+    {
+        Require(BookingStatus.Tentative);
+        Status = BookingStatus.Cancelled;
+        CancelledAt = DateTimeOffset.UtcNow;
+        CancellationReason = string.IsNullOrWhiteSpace(reason) ? "Tentative window expired without owner action" : reason.Trim();
+        Raise(new BookingCancelled(Id, Reference, PropertyId, GuestUserId, "sla", 0m, Currency));
+    }
+
     public void Reject(string reason)
     {
         Require(BookingStatus.Tentative);
