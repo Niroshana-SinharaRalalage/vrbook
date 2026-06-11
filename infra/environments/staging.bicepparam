@@ -16,3 +16,7 @@ param pgAdminPassword = az.getSecret(
 
 // Image tags default to a placeholder in main.bicep; the CI/CD pipeline overrides
 // them per build with the CI-built image SHAs against ACR.
+
+// Slice 0.1 requires Redis (IHoldStore implementation). Provision Basic C0 for
+// staging — 250MB, sufficient for hold keys (tiny, TTL-expiring).
+param deployRedis = true
