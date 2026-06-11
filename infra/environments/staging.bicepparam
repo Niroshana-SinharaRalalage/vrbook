@@ -17,6 +17,10 @@ param pgAdminPassword = az.getSecret(
 // Image tags default to a placeholder in main.bicep; the CI/CD pipeline overrides
 // them per build with the CI-built image SHAs against ACR.
 
-// Slice 0.1 requires Redis (IHoldStore implementation). Provision Basic C0 for
-// staging — 250MB, sufficient for hold keys (tiny, TTL-expiring).
-param deployRedis = true
+// Slice 0.1 hold flow ships on Postgres (PostgresHoldStore) — see BookingModule.
+// Microsoft.Cache/Redis is retiring in 2026 and Azure Managed Redis
+// (Microsoft.Cache/redisEnterprise) is ~5x cost at the smallest SKU — not
+// justified for Phase 1 staging. Re-enable when prod traffic warrants by
+// setting deployRedis=true here AND Features__UseRedisHoldStore=true in API
+// app settings.
+param deployRedis = false
