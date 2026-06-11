@@ -1,6 +1,11 @@
+using System.Data;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
+using VrBook.Contracts.Enums;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
 using VrBook.Modules.Booking.Application.Common;
@@ -17,6 +22,7 @@ internal sealed class PlaceBookingHandler(
     ICurrentUser currentUser,
     IMediator mediator,
     IBookingRepository bookings,
+    IHoldStore holds,
     BookingDbContext db) : IRequestHandler<PlaceBookingCommand, BookingDto>
 {
     public async Task<BookingDto> Handle(PlaceBookingCommand request, CancellationToken cancellationToken)
@@ -49,18 +55,9 @@ internal sealed class PlaceBookingHandler(
                 "You can't book your own property.");
         }
 
-        // Availability check (A2.1). Anything not Cancelled / Rejected occupies the
-        // calendar. Race window vs SaveChangesAsync is acceptable for v1 - A5 will
-        // harden via a transactional pre-charge guard.
-        var overlaps = await bookings.FindOverlapsAsync(property.Id, r.CheckinDate, r.CheckoutDate, cancellationToken);
-        if (overlaps.Count > 0)
-        {
-            throw new BusinessRuleViolationException(
-                "booking.dates_unavailable",
-                "These dates are already booked. Please choose different dates.");
-        }
-
         // Compute the quote via Pricing (in-process MediatR; not Service Bus).
+        // Quote computation is read-only so we keep it OUTSIDE the serializable txn
+        // to keep the locked window as short as possible.
         var quoteReq = new QuoteRequest(r.CheckinDate, r.CheckoutDate, r.GuestCount, r.ApplyLoyaltyDiscount);
         var quote = await mediator.Send(new ComputeQuoteCommand(r.PropertyId, quoteReq), cancellationToken);
 
@@ -94,12 +91,68 @@ internal sealed class PlaceBookingHandler(
                 .Select(g => (g.FullName, g.IsPrimary)),
             specialRequests: r.SpecialRequests);
 
-        await bookings.AddAsync(booking, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
+        // Slice 0.2: serializable transaction + SELECT FOR UPDATE row lock + hold
+        // consumption all in one atomic step. Closes the race per proposal §7.3.
+        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        try
+        {
+            // (1) Consume the Redis hold. If the hold has expired or someone else
+            //     consumed it, fail before doing any DB work.
+            var consumed = await holds.TryConsumeAsync(r.HoldId, property.Id, r.CheckinDate, r.CheckoutDate, cancellationToken);
+            if (!consumed)
+            {
+                throw new ConflictException(
+                    "Your hold has expired or is invalid. Please restart the booking and try again.");
+            }
 
-        // Create the Stripe PaymentIntent (manual capture). No-op when Stripe is
-        // unconfigured - the booking still persists, just without a payment path.
-        // The guest can complete payment from /bookings/[id] using the client secret.
+            // (2) SELECT COUNT(*) ... FOR UPDATE — row lock on any existing overlapping bookings.
+            //     Combined with the serializable isolation level, this closes both the
+            //     "modify-existing concurrent" race and the "insert-insert gap" race.
+            //     status enum order: Tentative=0, Confirmed=1, CheckedIn=2, CheckedOut=3,
+            //     Cancelled=4, Rejected=5, Completed=6, Disputed=7, Refunded=8.
+            const string overlapCountSql = """
+                SELECT COUNT(*)::int FROM booking.bookings
+                WHERE property_id = @p0
+                  AND status NOT IN (4, 5, 8)
+                  AND deleted_at IS NULL
+                  AND checkin_date < @p2
+                  AND @p1 < checkout_date
+                FOR UPDATE
+                """;
+            await using var cmd = db.Database.GetDbConnection().CreateCommand();
+            cmd.Transaction = db.Database.CurrentTransaction!.GetDbTransaction();
+            cmd.CommandText = overlapCountSql;
+            AddParam(cmd, "@p0", property.Id);
+            AddParam(cmd, "@p1", r.CheckinDate);
+            AddParam(cmd, "@p2", r.CheckoutDate);
+            var overlapCount = (int)(await cmd.ExecuteScalarAsync(cancellationToken) ?? 0);
+            if (overlapCount > 0)
+            {
+                throw new BusinessRuleViolationException(
+                    "booking.dates_unavailable",
+                    "These dates are already booked. Please choose different dates.");
+            }
+
+            // (3) Insert booking inside the locked txn.
+            await bookings.AddAsync(booking, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+
+            await tx.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (
+            ex.InnerException is PostgresException pg && pg.SqlState == "40001")
+        {
+            // Serialization failure — another transaction committed an overlapping
+            // booking between our SELECT FOR UPDATE and our COMMIT. Map to 409 with
+            // a guest-friendly message.
+            throw new ConflictException(
+                "Another guest just booked these dates. Please choose different dates and try again.");
+        }
+
+        // Create the Stripe PaymentIntent OUTSIDE the booking transaction. Manual
+        // capture (default in StripeGateway): we authorize now, capture on Confirm,
+        // cancel on Reject. If the Stripe call fails the booking is in Tentative
+        // with no payment intent; guest can complete from /bookings/[id].
         await mediator.Send(
             new CreatePaymentIntentForBookingCommand(
                 booking.Id,
@@ -107,5 +160,13 @@ internal sealed class PlaceBookingHandler(
             cancellationToken);
 
         return booking.ToDto();
+    }
+
+    private static void AddParam(System.Data.Common.DbCommand cmd, string name, object value)
+    {
+        var p = cmd.CreateParameter();
+        p.ParameterName = name;
+        p.Value = value;
+        cmd.Parameters.Add(p);
     }
 }
