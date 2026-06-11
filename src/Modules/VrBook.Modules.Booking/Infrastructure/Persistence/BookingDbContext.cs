@@ -17,6 +17,7 @@ public sealed class BookingDbContext(
     public DbSet<DomainBooking> Bookings => Set<DomainBooking>();
     public DbSet<BookingLineItem> LineItems => Set<BookingLineItem>();
     public DbSet<BookingGuestEntry> Guests => Set<BookingGuestEntry>();
+    public DbSet<BookingHold> BookingHolds => Set<BookingHold>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

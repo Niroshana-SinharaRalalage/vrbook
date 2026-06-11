@@ -5,6 +5,7 @@ using Swashbuckle.AspNetCore.Annotations;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
 using VrBook.Modules.Booking.Application.Commands;
+using VrBook.Modules.Booking.Application.Holds.Commands;
 using VrBook.Modules.Booking.Application.Queries;
 
 namespace VrBook.Api.Controllers;
@@ -15,16 +16,27 @@ namespace VrBook.Api.Controllers;
 [Authorize]
 public sealed class BookingsController(IMediator mediator) : ControllerBase
 {
-    // ---- Hold flow deferred to A4.1 ----
+    // ---- Slice 0.1: 15-minute checkout hold (§9.3) ----
     [HttpPost("holds")]
     [SwaggerOperation(Summary = "Create a 15-minute hold on dates during checkout.")]
     [ProducesResponseType(typeof(HoldDto), StatusCodes.Status201Created)]
-    public IActionResult CreateHold([FromBody] CreateHoldRequest request) =>
-        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Hold flow lands in A4.1." });
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<HoldDto>> CreateHold(
+        [FromBody] CreateHoldRequest request, CancellationToken cancellationToken)
+    {
+        var hold = await mediator.Send(
+            new CreateHoldCommand(request.PropertyId, request.Checkin, request.Checkout, request.Guests),
+            cancellationToken);
+        return CreatedAtAction(nameof(CreateHold), new { id = hold.Id }, hold);
+    }
 
     [HttpDelete("holds/{holdId:guid}")]
-    public IActionResult ReleaseHold(Guid holdId) =>
-        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Hold flow lands in A4.1." });
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> ReleaseHold(Guid holdId, CancellationToken cancellationToken)
+    {
+        await mediator.Send(new ReleaseHoldCommand(holdId), cancellationToken);
+        return NoContent();
+    }
 
     [HttpPost]
     [SwaggerOperation(Summary = "Place a booking: Draft -> Tentative.")]

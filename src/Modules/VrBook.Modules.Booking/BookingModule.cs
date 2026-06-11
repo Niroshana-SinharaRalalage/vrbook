@@ -23,6 +23,10 @@ public sealed class BookingModule : IModuleRegistration
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<BookingDbContext>());
 
+        // Slice 0.1: replace any prior stub with the real Redis-backed hold store.
+        services.AddScoped<VrBook.Contracts.Interfaces.IHoldStore,
+                           VrBook.Modules.Booking.Infrastructure.Holds.RedisHoldStore>();
+
         // A6 stage 5: cross-module read for Sync conflict detection.
         services.AddScoped<VrBook.Contracts.Interfaces.IConfirmedBookingLookup,
                            VrBook.Modules.Booking.Infrastructure.Persistence.ConfirmedBookingLookup>();
