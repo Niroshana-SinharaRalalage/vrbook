@@ -360,13 +360,30 @@ jobs:
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-  # deploy-booking-worker removed 2026-06-11: replaced by caj-vrbook-bookingexpiry-${env}
-  # Container App Job (deployed by Bicep directly). The booking-worker IMAGE is still
-  # built above so the expiry job can use it via Bicep's bookingWorkerImage param.
+  # Booking expiry job — Slice 0.4. Mirrors deploy-sync-worker because both are
+  # cron-triggered Container App Jobs (az containerapp job update, NOT the
+  # _deploy-container-app.yml reusable workflow which only handles Container Apps).
+  deploy-booking-expiry-job:
+    name: deploy booking-expiry (job)
+    needs: migrate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Update booking-expiry job image
+        run: |
+          az containerapp job update \
+            -n caj-vrbook-bookingexpiry-staging \
+            -g ${{ env.RESOURCE_GROUP }} \
+            --image ${{ vars.ACR_NAME }}.azurecr.io/vrbook-booking-worker:${{ github.sha }}
 
   deploy-api:
     name: deploy api
-    needs: [deploy-sync-worker, deploy-notification-worker]
+    needs: [deploy-sync-worker, deploy-notification-worker, deploy-booking-expiry-job]
     uses: ./.github/workflows/_deploy-container-app.yml
     with:
       app_name: ca-vrbook-api-staging
