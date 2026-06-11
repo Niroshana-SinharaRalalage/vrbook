@@ -315,37 +315,6 @@ module apiApp 'modules/container-app.bicep' = {
   }
 }
 
-// ---------- Booking worker (Service Bus-triggered Container App) ----------
-module bookingWorker 'modules/container-app.bicep' = {
-  name: 'booking-worker'
-  params: {
-    name: 'ca-vrbook-bookingworker-${env}'
-    location: location
-    tags: tags
-    environmentId: cae.outputs.id
-    containerImage: bookingWorkerImage
-    registryServer: acr.outputs.loginServer
-    userAssignedIdentityId: mi.outputs.id
-    workloadProfileName: 'Consumption'
-    targetPort: 8080
-    externalIngress: false
-    minReplicas: env == 'dev' ? 0 : 1
-    maxReplicas: 5
-    cpu: '0.5'
-    memory: '1Gi'
-    envVars: apiEnvVars
-    secrets: apiSecrets
-    keyVaultName: kv.outputs.name
-    scaleRuleType: 'kedaServiceBus'
-    serviceBusNamespace: sb.outputs.namespaceFqdn
-    serviceBusTopicName: 'bookings'
-    serviceBusSubscriptionName: 'default'
-    serviceBusMessageCount: 10
-    includeProbes: false
-    enableIngress: false
-  }
-}
-
 // ---------- Notifications worker ----------
 module notifWorker 'modules/container-app.bicep' = {
   name: 'notif-worker'

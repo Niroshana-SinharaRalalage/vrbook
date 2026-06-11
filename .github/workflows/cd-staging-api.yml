@@ -360,22 +360,13 @@ jobs:
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-  deploy-booking-worker:
-    name: deploy booking-worker
-    needs: migrate
-    uses: ./.github/workflows/_deploy-container-app.yml
-    with:
-      app_name: ca-vrbook-bookingworker-staging
-      resource_group: rg-vrbook-staging
-      image: ${{ vars.ACR_NAME }}.azurecr.io/vrbook-booking-worker:${{ github.sha }}
-    secrets:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  # deploy-booking-worker removed 2026-06-11: replaced by caj-vrbook-bookingexpiry-${env}
+  # Container App Job (deployed by Bicep directly). The booking-worker IMAGE is still
+  # built above so the expiry job can use it via Bicep's bookingWorkerImage param.
 
   deploy-api:
     name: deploy api
-    needs: [deploy-sync-worker, deploy-notification-worker, deploy-booking-worker]
+    needs: [deploy-sync-worker, deploy-notification-worker]
     uses: ./.github/workflows/_deploy-container-app.yml
     with:
       app_name: ca-vrbook-api-staging
