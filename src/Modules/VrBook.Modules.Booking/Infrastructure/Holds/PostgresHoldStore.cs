@@ -61,8 +61,11 @@ internal sealed class PostgresHoldStore(
         {
             // Lock any active, unexpired holds that overlap the requested range.
             // status: Active=0, Consumed=1, Released=2, Expired=3.
-            const string overlapCountSql = """
-                SELECT COUNT(*)::int FROM booking.booking_holds
+            // Note: Postgres rejects SELECT COUNT(*) ... FOR UPDATE
+            // (0A000: "FOR UPDATE is not allowed with aggregate functions").
+            // Select the IDs instead and check HasRows.
+            const string overlapSql = """
+                SELECT id FROM booking.booking_holds
                 WHERE property_id = @p0
                   AND status = 0
                   AND expires_at > @p1
@@ -72,13 +75,17 @@ internal sealed class PostgresHoldStore(
                 """;
             await using var cmd = db.Database.GetDbConnection().CreateCommand();
             cmd.Transaction = db.Database.CurrentTransaction!.GetDbTransaction();
-            cmd.CommandText = overlapCountSql;
+            cmd.CommandText = overlapSql;
             AddParam(cmd, "@p0", propertyId);
             AddParam(cmd, "@p1", now);
             AddParam(cmd, "@p2", checkin);
             AddParam(cmd, "@p3", checkout);
-            var overlapCount = (int)(await cmd.ExecuteScalarAsync(ct) ?? 0);
-            if (overlapCount > 0)
+            bool anyOverlap;
+            await using (var reader = await cmd.ExecuteReaderAsync(ct))
+            {
+                anyOverlap = await reader.ReadAsync(ct);
+            }
+            if (anyOverlap)
             {
                 throw new ConflictException(
                     $"Another guest is currently holding these dates for property {propertyId}. " +

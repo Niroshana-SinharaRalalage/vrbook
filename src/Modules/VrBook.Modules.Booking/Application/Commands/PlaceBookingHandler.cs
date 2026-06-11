@@ -105,13 +105,15 @@ internal sealed class PlaceBookingHandler(
                     "Your hold has expired or is invalid. Please restart the booking and try again.");
             }
 
-            // (2) SELECT COUNT(*) ... FOR UPDATE — row lock on any existing overlapping bookings.
+            // (2) SELECT id ... FOR UPDATE — row lock on any existing overlapping bookings.
             //     Combined with the serializable isolation level, this closes both the
             //     "modify-existing concurrent" race and the "insert-insert gap" race.
             //     status enum order: Tentative=0, Confirmed=1, CheckedIn=2, CheckedOut=3,
             //     Cancelled=4, Rejected=5, Completed=6, Disputed=7, Refunded=8.
-            const string overlapCountSql = """
-                SELECT COUNT(*)::int FROM booking.bookings
+            //     Note: Postgres rejects SELECT COUNT(*) ... FOR UPDATE (0A000); select
+            //     the IDs and check HasRows instead.
+            const string overlapSql = """
+                SELECT id FROM booking.bookings
                 WHERE property_id = @p0
                   AND status NOT IN (4, 5, 8)
                   AND deleted_at IS NULL
@@ -121,12 +123,16 @@ internal sealed class PlaceBookingHandler(
                 """;
             await using var cmd = db.Database.GetDbConnection().CreateCommand();
             cmd.Transaction = db.Database.CurrentTransaction!.GetDbTransaction();
-            cmd.CommandText = overlapCountSql;
+            cmd.CommandText = overlapSql;
             AddParam(cmd, "@p0", property.Id);
             AddParam(cmd, "@p1", r.CheckinDate);
             AddParam(cmd, "@p2", r.CheckoutDate);
-            var overlapCount = (int)(await cmd.ExecuteScalarAsync(cancellationToken) ?? 0);
-            if (overlapCount > 0)
+            bool anyOverlap;
+            await using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
+            {
+                anyOverlap = await reader.ReadAsync(cancellationToken);
+            }
+            if (anyOverlap)
             {
                 throw new BusinessRuleViolationException(
                     "booking.dates_unavailable",
