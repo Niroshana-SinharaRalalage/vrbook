@@ -93,6 +93,31 @@ public sealed class AmenitiesController(IMediator mediator) : ControllerBase
         Ok(await mediator.Send(new VrBook.Modules.Catalog.Application.Amenities.Queries.ListAmenitiesQuery(), cancellationToken));
 }
 
+/// <summary>Slice 0.6 — multi-source availability aggregator for /admin/calendar.</summary>
+[Route("api/v1/properties/{propertyId:guid}/calendar")]
+[Tags("Booking")]
+[Authorize]
+public sealed class PropertyCalendarController(IMediator mediator) : ControllerBase
+{
+    [HttpGet]
+    [ProducesResponseType(typeof(PropertyCalendarDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PropertyCalendarDto>> Get(
+        Guid propertyId,
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        if (to <= from)
+        {
+            return BadRequest(new { detail = "`to` must be after `from`." });
+        }
+        var dto = await mediator.Send(
+            new VrBook.Modules.Booking.Application.Queries.GetPropertyCalendarQuery(propertyId, from, to),
+            cancellationToken);
+        return Ok(dto);
+    }
+}
+
 /// <summary>Admin CRUD for the amenity catalog (A2.2).</summary>
 [Route("api/v1/admin/amenities")]
 [Tags("Catalog — Admin")]

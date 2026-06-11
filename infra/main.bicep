@@ -92,6 +92,19 @@ module kv 'modules/key-vault.bicep' = {
   }
 }
 
+// Slice 0.5: Azure Communication Services Email per ADR-0011.
+// The 'acs-connection-string' Key Vault secret reference already exists in
+// apiSecrets[] below; this module provisions the resource + writes the
+// connection string into Key Vault. Slice 4 wires the actual email sender.
+module acs 'modules/acs.bicep' = {
+  name: 'acs'
+  params: {
+    env: env
+    tags: tags
+    keyVaultName: kv.outputs.name
+  }
+}
+
 module law 'modules/log-analytics.bicep' = {
   name: 'law'
   params: {
