@@ -64,8 +64,10 @@ internal sealed class PostgresHoldStore(
             // Note: Postgres rejects SELECT COUNT(*) ... FOR UPDATE
             // (0A000: "FOR UPDATE is not allowed with aggregate functions").
             // Select the IDs instead and check HasRows.
+            // EF maps the PK column as quoted "Id" (Postgres preserves case when
+            // quoted); raw SQL must quote it likewise.
             const string overlapSql = """
-                SELECT id FROM booking.booking_holds
+                SELECT "Id" FROM booking.booking_holds
                 WHERE property_id = @p0
                   AND status = 0
                   AND expires_at > @p1

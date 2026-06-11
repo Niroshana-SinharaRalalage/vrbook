@@ -112,8 +112,11 @@ internal sealed class PlaceBookingHandler(
             //     Cancelled=4, Rejected=5, Completed=6, Disputed=7, Refunded=8.
             //     Note: Postgres rejects SELECT COUNT(*) ... FOR UPDATE (0A000); select
             //     the IDs and check HasRows instead.
+            // EF maps the PK column as quoted "Id"; raw SQL must quote it likewise
+            // (Postgres preserves case in quoted identifiers, folds unquoted to
+            // lowercase, so "SELECT id FROM ..." raises 42703).
             const string overlapSql = """
-                SELECT id FROM booking.bookings
+                SELECT "Id" FROM booking.bookings
                 WHERE property_id = @p0
                   AND status NOT IN (4, 5, 8)
                   AND deleted_at IS NULL
