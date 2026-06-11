@@ -23,9 +23,24 @@ public sealed class BookingModule : IModuleRegistration
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<BookingDbContext>());
 
-        // Slice 0.1: replace any prior stub with the real Redis-backed hold store.
-        services.AddScoped<VrBook.Contracts.Interfaces.IHoldStore,
-                           VrBook.Modules.Booking.Infrastructure.Holds.RedisHoldStore>();
+        // Slice 0.1: hold store. Default to the Postgres-backed implementation;
+        // Microsoft.Cache/Redis is retiring (2026) so Phase 1 staging cannot cheaply
+        // provision the classic Redis required by RedisHoldStore. Postgres has the
+        // same correctness guarantees (serializable txn + SELECT FOR UPDATE on
+        // booking.booking_holds). To re-enable Redis later, set
+        // "Features__UseRedisHoldStore": true after provisioning Azure Managed
+        // Redis (or running Microsoft.Cache/redisEnterprise in production).
+        var useRedisHoldStore = configuration.GetValue("Features:UseRedisHoldStore", false);
+        if (useRedisHoldStore)
+        {
+            services.AddScoped<VrBook.Contracts.Interfaces.IHoldStore,
+                               VrBook.Modules.Booking.Infrastructure.Holds.RedisHoldStore>();
+        }
+        else
+        {
+            services.AddScoped<VrBook.Contracts.Interfaces.IHoldStore,
+                               VrBook.Modules.Booking.Infrastructure.Holds.PostgresHoldStore>();
+        }
 
         // A6 stage 5: cross-module read for Sync conflict detection.
         services.AddScoped<VrBook.Contracts.Interfaces.IConfirmedBookingLookup,
