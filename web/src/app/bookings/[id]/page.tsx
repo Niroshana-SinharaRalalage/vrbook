@@ -8,6 +8,7 @@ import { SiteFooter } from '@/components/layout/SiteFooter';
 import { StripePaymentForm } from '@/components/booking/StripePaymentForm';
 import { CancelBookingButton } from '@/components/booking/CancelBookingButton';
 import { ReviewSubmitForm } from '@/components/booking/ReviewSubmitForm';
+import { BookingAutoRefresh } from '@/components/booking/BookingAutoRefresh';
 import { ApiProblemError } from '@/lib/api/client';
 import { getBooking, type Booking, type BookingStatus } from '@/lib/api/booking';
 import { formatCurrency } from '@/lib/utils/currency';
@@ -100,6 +101,7 @@ const BookingDetail = async ({ id }: { id: string }) => {
 
   return (
     <div className="space-y-6">
+      <BookingAutoRefresh status={b.status} />
       <header className="space-y-2">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">Booking {b.reference}</h1>
