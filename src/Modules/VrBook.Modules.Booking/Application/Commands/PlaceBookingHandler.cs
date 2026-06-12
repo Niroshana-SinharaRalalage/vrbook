@@ -108,17 +108,16 @@ internal sealed class PlaceBookingHandler(
             // (2) SELECT id ... FOR UPDATE — row lock on any existing overlapping bookings.
             //     Combined with the serializable isolation level, this closes both the
             //     "modify-existing concurrent" race and the "insert-insert gap" race.
-            //     status enum order: Tentative=0, Confirmed=1, CheckedIn=2, CheckedOut=3,
-            //     Cancelled=4, Rejected=5, Completed=6, Disputed=7, Refunded=8.
-            //     Note: Postgres rejects SELECT COUNT(*) ... FOR UPDATE (0A000); select
-            //     the IDs and check HasRows instead.
-            // EF maps the PK column as quoted "Id"; raw SQL must quote it likewise
-            // (Postgres preserves case in quoted identifiers, folds unquoted to
-            // lowercase, so "SELECT id FROM ..." raises 42703).
+            //     BookingConfiguration maps Status with HasConversion<string>() so the
+            //     column is character varying — compare to the enum NAME, not the int
+            //     value (Postgres 42883 otherwise).
+            //     Also: SELECT COUNT(*) ... FOR UPDATE is rejected (0A000); select the
+            //     ids and check HasRows. "Id" is quoted because EF preserves PascalCase
+            //     for the PK (Postgres folds unquoted identifiers to lowercase, 42703).
             const string overlapSql = """
                 SELECT "Id" FROM booking.bookings
                 WHERE property_id = @p0
-                  AND status NOT IN (4, 5, 8)
+                  AND status NOT IN ('Cancelled', 'Rejected', 'Refunded')
                   AND deleted_at IS NULL
                   AND checkin_date < @p2
                   AND @p1 < checkout_date
