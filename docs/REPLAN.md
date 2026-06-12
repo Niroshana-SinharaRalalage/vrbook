@@ -446,4 +446,36 @@ If you approve this plan, the next concrete actions are:
 
 Housekeeping:
 - A9 backend code committed (`ab3a685`) for future Slice 4 to fold into.
-- `docs/EXECUTION_PLAN.md` left in place for history; this document is the active plan.
+- `docs/EXECUTION_PLAN.md` left in place for history; this document is the active plan. As of 2026-06-12 it also carries the OPS.M.* multi-tenancy breakdown in §8.A (see §10 below).
+
+---
+
+## 10. What's next after Slice 7 — OPS phase (Phase 1.5)
+
+Once Slices 0..7 ship, the next gate is **multi-tenancy** so real owners can be onboarded, paid, and supported. The contract for that phase is `docs/MULTI_TENANCY_OPS_PLAN.md` (committed 2026-06-12 in `df5580b`, architect-reviewed).
+
+- **Scope**: 10 sub-deliverables `OPS.M.1..OPS.M.10` — tenant aggregate, claim wiring, `tenant_id` column rollout (3a/b/c/d expand-then-contract), tenant authorization pipeline behavior, Stripe Connect Express, iCal poller tenant-scoping, onboarding wizard UI, Super Admin console, RLS, isolation test pack.
+- **Critical path**: ~16 days. Realistic bring-up 4–5 weeks one engineer, 2.5–3 weeks two engineers.
+- **Lands before** `OPS.1..OPS.8` (Pact / k6 / ZAP / Trivy / key rotation / Entra cutover / DKIM) — except `OPS.7` (Entra) which is a prerequisite for `OPS.M.2` and folds into the OPS.M critical path.
+- **Same A-number-superseded rule**: OPS.M is the sequencing primitive for the OPS phase; A-numbers continue to tag individual deliverables.
+
+### 10.1 Forward-compatibility policy for new tables (Slice 3 onward)
+
+To keep `OPS.M.3` cheap (backfill + NOT NULL tightening only, not "rewrite every Slice 3-7 migration"), every new table introduced from Slice 3 onward MUST ship with:
+
+```sql
+tenant_id uuid NULL REFERENCES identity.tenants(id)
+```
+
+…from its very first migration. The column stays NULL-allowed during Phase 1; `OPS.M.3b` backfills it with the "VrBook Default" tenant id, `OPS.M.3c` tightens to NOT NULL. The cost today: one column + one FK + one index per new table. The saving in OPS.M.3: every Slice 3..7 table is already in shape.
+
+**Concretely**: Slice 3 creates an empty `identity.tenants` placeholder table (`id`, `slug`, `display_name`, `created_at` — ~30 lines of migration) so the FK target exists. The aggregate, lifecycle, memberships, Stripe linkage etc. all land in `OPS.M.1` proper. This is **Slice 3 prep, not OPS.M leakage**.
+
+The policy applies to:
+- Slice 3: `availability_blocks`, the lazy `identity.tenants` stub.
+- Slice 4: any new tables in the dispatch / notification path.
+- Slice 5: nothing new currently planned, but if added.
+- Slice 6: messaging-side and pricing-rule tables if they get split out.
+- Slice 7: report projection tables.
+
+Slice 0/1/2 tables (already shipped) do NOT get backfilled mid-stream — they get `tenant_id` added the proper expand-then-contract way in `OPS.M.3`.

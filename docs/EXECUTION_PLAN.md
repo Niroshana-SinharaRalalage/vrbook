@@ -7,7 +7,11 @@
 > hardening = `OPS.{N}`. Polish backlog = `POLISH.{N}`. **Never invent a parallel
 > system (no "Phase 1", no "Sprint 3", no "Wave A"). One TODO, one tag scheme.**
 
-Last revised: 2026-06-08
+Last revised: 2026-06-08 (multi-tenancy OPS addendum 2026-06-12)
+
+> **SUPERSEDED — see `docs/REPLAN.md` for the active Slice 0..7 sequencing.**
+> This file is retained for A-number history and as the OPS reference (§8). The
+> A-number nomenclature still tags individual deliverables inside REPLAN slices.
 
 ---
 
@@ -360,7 +364,32 @@ These are not agent-context items per §20.2; they're operational gates the prop
 - **OPS.5** Trivy + SBOM signing in image build (currently deferred to "prod-CD" that doesn't exist)
 - **OPS.6** Stripe key rotation (sandbox keys leaked in chat — overdue)
 - **OPS.7** Entra External ID prod app registrations + cutover
+  - **Note:** OPS.7 is a **hard prerequisite for OPS.M.2** (claim wiring needs real Entra). When the OPS wave starts, OPS.7 moves into the OPS.M critical path immediately before OPS.M.2 — not separate.
 - **OPS.8** Custom domain DKIM verification for ACS email
+  - **Note:** Phase 1.5 stays on a single platform domain per `MULTI_TENANCY_OPS_PLAN.md §8` (one ACS resource, per-tenant `From` display name + `Reply-To`). Per-tenant subdomains / DKIM-per-tenant land in Phase 2.
+
+---
+
+### 8.A — Multi-Tenancy OPS (OPS.M.1..OPS.M.10) — Phase 1.5
+
+> **Source of truth:** `docs/MULTI_TENANCY_OPS_PLAN.md` (2026-06-12, architect-reviewed).
+> **Runs:** OPS phase, **after Slices 3..7 complete**. Critical path ~16 days; total realistic bring-up 4–5 weeks with one engineer (2.5–3 weeks with two split front/back).
+> **Ordering vs OPS.1..OPS.8:** OPS.M.* runs **first** as the Phase 1.5 SaaS-ification gate. OPS.1..OPS.8 are launch-readiness and follow once tenancy is live. Exception: OPS.7 (Entra cutover) moves inside the OPS.M critical path per the note above.
+
+| # | Sub-deliverable | Est. days | Depends on |
+|---|---|---|---|
+| OPS.M.1 | Tenant aggregate + schema (`identity.tenants`, memberships) | 2 | — |
+| OPS.M.2 | `TenantId` claim wiring + `ICurrentUser` shape update | 1.5 | OPS.M.1, **OPS.7 (Entra)** |
+| OPS.M.3 | `tenant_id` column rollout (3a/3b/3c/3d) across all tables | 4 | OPS.M.1, OPS.M.2 |
+| OPS.M.4 | `TenantAuthorizationBehavior` + remove per-handler owner checks | 1.5 | OPS.M.3 |
+| OPS.M.5 | Stripe Connect Express (Account.create, AccountLink, webhook routing, PaymentIntent transfer_data) | 4 | OPS.M.3 |
+| OPS.M.6 | iCal poller tenant-scoping + outbound rate limit | 1 | OPS.M.3 |
+| OPS.M.7 | Tenant Admin onboarding wizard UI + first-property → Stripe link | 3 | OPS.M.5 |
+| OPS.M.8 | Super Admin console (list / detail / suspend / impersonate / audit filter) | 4 | OPS.M.4 |
+| OPS.M.9 | RLS policies + bypass connection factory | 1.5 | OPS.M.3c |
+| OPS.M.10 | Cross-tenant isolation test pack | 2 | OPS.M.4, OPS.M.5 |
+
+Critical path: OPS.M.1 → OPS.M.2 → OPS.M.3 → OPS.M.4 → OPS.M.5 → OPS.M.7 (~16 days). OPS.M.6, OPS.M.8, OPS.M.9, OPS.M.10 parallel against M.5/M.7. See `MULTI_TENANCY_OPS_PLAN.md` for the per-item design rationale, pushback items, and the cross-tenant isolation test scenario.
 
 ---
 
