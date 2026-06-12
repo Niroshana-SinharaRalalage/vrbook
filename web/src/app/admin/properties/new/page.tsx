@@ -132,7 +132,10 @@ const AdminPropertyCreatePage = () => {
         });
       }
 
-      router.push(`/admin/properties/${created.id}`);
+      // After create (and optional publish) drop back to the list so the
+      // owner sees the new row alongside the rest. The edit page is one click
+      // away if they want to continue refining.
+      router.push('/admin/properties');
     } catch (err) {
       setError(
         err instanceof ApiProblemError

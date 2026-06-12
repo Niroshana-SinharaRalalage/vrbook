@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ArrowLeft, ExternalLink, Save } from 'lucide-react';
 
@@ -68,6 +68,7 @@ const detailToForm = (p: PropertyDetail): FormState => ({
 });
 
 const AdminPropertyEditPage = () => {
+  const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const [detail, setDetail] = useState<PropertyDetail | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
@@ -75,7 +76,6 @@ const AdminPropertyEditPage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [savedAt, setSavedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -154,9 +154,9 @@ const AdminPropertyEditPage = () => {
         messagingEnabled: form.messagingEnabled,
         isActive: form.isActive,
       };
-      const updated = await updateProperty(id, body);
-      setDetail(updated);
-      setSavedAt(new Date());
+      await updateProperty(id, body);
+      router.push('/admin/properties');
+      return;
     } catch (err) {
       setError(
         err instanceof ApiProblemError
@@ -442,10 +442,13 @@ const AdminPropertyEditPage = () => {
           </Field>
         </Section>
 
-        <div className="sticky bottom-0 -mx-6 -mb-6 flex items-center justify-between border-t border-border bg-background px-6 py-3">
-          <span className="text-xs text-muted-foreground">
-            {savedAt && `Saved ${savedAt.toLocaleTimeString()}`}
-          </span>
+        <div className="sticky bottom-0 -mx-6 -mb-6 flex items-center justify-end gap-2 border-t border-border bg-background px-6 py-3">
+          <Link
+            href="/admin/properties"
+            className="rounded-md border border-input bg-background px-4 py-2 text-sm hover:bg-accent"
+          >
+            Cancel
+          </Link>
           <button
             type="submit"
             disabled={saving}
