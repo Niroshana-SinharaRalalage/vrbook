@@ -71,8 +71,9 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
         });
     }
 
+    [HttpGet("switch")]
     [HttpPost("switch")]
-    public IActionResult Switch([FromQuery] string persona)
+    public IActionResult Switch([FromQuery] string persona, [FromQuery] string? redirect)
     {
         if (!configuration.GetValue<bool>("DevAuth:AllowAnonymous"))
         {
@@ -91,6 +92,30 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
             MaxAge = TimeSpan.FromDays(30),
             Path = "/",
         });
+
+        // Optional same-origin redirect so the handoff convention can be a single
+        // URL: /api/v1/dev-auth/switch?persona=Guest&redirect=/properties/beach-villa
+        // Web base URL is config; reject absolute external redirects defensively.
+        if (!string.IsNullOrWhiteSpace(redirect))
+        {
+            var webBase = configuration["DevAuth:WebBaseUrl"]?.TrimEnd('/');
+            string target;
+            if (redirect.StartsWith('/'))
+            {
+                target = string.IsNullOrEmpty(webBase) ? redirect : webBase + redirect;
+            }
+            else if (!string.IsNullOrEmpty(webBase) &&
+                     redirect.StartsWith(webBase, StringComparison.OrdinalIgnoreCase))
+            {
+                target = redirect;
+            }
+            else
+            {
+                return BadRequest(new { detail = "redirect must be a same-origin path starting with '/'." });
+            }
+            return Redirect(target);
+        }
+
         return Ok(new { persona = parsed.ToString(), displayName = snapshot.DisplayName, email = snapshot.Email });
     }
 }

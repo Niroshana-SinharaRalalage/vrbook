@@ -261,6 +261,9 @@ var apiEnvVars = [
   // DevAuth enabled in dev + staging (first-deploy validation path); disabled in prod.
   // Switch staging back to 'false' before exposing to anyone outside the eng team.
   { name: 'DevAuth__AllowAnonymous', value: isProd ? 'false' : 'true' }
+  // Same-origin redirect target for /dev-auth/switch?redirect=/foo so demo
+  // handoff URLs land back on the web app. Empty in prod since DevAuth is off.
+  { name: 'DevAuth__WebBaseUrl', value: isProd ? '' : 'https://ca-vrbook-web-${env}.${cae.outputs.defaultDomain}' }
   // CORS - allow the deployed web Container App + localhost for dev. Same-cluster
   // ingress means we know the FQDN deterministically: ca-vrbook-web-{env}.{caeDomain}.
   { name: 'Cors__AllowedOrigins__0', value: 'http://localhost:3000' }
