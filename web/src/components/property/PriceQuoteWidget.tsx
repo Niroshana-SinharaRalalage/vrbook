@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { computeQuote, type Quote } from '@/lib/api/pricing';
-import { placeBooking } from '@/lib/api/booking';
+import { createHold, placeBooking } from '@/lib/api/booking';
 import { getAvailability, type BlockedRange } from '@/lib/api/catalog';
 import { ApiProblemError } from '@/lib/api/client';
 import { formatCurrency } from '@/lib/utils/currency';
@@ -63,7 +63,12 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
     setBooking(true);
     setError(null);
     try {
+      // Slice 0.1 + 0.2 closed the booking-race by requiring a Redis hold to
+      // be consumed inside the serializable placeBooking transaction. Create
+      // the hold first, then place the booking with its id.
+      const hold = await createHold(propertyId, checkin, checkout, guests);
       const result = await placeBooking({
+        holdId: hold.id,
         propertyId,
         checkinDate: checkin,
         checkoutDate: checkout,
@@ -202,7 +207,7 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
           </button>
 
           <p className="text-xs text-muted-foreground">
-            You won&apos;t be charged yet. Payment integration lands in Agent A5.
+            Your card will be authorized but not charged until the host confirms.
           </p>
         </div>
       )}

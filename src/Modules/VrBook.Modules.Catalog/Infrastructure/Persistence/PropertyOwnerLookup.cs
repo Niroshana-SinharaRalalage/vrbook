@@ -11,4 +11,11 @@ internal sealed class PropertyOwnerLookup(CatalogDbContext db) : IPropertyOwnerL
             .Where(p => p.Id == propertyId)
             .Select(p => new PropertyOwnerSnapshot(p.Id, p.OwnerUserId, p.Title))
             .FirstOrDefaultAsync(ct);
+
+    public async Task<IReadOnlyList<Guid>> ListPropertyIdsOwnedByAsync(Guid ownerUserId, CancellationToken ct = default) =>
+        await db.Properties
+            .AsNoTracking()
+            .Where(p => p.OwnerUserId == ownerUserId)
+            .Select(p => p.Id)
+            .ToArrayAsync(ct);
 }

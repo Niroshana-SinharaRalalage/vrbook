@@ -42,6 +42,27 @@ public sealed record BookingSummaryDto(
     Money Total,
     DateTimeOffset CreatedAt);
 
+/// <summary>
+/// Slice 2 — owner/admin view of a booking. Adds GuestUserId / DisplayName
+/// (the public BookingSummaryDto omits these because they're irrelevant for the
+/// guest's own listing) and TentativeUntil for the SLA countdown.
+/// </summary>
+public sealed record AdminBookingSummaryDto(
+    Guid Id,
+    string Reference,
+    Guid PropertyId,
+    string PropertyTitle,
+    Guid GuestUserId,
+    string GuestDisplayName,
+    DateOnly CheckinDate,
+    DateOnly CheckoutDate,
+    int GuestCount,
+    BookingStatus Status,
+    decimal Total,
+    string Currency,
+    DateTimeOffset? TentativeUntil,
+    DateTimeOffset CreatedAt);
+
 public sealed record BookingTotalsDto(
     Money Subtotal,
     Money Fees,

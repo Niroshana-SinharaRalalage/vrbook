@@ -91,12 +91,38 @@ export interface PlaceBookingBody {
   readonly applyLoyaltyDiscount?: boolean;
 }
 
-export const placeBooking = (body: PlaceBookingBody): Promise<Booking> =>
+// Slice 0.1 — checkout hold.
+export interface Hold {
+  readonly id: string;
+  readonly propertyId: string;
+  readonly checkin: string;
+  readonly checkout: string;
+  readonly expiresAt: string;
+}
+
+export const createHold = (
+  propertyId: string,
+  checkin: string,
+  checkout: string,
+  guests: number,
+): Promise<Hold> =>
+  apiFetch<Hold>('/api/v1/bookings/holds', {
+    method: 'POST',
+    body: { propertyId, checkin, checkout, guests },
+  });
+
+export const releaseHold = (holdId: string): Promise<void> =>
+  apiFetch<void>(`/api/v1/bookings/holds/${encodeURIComponent(holdId)}`, { method: 'DELETE' });
+
+// Slice 2 — placeBooking now consumes a real hold (Slice 0 closed the race).
+export interface PlaceBookingWithHoldBody extends PlaceBookingBody {
+  readonly holdId: string;
+}
+
+export const placeBooking = (body: PlaceBookingWithHoldBody): Promise<Booking> =>
   apiFetch<Booking>('/api/v1/bookings', {
     method: 'POST',
     body: {
-      // The hold flow is deferred (A4.1) - send a zero Guid for the field.
-      holdId: '00000000-0000-0000-0000-000000000000',
       applyLoyaltyDiscount: false,
       ...body,
     },
@@ -112,6 +138,41 @@ export const myBookings = (cursor?: string): Promise<PagedResult<BookingSummary>
 
 export const cancelBooking = (id: string, reason: string): Promise<Booking> =>
   apiFetch<Booking>(`/api/v1/bookings/${encodeURIComponent(id)}/cancel`, {
+    method: 'POST',
+    body: { reason },
+  });
+
+// ---- Slice 2 — Admin/Owner booking queue ---------------------------------
+export interface AdminBookingSummary {
+  readonly id: string;
+  readonly reference: string;
+  readonly propertyId: string;
+  readonly propertyTitle: string;
+  readonly guestUserId: string;
+  readonly guestDisplayName: string;
+  readonly checkinDate: string;
+  readonly checkoutDate: string;
+  readonly guestCount: number;
+  readonly status: BookingStatus;
+  readonly total: number;
+  readonly currency: string;
+  readonly tentativeUntil: string | null;
+  readonly createdAt: string;
+}
+
+export const adminListBookings = (status?: BookingStatus): Promise<readonly AdminBookingSummary[]> =>
+  apiFetch<readonly AdminBookingSummary[]>('/api/v1/admin/bookings', {
+    query: status ? { status } : undefined,
+  });
+
+export const adminGetBooking = (id: string): Promise<Booking> =>
+  apiFetch<Booking>(`/api/v1/admin/bookings/${encodeURIComponent(id)}`);
+
+export const confirmBooking = (id: string): Promise<Booking> =>
+  apiFetch<Booking>(`/api/v1/bookings/${encodeURIComponent(id)}/confirm`, { method: 'POST' });
+
+export const rejectBooking = (id: string, reason: string): Promise<Booking> =>
+  apiFetch<Booking>(`/api/v1/bookings/${encodeURIComponent(id)}/reject`, {
     method: 'POST',
     body: { reason },
   });

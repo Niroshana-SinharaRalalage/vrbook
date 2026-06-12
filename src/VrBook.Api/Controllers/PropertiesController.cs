@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
+using VrBook.Contracts.Enums;
 using VrBook.Modules.Booking.Application.Queries;
 using VrBook.Modules.Catalog.Application.Properties.Commands;
 using VrBook.Modules.Catalog.Application.Properties.Queries;
@@ -120,6 +121,30 @@ public sealed class AdminPropertiesController(IMediator mediator) : ControllerBa
             cancellationToken);
         return Ok(dto);
     }
+}
+
+/// <summary>Slice 2 — admin/owner bookings list and detail for /admin/bookings.</summary>
+[Route("api/v1/admin/bookings")]
+[Tags("Booking — Admin")]
+[Authorize(Roles = "Owner,Admin")]
+public sealed class AdminBookingsController(IMediator mediator) : ControllerBase
+{
+    [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<AdminBookingSummaryDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<AdminBookingSummaryDto>>> List(
+        [FromQuery] BookingStatus? status,
+        CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(
+            new VrBook.Modules.Booking.Application.Queries.ListAdminBookingsQuery(status),
+            cancellationToken));
+
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(BookingDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BookingDto>> Get(Guid id, CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(
+            new VrBook.Modules.Booking.Application.Queries.GetBookingQuery(id),
+            cancellationToken));
 }
 
 /// <summary>Slice 0.6 — multi-source availability aggregator for /admin/calendar.</summary>
