@@ -8,19 +8,74 @@ namespace VrBook.Modules.Identity.Infrastructure.Auth;
 
 /// <summary>
 /// Authentication handler used ONLY when <c>DevAuth:AllowAnonymous</c> is true (intended
-/// for local dev when no AD B2C tenant is configured). Authenticates every request as a
-/// synthetic "Dev Owner" so the API surface is reachable end-to-end without a real token.
+/// for local dev when no AD B2C tenant is configured). Authenticates every request with
+/// one of a small fixed set of personas (<see cref="DevAuthPersona"/>); the active persona
+/// is selected by the <c>vrbook-dev-persona</c> cookie. Without a cookie the handler
+/// defaults to Owner so historical demo scripts still work.
 /// MUST be disabled in non-Development environments.
 /// </summary>
 public sealed class DevAuthOptions : AuthenticationSchemeOptions
 {
     /// <summary>Defaults to false. Set true via <c>DevAuth:AllowAnonymous</c>.</summary>
     public bool Enabled { get; set; }
-    public string FakeOid { get; set; } = "dev-owner-00000000";
-    public string FakeEmail { get; set; } = "dev@vrbook.local";
-    public string FakeDisplayName { get; set; } = "Dev Owner";
-    public bool IsOwner { get; set; } = true;
-    public bool IsAdmin { get; set; } = true;
+}
+
+/// <summary>
+/// Built-in DevAuth personas. The OIDs are stable so seeded properties / bookings
+/// can be re-attributed across persona switches without DB reshuffling.
+/// </summary>
+public enum DevAuthPersona
+{
+    Owner = 0,
+    Guest = 1,
+    Admin = 2,
+}
+
+public static class DevAuthPersonas
+{
+    public sealed record Snapshot(
+        DevAuthPersona Persona,
+        string Oid,
+        string Email,
+        string DisplayName,
+        bool IsOwner,
+        bool IsAdmin);
+
+    public static readonly Snapshot Owner = new(
+        DevAuthPersona.Owner,
+        "e98aa66c-06c4-4e5f-83c9-523e211afd9b",
+        "dev-owner@vrbook.local",
+        "Dev Owner",
+        IsOwner: true,
+        IsAdmin: false);
+
+    public static readonly Snapshot Guest = new(
+        DevAuthPersona.Guest,
+        "11111111-1111-1111-1111-111111111111",
+        "dev-guest@vrbook.local",
+        "Dev Guest",
+        IsOwner: false,
+        IsAdmin: false);
+
+    public static readonly Snapshot Admin = new(
+        DevAuthPersona.Admin,
+        "22222222-2222-2222-2222-222222222222",
+        "dev-admin@vrbook.local",
+        "Dev Admin",
+        IsOwner: true,  // Admin sees everything, also acts as owner of admin-created properties
+        IsAdmin: true);
+
+    public const string CookieName = "vrbook-dev-persona";
+
+    public static Snapshot Get(DevAuthPersona persona) => persona switch
+    {
+        DevAuthPersona.Guest => Guest,
+        DevAuthPersona.Admin => Admin,
+        _ => Owner,
+    };
+
+    public static Snapshot Resolve(string? cookieValue) =>
+        Enum.TryParse<DevAuthPersona>(cookieValue, ignoreCase: true, out var p) ? Get(p) : Owner;
 }
 
 public sealed class DevAuthHandler(
@@ -37,25 +92,29 @@ public sealed class DevAuthHandler(
             return Task.FromResult(AuthenticateResult.NoResult());
         }
 
+        var cookie = Request.Cookies[DevAuthPersonas.CookieName];
+        var persona = DevAuthPersonas.Resolve(cookie);
+
         var claims = new List<Claim>
         {
-            new("oid", Options.FakeOid),
-            new(ClaimTypes.NameIdentifier, Options.FakeOid),
-            new(ClaimTypes.Name, Options.FakeDisplayName),
-            new("name", Options.FakeDisplayName),
-            new(ClaimTypes.Email, Options.FakeEmail),
-            new("emails", Options.FakeEmail),
+            new("oid", persona.Oid),
+            new(ClaimTypes.NameIdentifier, persona.Oid),
+            new(ClaimTypes.Name, persona.DisplayName),
+            new("name", persona.DisplayName),
+            new(ClaimTypes.Email, persona.Email),
+            new("emails", persona.Email),
             new("email_verified", "true"),
-            new("extension_isOwner", Options.IsOwner ? "true" : "false"),
-            new("extension_isAdmin", Options.IsAdmin ? "true" : "false"),
+            new("extension_isOwner", persona.IsOwner ? "true" : "false"),
+            new("extension_isAdmin", persona.IsAdmin ? "true" : "false"),
+            new("dev_persona", persona.Persona.ToString()),
         };
 
-        if (Options.IsOwner)
+        if (persona.IsOwner)
         {
             claims.Add(new Claim(ClaimTypes.Role, "Owner"));
         }
 
-        if (Options.IsAdmin)
+        if (persona.IsAdmin)
         {
             claims.Add(new Claim(ClaimTypes.Role, "Admin"));
         }

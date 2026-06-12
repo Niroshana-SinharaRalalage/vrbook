@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 
 import { Providers } from '@/components/Providers';
+import { DevPersonaSwitcher } from '@/components/DevPersonaSwitcher';
 import './globals.css';
 
 const inter = Inter({
@@ -44,6 +45,7 @@ const RootLayout = ({ children }: RootLayoutProps) => {
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body>
         <Providers>{children}</Providers>
+        <DevPersonaSwitcher />
       </body>
     </html>
   );

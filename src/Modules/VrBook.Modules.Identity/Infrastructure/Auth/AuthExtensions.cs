@@ -63,14 +63,11 @@ public static class AuthExtensions
 
         if (devAuthEnabled)
         {
+            // Persona claims are now resolved per-request from the
+            // vrbook-dev-persona cookie inside DevAuthHandler (Owner default).
             auth.AddScheme<DevAuthOptions, DevAuthHandler>(DevAuthHandler.SchemeName, opts =>
             {
                 opts.Enabled = true;
-                opts.FakeOid = configuration["DevAuth:FakeOid"] ?? opts.FakeOid;
-                opts.FakeEmail = configuration["DevAuth:FakeEmail"] ?? opts.FakeEmail;
-                opts.FakeDisplayName = configuration["DevAuth:FakeDisplayName"] ?? opts.FakeDisplayName;
-                opts.IsOwner = configuration.GetValue("DevAuth:IsOwner", true);
-                opts.IsAdmin = configuration.GetValue("DevAuth:IsAdmin", true);
             });
         }
 
