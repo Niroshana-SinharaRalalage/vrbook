@@ -41,17 +41,20 @@ public static class DevAuthPersonas
         bool IsOwner,
         bool IsAdmin);
 
+    // Owner OID matches the pre-existing seeded user (the original DevAuthOptions
+    // default). Changing it would orphan every seeded property + booking that
+    // references the original user row.
     public static readonly Snapshot Owner = new(
         DevAuthPersona.Owner,
-        "e98aa66c-06c4-4e5f-83c9-523e211afd9b",
-        "dev-owner@vrbook.local",
+        "dev-owner-00000000",
+        "dev@vrbook.local",
         "Dev Owner",
         IsOwner: true,
-        IsAdmin: false);
+        IsAdmin: true);
 
     public static readonly Snapshot Guest = new(
         DevAuthPersona.Guest,
-        "11111111-1111-1111-1111-111111111111",
+        "dev-guest-00000001",
         "dev-guest@vrbook.local",
         "Dev Guest",
         IsOwner: false,
@@ -59,10 +62,10 @@ public static class DevAuthPersonas
 
     public static readonly Snapshot Admin = new(
         DevAuthPersona.Admin,
-        "22222222-2222-2222-2222-222222222222",
+        "dev-admin-00000002",
         "dev-admin@vrbook.local",
         "Dev Admin",
-        IsOwner: true,  // Admin sees everything, also acts as owner of admin-created properties
+        IsOwner: true,  // also acts as Owner so admin can create + manage their own listings
         IsAdmin: true);
 
     public const string CookieName = "vrbook-dev-persona";
