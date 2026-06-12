@@ -28,6 +28,25 @@ public sealed record PropertyDto(
     IReadOnlyList<AmenityDto> Amenities,
     IReadOnlyList<string> HouseRules);
 
+/// <summary>
+/// Slice 1 — admin list view of a property. Adds <c>IsActive</c> (so the UI can
+/// distinguish drafts from published listings) and <c>OwnerUserId</c> + audit
+/// time fields that the public summary intentionally omits.
+/// </summary>
+public sealed record AdminPropertySummaryDto(
+    Guid Id,
+    string Slug,
+    string Title,
+    PropertyType Type,
+    string City,
+    string Country,
+    int MaxGuests,
+    int Bedrooms,
+    bool IsActive,
+    Guid OwnerUserId,
+    DateTimeOffset CreatedAt,
+    string? PrimaryImageUrl);
+
 /// <summary>Compact projection used in search results and dashboards.</summary>
 public sealed record PropertySummaryDto(
     Guid Id,

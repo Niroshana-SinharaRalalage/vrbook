@@ -181,3 +181,70 @@ export const adminDeleteAmenity = (id: string): Promise<void> =>
   apiFetch<void>(`/api/v1/admin/amenities/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
+
+// ---- Admin property management (Slice 1) -------------------------------
+export interface AdminPropertySummary {
+  readonly id: string;
+  readonly slug: string;
+  readonly title: string;
+  readonly type: string;
+  readonly city: string;
+  readonly country: string;
+  readonly maxGuests: number;
+  readonly bedrooms: number;
+  readonly isActive: boolean;
+  readonly ownerUserId: string;
+  readonly createdAt: string;
+  readonly primaryImageUrl: string | null;
+}
+
+export interface PropertyAddressBody {
+  readonly street: string;
+  readonly city: string;
+  readonly state: string;
+  readonly postalCode: string;
+  readonly countryCode: string;
+  readonly latitude: number;
+  readonly longitude: number;
+}
+
+export interface CreatePropertyBody {
+  readonly title: string;
+  readonly description: string;
+  readonly type: string; // 'House' | 'Apartment' | 'Cabin' | 'Cottage' | 'Studio' | 'Villa'
+  readonly address: PropertyAddressBody;
+  readonly maxGuests: number;
+  readonly bedrooms: number;
+  readonly bathrooms: number;
+  readonly beds: number;
+  readonly checkinFrom: string; // HH:mm
+  readonly checkinTo: string;
+  readonly checkoutBy: string;
+  readonly houseRules: readonly string[];
+  readonly amenityIds: readonly string[];
+}
+
+export interface UpdatePropertyBody extends CreatePropertyBody {
+  readonly reviewsEnabled: boolean;
+  readonly dynamicPricingEnabled: boolean;
+  readonly messagingEnabled: boolean;
+  readonly isActive: boolean;
+}
+
+export const adminListMyProperties = (): Promise<readonly AdminPropertySummary[]> =>
+  apiFetch<readonly AdminPropertySummary[]>('/api/v1/admin/properties');
+
+export const adminGetPropertyById = (id: string): Promise<PropertyDetail> =>
+  apiFetch<PropertyDetail>(`/api/v1/admin/properties/${encodeURIComponent(id)}`);
+
+export const createProperty = (body: CreatePropertyBody): Promise<PropertyDetail> =>
+  apiFetch<PropertyDetail>('/api/v1/properties', {
+    method: 'POST',
+    body,
+  });
+
+export const updateProperty = (id: string, body: UpdatePropertyBody): Promise<PropertyDetail> =>
+  apiFetch<PropertyDetail>(`/api/v1/properties/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body,
+  });

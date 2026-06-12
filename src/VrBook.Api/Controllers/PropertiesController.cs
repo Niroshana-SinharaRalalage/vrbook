@@ -93,6 +93,33 @@ public sealed class AmenitiesController(IMediator mediator) : ControllerBase
         Ok(await mediator.Send(new VrBook.Modules.Catalog.Application.Amenities.Queries.ListAmenitiesQuery(), cancellationToken));
 }
 
+/// <summary>Slice 1 — admin list of the caller's properties (or all for admins).</summary>
+[Route("api/v1/admin/properties")]
+[Tags("Catalog — Admin")]
+[Authorize(Roles = "Owner,Admin")]
+public sealed class AdminPropertiesController(IMediator mediator) : ControllerBase
+{
+    [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<AdminPropertySummaryDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<AdminPropertySummaryDto>>> ListMine(
+        CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(new VrBook.Modules.Catalog.Application.Properties.Queries.ListMyPropertiesQuery(),
+            cancellationToken));
+
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(PropertyDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PropertyDto>> GetById(Guid id, CancellationToken cancellationToken)
+    {
+        var dto = await mediator.Send(
+            new VrBook.Modules.Catalog.Application.Properties.Queries.GetPropertyByIdQuery(id),
+            cancellationToken);
+        return dto is null
+            ? NotFound(new { detail = $"Property {id} not found." })
+            : Ok(dto);
+    }
+}
+
 /// <summary>Slice 0.6 — multi-source availability aggregator for /admin/calendar.</summary>
 [Route("api/v1/properties/{propertyId:guid}/calendar")]
 [Tags("Booking")]
