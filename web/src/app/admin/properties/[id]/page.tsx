@@ -139,9 +139,11 @@ const AdminPropertyEditPage = () => {
         bedrooms: form.bedrooms,
         bathrooms: form.bathrooms,
         beds: form.beds,
-        checkinFrom: form.checkinFrom,
-        checkinTo: form.checkinTo,
-        checkoutBy: form.checkoutBy,
+        // HTML <input type="time"> returns "HH:mm" but .NET TimeOnly's
+        // System.Text.Json converter wants "HH:mm:ss" — append ":00".
+        checkinFrom: ensureSeconds(form.checkinFrom),
+        checkinTo: ensureSeconds(form.checkinTo),
+        checkoutBy: ensureSeconds(form.checkoutBy),
         houseRules: form.houseRules
           .split('\n')
           .map((r) => r.trim())
@@ -456,6 +458,9 @@ const AdminPropertyEditPage = () => {
     </div>
   );
 };
+
+const ensureSeconds = (hhmm: string): string =>
+  /^\d{2}:\d{2}$/.test(hhmm) ? `${hhmm}:00` : hhmm;
 
 const inputCls =
   'w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-brand-maroon-600 focus:outline-none focus:ring-1 focus:ring-brand-maroon-600';
