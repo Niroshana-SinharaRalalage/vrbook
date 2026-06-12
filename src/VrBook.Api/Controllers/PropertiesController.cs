@@ -111,12 +111,14 @@ public sealed class AdminPropertiesController(IMediator mediator) : ControllerBa
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<PropertyDto>> GetById(Guid id, CancellationToken cancellationToken)
     {
+        // Use the FULL-detail query (Address/Capacity/HouseRules/Amenities/Images)
+        // because the edit page needs all of it. The lighter
+        // GetPropertyByIdQuery -> PropertyBasicInfo is reserved for cross-module
+        // reads where only Slug/Title/IsActive are needed.
         var dto = await mediator.Send(
-            new VrBook.Modules.Catalog.Application.Properties.Queries.GetPropertyByIdQuery(id),
+            new VrBook.Modules.Catalog.Application.Properties.Queries.GetPropertyDetailByIdQuery(id),
             cancellationToken);
-        return dto is null
-            ? NotFound(new { detail = $"Property {id} not found." })
-            : Ok(dto);
+        return Ok(dto);
     }
 }
 
