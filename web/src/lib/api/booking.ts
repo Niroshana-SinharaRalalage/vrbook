@@ -196,3 +196,104 @@ export interface PaymentIntentForBooking {
 
 export const getPaymentIntentForBooking = (bookingId: string): Promise<PaymentIntentForBooking> =>
   apiFetch<PaymentIntentForBooking>(`/api/v1/payments/intents/by-booking/${encodeURIComponent(bookingId)}`);
+
+// ---- Slice 3 — property calendar + owner-created blocks -----------------
+
+export type CalendarChannelKind = 'AirBnb' | 'VRBO' | 'BookingCom' | 'Direct';
+
+export interface CalendarBookingEntry {
+  readonly bookingId: string;
+  readonly reference: string;
+  readonly checkin: string;   // ISO date
+  readonly checkout: string;
+  readonly status: BookingStatus;
+  readonly guestDisplayName: string;
+}
+
+export interface CalendarExternalEntry {
+  readonly externalReservationId: string;
+  readonly channel: CalendarChannelKind;
+  readonly checkin: string;
+  readonly checkout: string;
+  readonly summary?: string | null;
+}
+
+export interface CalendarHoldEntry {
+  readonly holdId: string;
+  readonly checkin: string;
+  readonly checkout: string;
+  readonly expiresAt: string;
+}
+
+export interface CalendarBlockEntry {
+  readonly blockId: string;
+  readonly startDate: string;
+  readonly endDate: string;
+  readonly reason?: string | null;
+}
+
+export interface PropertyCalendar {
+  readonly propertyId: string;
+  readonly from: string;
+  readonly to: string;
+  readonly bookings: readonly CalendarBookingEntry[];
+  readonly externalReservations: readonly CalendarExternalEntry[];
+  readonly holds: readonly CalendarHoldEntry[];
+  readonly blocks: readonly CalendarBlockEntry[];
+}
+
+export const getPropertyCalendar = (
+  propertyId: string,
+  from: string,
+  to: string,
+): Promise<PropertyCalendar> =>
+  apiFetch<PropertyCalendar>(
+    `/api/v1/properties/${encodeURIComponent(propertyId)}/calendar?from=${from}&to=${to}`,
+  );
+
+export interface AvailabilityBlock {
+  readonly id: string;
+  readonly propertyId: string;
+  readonly startDate: string;
+  readonly endDate: string;
+  readonly reason?: string | null;
+  readonly createdAt: string;
+}
+
+export interface CreateAvailabilityBlockBody {
+  readonly startDate: string;
+  readonly endDate: string;
+  readonly reason?: string | null;
+}
+
+export const listAvailabilityBlocks = (
+  propertyId: string,
+  from?: string,
+  to?: string,
+): Promise<readonly AvailabilityBlock[]> => {
+  const params = new URLSearchParams();
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  const qs = params.toString();
+  return apiFetch<readonly AvailabilityBlock[]>(
+    `/api/v1/properties/${encodeURIComponent(propertyId)}/blocks${qs ? `?${qs}` : ''}`,
+  );
+};
+
+export const createAvailabilityBlock = (
+  propertyId: string,
+  body: CreateAvailabilityBlockBody,
+): Promise<AvailabilityBlock> =>
+  apiFetch<AvailabilityBlock>(
+    `/api/v1/properties/${encodeURIComponent(propertyId)}/blocks`,
+    { method: 'POST', body },
+  );
+
+export const deleteAvailabilityBlock = (
+  propertyId: string,
+  blockId: string,
+): Promise<void> =>
+  apiFetch<void>(
+    `/api/v1/properties/${encodeURIComponent(propertyId)}/blocks/${encodeURIComponent(blockId)}`,
+    { method: 'DELETE' },
+  );
