@@ -141,6 +141,35 @@ internal sealed class PlaceBookingHandler(
                     "These dates are already booked. Please choose different dates.");
             }
 
+            // (2b) Slice 3: same FOR UPDATE check against owner-created blocks.
+            //      Locking in the same serializable txn closes the race where a block
+            //      is inserted concurrently with a booking on the same dates.
+            const string blockSql = """
+                SELECT "Id" FROM booking.availability_blocks
+                WHERE property_id = @p0
+                  AND deleted_at IS NULL
+                  AND start_date < @p2
+                  AND @p1 < end_date
+                FOR UPDATE
+                """;
+            await using var blockCmd = db.Database.GetDbConnection().CreateCommand();
+            blockCmd.Transaction = db.Database.CurrentTransaction!.GetDbTransaction();
+            blockCmd.CommandText = blockSql;
+            AddParam(blockCmd, "@p0", property.Id);
+            AddParam(blockCmd, "@p1", r.CheckinDate);
+            AddParam(blockCmd, "@p2", r.CheckoutDate);
+            bool anyBlock;
+            await using (var blockReader = await blockCmd.ExecuteReaderAsync(cancellationToken))
+            {
+                anyBlock = await blockReader.ReadAsync(cancellationToken);
+            }
+            if (anyBlock)
+            {
+                throw new BusinessRuleViolationException(
+                    "booking.dates_blocked",
+                    "These dates are blocked by the host. Please choose different dates.");
+            }
+
             // (3) Insert booking inside the locked txn.
             await bookings.AddAsync(booking, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);

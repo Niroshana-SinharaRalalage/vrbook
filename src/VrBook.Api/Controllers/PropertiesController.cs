@@ -172,6 +172,53 @@ public sealed class PropertyCalendarController(IMediator mediator) : ControllerB
     }
 }
 
+/// <summary>Slice 3 — owner-created calendar blocks for a property.</summary>
+[Route("api/v1/properties/{propertyId:guid}/blocks")]
+[Tags("Booking")]
+[Authorize]
+public sealed class PropertyBlocksController(IMediator mediator) : ControllerBase
+{
+    [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<AvailabilityBlockDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<AvailabilityBlockDto>>> List(
+        Guid propertyId,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(
+            new VrBook.Modules.Booking.Application.Queries.ListAvailabilityBlocksQuery(propertyId, from, to),
+            cancellationToken));
+
+    [HttpPost]
+    [ProducesResponseType(typeof(AvailabilityBlockDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<AvailabilityBlockDto>> Create(
+        Guid propertyId,
+        [FromBody] CreateAvailabilityBlockRequest request,
+        CancellationToken cancellationToken)
+    {
+        var dto = await mediator.Send(
+            new VrBook.Modules.Booking.Application.Commands.CreateAvailabilityBlockCommand(propertyId, request),
+            cancellationToken);
+        return CreatedAtAction(nameof(List), new { propertyId }, dto);
+    }
+
+    [HttpDelete("{blockId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(
+        Guid propertyId,
+        Guid blockId,
+        CancellationToken cancellationToken)
+    {
+        await mediator.Send(
+            new VrBook.Modules.Booking.Application.Commands.DeleteAvailabilityBlockCommand(propertyId, blockId),
+            cancellationToken);
+        return NoContent();
+    }
+}
+
 /// <summary>Admin CRUD for the amenity catalog (A2.2).</summary>
 [Route("api/v1/admin/amenities")]
 [Tags("Catalog — Admin")]

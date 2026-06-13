@@ -13,7 +13,8 @@ public sealed record PropertyCalendarDto(
     DateOnly To,
     IReadOnlyList<CalendarBookingEntry> Bookings,
     IReadOnlyList<CalendarExternalEntry> ExternalReservations,
-    IReadOnlyList<CalendarHoldEntry> Holds);
+    IReadOnlyList<CalendarHoldEntry> Holds,
+    IReadOnlyList<CalendarBlockEntry> Blocks);
 
 public sealed record CalendarBookingEntry(
     Guid BookingId,
@@ -35,3 +36,25 @@ public sealed record CalendarHoldEntry(
     DateOnly Checkin,
     DateOnly Checkout,
     DateTimeOffset ExpiresAt);
+
+/// <summary>Slice 3 — owner-created calendar block, half-open <c>[StartDate, EndDate)</c>.</summary>
+public sealed record CalendarBlockEntry(
+    Guid BlockId,
+    DateOnly StartDate,
+    DateOnly EndDate,
+    string? Reason);
+
+/// <summary>Slice 3 — full availability block, returned by list + create endpoints.</summary>
+public sealed record AvailabilityBlockDto(
+    Guid Id,
+    Guid PropertyId,
+    DateOnly StartDate,
+    DateOnly EndDate,
+    string? Reason,
+    DateTimeOffset CreatedAt);
+
+/// <summary>Slice 3 — payload for <c>POST /api/v1/properties/{propertyId}/blocks</c>.</summary>
+public sealed record CreateAvailabilityBlockRequest(
+    DateOnly StartDate,
+    DateOnly EndDate,
+    string? Reason);

@@ -65,12 +65,21 @@ internal sealed class GetPropertyCalendarHandler(
             .Select(h => new CalendarHoldEntry(h.Id, h.Checkin, h.Checkout, h.ExpiresAt))
             .ToListAsync(cancellationToken);
 
+        // Slice 3: owner-created manual blocks (maintenance, off-platform reservations).
+        var blocks = await db.AvailabilityBlocks
+            .AsNoTracking()
+            .Where(x => x.PropertyId == request.PropertyId)
+            .Where(x => x.StartDate < request.To && request.From < x.EndDate)
+            .Select(x => new CalendarBlockEntry(x.Id, x.StartDate, x.EndDate, x.Reason))
+            .ToListAsync(cancellationToken);
+
         return new PropertyCalendarDto(
             request.PropertyId,
             request.From,
             request.To,
             bookings,
             externalEntries,
-            holds);
+            holds,
+            blocks);
     }
 }

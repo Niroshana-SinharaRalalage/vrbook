@@ -18,6 +18,7 @@ public sealed class BookingDbContext(
     public DbSet<BookingLineItem> LineItems => Set<BookingLineItem>();
     public DbSet<BookingGuestEntry> Guests => Set<BookingGuestEntry>();
     public DbSet<BookingHold> BookingHolds => Set<BookingHold>();
+    public DbSet<AvailabilityBlock> AvailabilityBlocks => Set<AvailabilityBlock>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
