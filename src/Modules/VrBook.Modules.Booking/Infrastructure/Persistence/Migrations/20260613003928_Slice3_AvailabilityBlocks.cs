@@ -48,15 +48,17 @@ namespace VrBook.Modules.Booking.Infrastructure.Persistence.Migrations
                 columns: new[] { "property_id", "start_date", "end_date" });
 
             // REPLAN.md §10.1 forward-compat policy: cross-schema FK to
-            // identity.tenants(id). Declared as raw SQL because EF doesn't model
-            // FKs across DbContexts (each module owns its own schema). Stays
-            // ON DELETE RESTRICT — OPS.M.3b will backfill rows before any tenant
-            // can be deleted; closure happens in OPS.M.
+            // identity.tenants("Id"). Declared as raw SQL because EF doesn't
+            // model FKs across DbContexts (each module owns its own schema).
+            // "Id" is quoted because EF preserves PascalCase on the PK column —
+            // unquoted Postgres folds to lowercase 42P01 (same trap that bit
+            // Slice 0 hotfix 5b2ec0b). Stays ON DELETE RESTRICT — OPS.M.3b
+            // backfills rows before any tenant can be deleted.
             migrationBuilder.Sql("""
                 ALTER TABLE booking.availability_blocks
                 ADD CONSTRAINT fk_availability_blocks_tenant
                 FOREIGN KEY (tenant_id)
-                REFERENCES identity.tenants (id)
+                REFERENCES identity.tenants ("Id")
                 ON DELETE RESTRICT;
                 """);
 
