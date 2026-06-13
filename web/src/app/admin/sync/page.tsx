@@ -199,29 +199,40 @@ const AdminSyncPage = () => {
                       every {f.pollIntervalMinutes}m
                       {f.lastSuccessAt && ` · last success ${new Date(f.lastSuccessAt).toLocaleString()}`}
                     </div>
-                    <details className="mt-1.5 text-xs">
-                      <summary className="cursor-pointer text-muted-foreground">URLs</summary>
-                      <div className="mt-1 space-y-1 pl-4">
-                        <div>
-                          <div className="text-muted-foreground/70">Inbound:</div>
-                          <div className="break-all font-mono text-xs">{f.inboundUrl}</div>
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2 text-muted-foreground/70">
-                            <span>Outbound:</span>
-                            <button
-                              type="button"
-                              onClick={() => void navigator.clipboard.writeText(f.outboundFeedUrl)}
-                              className="inline-flex items-center gap-1 text-xs hover:text-foreground"
-                              title="Copy"
-                            >
-                              <Copy className="h-3 w-3" />
-                              Copy
-                            </button>
-                          </div>
-                          <div className="break-all font-mono text-xs">{f.outboundFeedUrl}</div>
-                        </div>
+
+                    {/* Slice 3 polish: outbound URL is the thing the owner actually
+                        needs to copy back to AirBnB. Pull it out of the details. */}
+                    <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50/60 p-2 dark:border-emerald-900 dark:bg-emerald-950/40">
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-medium text-emerald-900 dark:text-emerald-200">
+                          Outbound iCal (give this to AirBnB)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void navigator.clipboard.writeText(f.outboundFeedUrl)}
+                          className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-white px-2 py-0.5 text-xs font-medium text-emerald-900 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200"
+                        >
+                          <Copy className="h-3 w-3" />
+                          Copy URL
+                        </button>
                       </div>
+                      <div className="mt-1 break-all font-mono text-[11px] text-emerald-900/80 dark:text-emerald-200/80">
+                        {f.outboundFeedUrl}
+                      </div>
+                      <details className="mt-1 text-xs text-emerald-900/80 dark:text-emerald-200/80">
+                        <summary className="cursor-pointer">How to subscribe AirBnB to this URL</summary>
+                        <ol className="ml-4 mt-1 list-decimal space-y-0.5">
+                          <li>Open the AirBnB host calendar for this listing.</li>
+                          <li>Go to <b>Availability</b> → <b>Sync calendars</b> → <b>Import calendar</b>.</li>
+                          <li>Paste the URL above. Name it &ldquo;VrBook&rdquo;.</li>
+                          <li>AirBnB will block these dates on its side within 2&ndash;3 hours.</li>
+                        </ol>
+                      </details>
+                    </div>
+
+                    <details className="mt-1.5 text-xs">
+                      <summary className="cursor-pointer text-muted-foreground">Inbound URL (you pasted this from AirBnB)</summary>
+                      <div className="mt-1 break-all pl-4 font-mono text-xs">{f.inboundUrl}</div>
                     </details>
                   </div>
                   <button
