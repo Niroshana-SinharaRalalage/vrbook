@@ -123,6 +123,10 @@ export const apiFetch = async <T = unknown>(
     ...init,
     method,
     headers,
+    // Include credentials so the DevAuth `vrbook-dev-persona` cookie travels on
+    // cross-origin web → api fetches. CORS on the API side already calls
+    // .AllowCredentials() with an explicit origin list, so this is safe.
+    credentials: init.credentials ?? 'include',
     body:
       body === undefined
         ? undefined

@@ -52,10 +52,14 @@ public static class DevAuthPersonas
         IsOwner: true,
         IsAdmin: true);
 
+    // Emails are namespaced by OID so they don't collide with stale rows from
+    // earlier DevAuth refactors (the original Guest/Admin used GUID-shaped OIDs
+    // and "dev-guest@vrbook.local" — leaving those rows in identity.users with
+    // different b2c_object_id values that block provisioning a clean re-attempt).
     public static readonly Snapshot Guest = new(
         DevAuthPersona.Guest,
         "dev-guest-00000001",
-        "dev-guest@vrbook.local",
+        "dev-guest-00000001@vrbook.local",
         "Dev Guest",
         IsOwner: false,
         IsAdmin: false);
@@ -63,7 +67,7 @@ public static class DevAuthPersonas
     public static readonly Snapshot Admin = new(
         DevAuthPersona.Admin,
         "dev-admin-00000002",
-        "dev-admin@vrbook.local",
+        "dev-admin-00000002@vrbook.local",
         "Dev Admin",
         IsOwner: true,  // also acts as Owner so admin can create + manage their own listings
         IsAdmin: true);
