@@ -23,6 +23,16 @@ public enum NotificationStatus
     Sent = 1,
     Failed = 2,
     DeadLetter = 3,
+
+    /// <summary>
+    /// Slice 4 C2: the dispatch worker has leased the row and is in the middle of
+    /// the ACS call. If the worker crashes between <see cref="NotificationLog.Lease"/>
+    /// and <see cref="NotificationLog.MarkSent"/>/<see cref="NotificationLog.RecordFailure"/>,
+    /// the row sits in <c>Sending</c> with a stale <see cref="NotificationLog.DispatchStartedAt"/>;
+    /// the next worker tick resets it to <c>Queued</c> after a 5-minute timeout
+    /// (see <see cref="NotificationLog.ReleaseLease"/>).
+    /// </summary>
+    Sending = 4,
 }
 
 /// <summary>
@@ -47,6 +57,22 @@ public sealed class NotificationLog : AggregateRoot
     public int RetryCount { get; private set; }
     public string? LastError { get; private set; }
 
+    /// <summary>
+    /// Slice 4 C2: optional deferred-send timestamp. Worker query is
+    /// <c>Status=Queued AND (NotBeforeUtc IS NULL OR NotBeforeUtc &lt;= NOW())</c>.
+    /// Used by SLICE4_PLAN §2.3 for <c>owner.action_required_24h_reminder</c> and any
+    /// future scheduled template.
+    /// </summary>
+    public DateTimeOffset? NotBeforeUtc { get; private set; }
+
+    /// <summary>
+    /// Slice 4 C2: when the worker leases this row (transitions Queued → Sending),
+    /// stamps the moment it started the ACS call. If the worker crashes after this
+    /// point but before <see cref="MarkSent"/>/<see cref="RecordFailure"/>, the next
+    /// tick's <see cref="ReleaseLease"/> resets the row after a 5-minute timeout.
+    /// </summary>
+    public DateTimeOffset? DispatchStartedAt { get; private set; }
+
     private NotificationLog() { } // EF
 
     public static NotificationLog Queue(
@@ -54,7 +80,8 @@ public sealed class NotificationLog : AggregateRoot
         Guid recipientUserId,
         string recipientEmail,
         string subject,
-        string payloadJson)
+        string payloadJson,
+        DateTimeOffset? notBeforeUtc = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(recipientEmail);
         ArgumentException.ThrowIfNullOrWhiteSpace(subject);
@@ -68,7 +95,45 @@ public sealed class NotificationLog : AggregateRoot
             RecipientEmail = recipientEmail.Trim(),
             Subject = subject.Trim(),
             PayloadJson = payloadJson,
+            NotBeforeUtc = notBeforeUtc,
         };
+    }
+
+    /// <summary>
+    /// Slice 4 C2: claim the row for dispatch. Worker calls this before the ACS
+    /// send so multi-replica polling is idempotent. Only valid from
+    /// <see cref="NotificationStatus.Queued"/>.
+    /// </summary>
+    public void Lease(DateTimeOffset at)
+    {
+        if (Status != NotificationStatus.Queued)
+        {
+            throw new InvalidOperationException(
+                $"Cannot lease NotificationLog {Id}; current status is {Status}.");
+        }
+        Status = NotificationStatus.Sending;
+        DispatchStartedAt = at;
+    }
+
+    /// <summary>
+    /// Slice 4 C2: revert a stale <see cref="NotificationStatus.Sending"/> row to
+    /// <see cref="NotificationStatus.Queued"/> when its lease has expired (worker
+    /// crashed mid-send). Caller passes a <paramref name="cutoff"/>; rows with
+    /// <see cref="DispatchStartedAt"/> older than the cutoff are reset.
+    /// </summary>
+    public void ReleaseLease(DateTimeOffset cutoff)
+    {
+        if (Status != NotificationStatus.Sending)
+        {
+            return;
+        }
+        if (DispatchStartedAt is null || DispatchStartedAt > cutoff)
+        {
+            return;
+        }
+        Status = NotificationStatus.Queued;
+        DispatchStartedAt = null;
+        LastError = "lease-expired";
     }
 
     public void MarkSent(DateTimeOffset at)
@@ -76,6 +141,7 @@ public sealed class NotificationLog : AggregateRoot
         Status = NotificationStatus.Sent;
         SentAt = at;
         LastError = null;
+        DispatchStartedAt = null;
     }
 
     public void RecordFailure(string error)
@@ -83,5 +149,24 @@ public sealed class NotificationLog : AggregateRoot
         RetryCount++;
         LastError = error;
         Status = RetryCount >= 3 ? NotificationStatus.DeadLetter : NotificationStatus.Failed;
+        DispatchStartedAt = null;
+    }
+
+    /// <summary>
+    /// Slice 4 C5: admin "Retry" button. Resets a Failed/DeadLetter row back to
+    /// Queued so the next worker tick picks it up. Clears the retry counter so
+    /// the row gets a fresh 3-attempt budget.
+    /// </summary>
+    public void Reset()
+    {
+        if (Status != NotificationStatus.Failed && Status != NotificationStatus.DeadLetter)
+        {
+            throw new InvalidOperationException(
+                $"Cannot reset NotificationLog {Id}; current status is {Status}.");
+        }
+        Status = NotificationStatus.Queued;
+        RetryCount = 0;
+        LastError = null;
+        DispatchStartedAt = null;
     }
 }

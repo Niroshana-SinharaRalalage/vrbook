@@ -44,6 +44,7 @@
   </ItemGroup>
 
   <ItemGroup Label="Azure SDKs">
+    <PackageVersion Include="Azure.Communication.Email" Version="1.0.1" />
     <PackageVersion Include="Azure.Identity" Version="1.12.1" />
     <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.6.0" />
     <PackageVersion Include="Azure.Storage.Blobs" Version="12.22.2" />

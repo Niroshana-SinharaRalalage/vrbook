@@ -3,7 +3,9 @@
   <PropertyGroup>
     <RootNamespace>VrBook.Modules.Notifications</RootNamespace>
     <Description>
-      Notifications bounded context. Service Bus consumer worker, Mustache template engine (Stubble), SendGrid sender, notification log, feature toggles.
+      Notifications bounded context. Mustache template engine (Stubble),
+      Azure Communication Services sender (per ADR-0011), notification log,
+      dispatch worker. Slice 4 / SLICE4_PLAN.md.
     </Description>
   </PropertyGroup>
 
@@ -21,6 +23,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Mapster" />
+    <PackageReference Include="Azure.Communication.Email" />
   </ItemGroup>
 
 </Project>

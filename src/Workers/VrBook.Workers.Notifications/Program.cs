@@ -1,44 +1,78 @@
+using MediatR;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Serilog;
+using VrBook.Contracts.Interfaces;
+using VrBook.Infrastructure;
+using VrBook.Infrastructure.Common;
+using VrBook.Infrastructure.Outbox;
+using VrBook.Modules.Notifications;
+using VrBook.Modules.Notifications.Application.Dispatch;
 
 // =================================================================================
-// VrBook.Workers.Notifications — KEDA Service Bus-scaled. A0 skeleton: hosts an empty loop.
-// A9 replaces this with the SendGrid + Stubble template pipeline. See proposal §13.
+// VrBook.Workers.Notifications — Slice 4 C2 dispatch sweep.
+// Container App Job, cron */2 * * * *. One-shot per tick: release expired
+// Sending leases, then dispatch up to BatchSize Queued rows whose NotBefore
+// is due. See docs/SLICE4_PLAN.md §2.4 / §2.5.
 // =================================================================================
 
-Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateBootstrapLogger();
+Log.Logger = new LoggerConfiguration()
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("Application", "VrBook.Workers.Notifications")
+    .WriteTo.Console(new Serilog.Formatting.Compact.CompactJsonFormatter())
+    .CreateBootstrapLogger();
 
 try
 {
     var builder = Host.CreateApplicationBuilder(args);
-    builder.Configuration.AddEnvironmentVariables();
-    builder.Services.AddSerilog((sp, lc) => lc.ReadFrom.Configuration(builder.Configuration));
 
-    builder.Services.AddHostedService<NotificationWorkerSkeleton>();
+    builder.Configuration
+        .AddJsonFile("appsettings.json", optional: true)
+        .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
+        .AddEnvironmentVariables();
+
+    builder.Services.AddSerilog((sp, lc) => lc
+        .ReadFrom.Configuration(builder.Configuration)
+        .Enrich.FromLogContext()
+        .Enrich.WithProperty("Application", "VrBook.Workers.Notifications")
+        .WriteTo.Console(new Serilog.Formatting.Compact.CompactJsonFormatter()));
+
+    builder.Services.AddSingleton<IDateTimeProvider, SystemClock>();
+    builder.Services.AddSingleton<ICurrentUser, AnonymousCurrentUser>();
+    builder.Services.AddOutbox();
+    builder.Services.AddInfrastructureCore(builder.Configuration);
+
+    builder.Services.AddMediatR(cfg => cfg
+        .RegisterServicesFromAssembly(typeof(NotificationsModule).Assembly));
+
+    // The dispatcher only needs IEmailSender + NotificationsDbContext; the row
+    // already carries a resolved RecipientEmail from the API-side queue handler
+    // (Slice 4 C1). Identity is NOT registered here on purpose.
+    builder.Services.AddNotificationsModule(builder.Configuration);
 
     using var host = builder.Build();
-    Log.Information("Notification Worker (A0 skeleton). Real implementation in A9.");
-    await host.RunAsync();
+    var logger = host.Services.GetRequiredService<ILogger<Program>>();
+
+    logger.LogInformation("Notification Dispatch Worker — Slice 4 C2 starting.");
+
+    using var scope = host.Services.CreateScope();
+    var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+    var result = await mediator.Send(new DrainQueuedNotificationsCommand());
+
+    logger.LogInformation(
+        "Notification dispatch complete. released={Released} picked={Picked} sent={Sent} failed={Failed} deadLettered={DeadLettered}",
+        result.Released, result.Picked, result.Sent, result.Failed, result.DeadLettered);
+
     return 0;
 }
 catch (Exception ex)
 {
-    Log.Fatal(ex, "Notification worker crashed");
+    Log.Fatal(ex, "Notification Dispatch Worker crashed");
     return 1;
 }
 finally
 {
     await Log.CloseAndFlushAsync();
-}
-
-internal sealed class NotificationWorkerSkeleton : BackgroundService
-{
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
-        }
-    }
 }

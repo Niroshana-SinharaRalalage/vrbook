@@ -6,10 +6,10 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <UserSecretsId>vrbook-workers-notifications-local-secrets</UserSecretsId>
     <Description>
-      Notification Worker — KEDA-scaled Container App (Service Bus topic 'notifications').
-      Consumes NotificationRequested events, renders Mustache templates via Stubble, dispatches
-      via SendGrid. Retry policy 3x exponential -> dead-letter. Real implementation in A9
-      (proposal §13).
+      Notification Dispatch Worker — Container App Job, cron */2 * * * *.
+      Drains Queued NotificationLog rows, dispatches via Azure Communication
+      Services per ADR-0011. 3-retry exponential backoff per send; 5-minute
+      Sending lease for multi-replica safety. Slice 4 / SLICE4_PLAN.md.
     </Description>
   </PropertyGroup>
 
@@ -26,8 +26,7 @@
     <PackageReference Include="Serilog.Sinks.Console" />
     <PackageReference Include="Serilog.Settings.Configuration" />
     <PackageReference Include="Azure.Messaging.ServiceBus" />
-    <PackageReference Include="SendGrid" />
-    <PackageReference Include="Stubble.Core" />
+    <PackageReference Include="MediatR" />
   </ItemGroup>
 
 </Project>

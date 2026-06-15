@@ -39,6 +39,10 @@ internal sealed class NotificationLogConfiguration : IEntityTypeConfiguration<No
         builder.Property(x => x.RetryCount).HasColumnName("retry_count").HasDefaultValue(0).IsRequired();
         builder.Property(x => x.LastError).HasColumnName("last_error");
 
+        // Slice 4 C2
+        builder.Property(x => x.NotBeforeUtc).HasColumnName("not_before_utc");
+        builder.Property(x => x.DispatchStartedAt).HasColumnName("dispatch_started_at");
+
         builder.HasIndex(x => x.Status).HasDatabaseName("ix_notification_log_status");
         builder.HasIndex(x => new { x.RecipientUserId, x.CreatedAt }).HasDatabaseName("ix_notification_log_recipient");
 

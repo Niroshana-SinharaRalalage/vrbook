@@ -22,6 +22,9 @@ public sealed class NotificationsModule : IModuleRegistration
 
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<NotificationsDbContext>());
 
+        // Slice 4 C2: ACS adapter for outbound mail.
+        services.AddSingleton<IEmailSender, Infrastructure.Email.AzureEmailSender>();
+
         services.AddModuleAssembly(typeof(NotificationsModule).Assembly);
         return services;
     }
