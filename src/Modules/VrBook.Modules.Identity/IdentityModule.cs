@@ -27,6 +27,7 @@ public sealed class IdentityModule : IModuleRegistration
                 .UseOutbox(sp));
 
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IUserEmailLookup, UserEmailLookup>();
 
         // The DbContext doubles as the module's IUnitOfWork.
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<IdentityDbContext>());
