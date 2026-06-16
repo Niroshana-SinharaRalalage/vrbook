@@ -347,18 +347,27 @@ jobs:
             -g ${{ env.RESOURCE_GROUP }} \
             --image ${{ vars.ACR_NAME }}.azurecr.io/vrbook-sync-worker:${{ github.sha }}
 
+  # Notification dispatch worker — Slice 4 C2. Container App Job, cron */2.
+  # Replaces the A9 v1 ca-vrbook-notifworker Container App (KEDA Service Bus,
+  # never had a real dispatcher attached). Uses az containerapp job update
+  # like deploy-sync-worker / deploy-booking-expiry-job.
   deploy-notification-worker:
-    name: deploy notification-worker
+    name: deploy notification-dispatch (job)
     needs: migrate
-    uses: ./.github/workflows/_deploy-container-app.yml
-    with:
-      app_name: ca-vrbook-notifworker-staging
-      resource_group: rg-vrbook-staging
-      image: ${{ vars.ACR_NAME }}.azurecr.io/vrbook-notification-worker:${{ github.sha }}
-    secrets:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Update notification-dispatch job image
+        run: |
+          az containerapp job update \
+            -n caj-vrbook-notifdispatch-staging \
+            -g ${{ env.RESOURCE_GROUP }} \
+            --image ${{ vars.ACR_NAME }}.azurecr.io/vrbook-notification-worker:${{ github.sha }}
 
   # Booking expiry job — Slice 0.4. Mirrors deploy-sync-worker because both are
   # cron-triggered Container App Jobs (az containerapp job update, NOT the

@@ -331,11 +331,19 @@ module apiApp 'modules/container-app.bicep' = {
   }
 }
 
-// ---------- Notifications worker ----------
-module notifWorker 'modules/container-app.bicep' = {
-  name: 'notif-worker'
+// ---------- Notification Dispatch Worker (scheduled job, */2 * * * *) ----------
+// Slice 4 C2: drains Queued NotificationLog rows + dispatches via ACS per
+// ADR-0011. One-shot per tick; the dispatcher releases stale Sending leases
+// (5-min timeout), picks up to 50 rows whose NotBefore is due, leases each,
+// sends, marks Sent or Failed/DeadLetter. See docs/SLICE4_PLAN.md §2.4-§2.5.
+//
+// Replaces the A9 v1 KEDA Service Bus Container App that never had a real
+// dispatcher attached. The 'notifications' Service Bus topic stays declared
+// in service-bus.bicep for the A11 outbox->topic relay (Phase 2).
+module notifDispatchJob 'modules/container-app-job.bicep' = {
+  name: 'notif-dispatch-job'
   params: {
-    name: 'ca-vrbook-notifworker-${env}'
+    name: 'caj-vrbook-notifdispatch-${env}'
     location: location
     tags: tags
     environmentId: cae.outputs.id
@@ -343,22 +351,14 @@ module notifWorker 'modules/container-app.bicep' = {
     registryServer: acr.outputs.loginServer
     userAssignedIdentityId: mi.outputs.id
     workloadProfileName: 'Consumption'
-    targetPort: 8080
-    externalIngress: false
-    minReplicas: env == 'dev' ? 0 : 1
-    maxReplicas: 5
+    triggerType: 'Schedule'
+    cronExpression: '*/2 * * * *'
+    replicaTimeoutSeconds: 300
     cpu: '0.5'
     memory: '1Gi'
     envVars: apiEnvVars
     secrets: apiSecrets
     keyVaultName: kv.outputs.name
-    scaleRuleType: 'kedaServiceBus'
-    serviceBusNamespace: sb.outputs.namespaceFqdn
-    serviceBusTopicName: 'notifications'
-    serviceBusSubscriptionName: 'default'
-    serviceBusMessageCount: 20
-    includeProbes: false
-    enableIngress: false
   }
 }
 
