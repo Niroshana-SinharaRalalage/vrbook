@@ -253,7 +253,12 @@ var apiEnvVars = [
   // Connection string is seeded out-of-band into KV (or provisioned by a future
   // acs-email.bicep module). A9 reads Acs__* in lieu of SendGrid__*.
   { name: 'Acs__ConnectionString', secretRef: 'acs-connection-string' }
-  { name: 'Acs__SenderAddress', value: 'donotreply@vrbook.example.com' }
+  // Slice 4 C2/C5: sender uses the ACS AzureManagedDomain that the email
+  // service auto-provisions (DKIM/SPF/DMARC pre-verified). Custom domain
+  // (e.g. bookings@vrbook.example.com) lands in OPS.8 / MULTI_TENANCY_OPS_PLAN
+  // §8 once the DNS records are wired. The GUID is environment-specific;
+  // production picks up its own managed domain at deploy time.
+  { name: 'Acs__SenderAddress', secretRef: 'acs-sender-address' }
   // Identity — Microsoft Entra External ID (ADR-0012 supersedes AD B2C).
   { name: 'EntraExternalId__Instance', secretRef: 'entra-instance' }
   { name: 'EntraExternalId__TenantId', secretRef: 'entra-tenant-id' }
@@ -298,6 +303,7 @@ var apiSecrets = [
   { name: 'stripe-webhook-secret', keyVaultSecretName: 'stripe-webhook-secret' }
   { name: 'stripe-publishable-key', keyVaultSecretName: 'stripe-publishable-key' }
   { name: 'acs-connection-string', keyVaultSecretName: 'acs-connection-string' }
+  { name: 'acs-sender-address', keyVaultSecretName: 'acs-sender-address' }
   { name: 'entra-instance', keyVaultSecretName: 'entra-instance' }
   { name: 'entra-tenant-id', keyVaultSecretName: 'entra-tenant-id' }
   { name: 'entra-api-client-id', keyVaultSecretName: 'entra-api-client-id' }
