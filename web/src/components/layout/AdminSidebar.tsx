@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Settings,
   Sparkles,
+  Mail,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils/cn';
@@ -38,6 +39,7 @@ const items: readonly NavItem[] = [
   { href: '/admin/reviews', label: 'Reviews', icon: Star },
   { href: '/admin/reports', label: 'Reports', icon: BarChart3 },
   { href: '/admin/sync', label: 'Sync', icon: RefreshCw },
+  { href: '/admin/notifications', label: 'Notifications', icon: Mail },
   { href: '/admin/amenities', label: 'Amenities', icon: Sparkles },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];
