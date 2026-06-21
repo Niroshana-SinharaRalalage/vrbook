@@ -118,4 +118,34 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
 
         return Ok(new { persona = parsed.ToString(), displayName = snapshot.DisplayName, email = snapshot.Email });
     }
+
+    /// <summary>
+    /// Slice 4 dev bridge: repoint a DevAuth persona's User row at a real
+    /// inbox. Future bookings placed by that persona land in the real mailbox
+    /// because the notification handler resolves the email via IUserEmailLookup
+    /// at queue time. DevAuth-only.
+    /// </summary>
+    [HttpPost("persona-email")]
+    public async Task<IActionResult> SetPersonaEmail(
+        [FromQuery] string persona,
+        [FromQuery] string email,
+        [FromServices] IMediator mediator,
+        CancellationToken ct)
+    {
+        if (!configuration.GetValue<bool>("DevAuth:AllowAnonymous"))
+        {
+            return NotFound();
+        }
+        if (!Enum.TryParse<DevAuthPersona>(persona, ignoreCase: true, out var parsed))
+        {
+            return BadRequest(new { detail = $"Unknown persona '{persona}'." });
+        }
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+        {
+            return BadRequest(new { detail = "email must look like an email." });
+        }
+        var snapshot = DevAuthPersonas.Get(parsed);
+        await mediator.Send(new SetPersonaEmailCommand(snapshot.Oid, email.Trim()), ct);
+        return Ok(new { persona = parsed.ToString(), email = email.Trim() });
+    }
 }
