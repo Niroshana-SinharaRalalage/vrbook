@@ -24,6 +24,9 @@ public sealed class NotificationsModule : IModuleRegistration
 
         // Slice 4 C2: ACS adapter for outbound mail.
         services.AddSingleton<IEmailSender, Infrastructure.Email.AzureEmailSender>();
+        // Slice 4 C3: Stubble + embedded Mustache templates.
+        services.AddSingleton<Application.Dispatch.ITemplateRenderer,
+                              Application.Dispatch.MustacheTemplateRenderer>();
 
         services.AddModuleAssembly(typeof(NotificationsModule).Assembly);
         return services;

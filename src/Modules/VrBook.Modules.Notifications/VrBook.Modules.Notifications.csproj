@@ -24,6 +24,15 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Mapster" />
     <PackageReference Include="Azure.Communication.Email" />
+    <PackageReference Include="Stubble.Core" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Slice 4 C3: templates ship inside the dll (per ADR-0011 Phase 1). -->
+    <EmbeddedResource Include="Templates\**\*.mustache" />
+    <!-- Sample variable fixtures, used by the CI render test. ~6KB; acceptable
+         price to have them travel with the dll for easy access from the test. -->
+    <EmbeddedResource Include="Templates\Samples\*.json" />
   </ItemGroup>
 
 </Project>

@@ -29,6 +29,7 @@ public sealed record DrainResult(int Released, int Picked, int Sent, int Failed,
 internal sealed class DrainQueuedNotificationsHandler(
     NotificationsDbContext db,
     IEmailSender sender,
+    ITemplateRenderer renderer,
     IDateTimeProvider clock,
     ILogger<DrainQueuedNotificationsHandler> logger)
     : IRequestHandler<DrainQueuedNotificationsCommand, DrainResult>
@@ -84,23 +85,23 @@ internal sealed class DrainQueuedNotificationsHandler(
                 continue;
             }
 
-            // (3b) Dispatch.
+            // (3b) Render + dispatch.
             EmailDispatchResult outcome;
             try
             {
+                var rendered = renderer.Render(row.Kind, row.PayloadJson);
                 outcome = await sender.SendAsync(
                     new EmailDispatchRequest(
                         ToEmail: row.RecipientEmail,
                         ToDisplayName: row.RecipientEmail,
                         Subject: row.Subject,
-                        // C2 sends raw payload; C3 swaps in Mustache-rendered HTML/text.
-                        HtmlBody: $"<pre>{System.Net.WebUtility.HtmlEncode(row.PayloadJson)}</pre>",
-                        PlainTextBody: row.PayloadJson),
+                        HtmlBody: rendered.Html,
+                        PlainTextBody: rendered.PlainText),
                     cancellationToken);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Sender threw for {LogId}.", row.Id);
+                logger.LogError(ex, "Sender or renderer threw for {LogId}.", row.Id);
                 outcome = EmailDispatchResult.Failure(ex.Message);
             }
 

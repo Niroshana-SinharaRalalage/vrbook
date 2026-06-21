@@ -1,0 +1,8 @@
+<p>A calendar conflict has been detected between a {{AppName}} direct booking and an external iCal feed.</p>
+<ul>
+  <li>Direct booking: <strong>{{BookingId}}</strong></li>
+  <li>External channel: <strong>{{Channel}}</strong></li>
+  <li>External reservation: <strong>{{ExternalReservationId}}</strong></li>
+</ul>
+<p>This needs a manual decision. Open <strong>/admin/sync</strong> and pick: keep the direct booking, cancel it in favor of the external, or manual override.</p>
+<p>While this conflict sits unresolved, new bookings on the overlapping dates are blocked.</p>

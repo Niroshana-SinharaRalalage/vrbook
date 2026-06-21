@@ -1,0 +1,7 @@
+{
+  "BookingId": "00000000-0000-0000-0000-000000000001",
+  "Reference": "VRB-SAMPLE",
+  "PropertyId": "00000000-0000-0000-0000-000000000002",
+  "GuestUserId": "00000000-0000-0000-0000-000000000003",
+  "Reason": "Property unavailable on those dates."
+}
