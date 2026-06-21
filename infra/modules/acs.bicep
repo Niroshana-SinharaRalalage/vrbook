@@ -33,6 +33,13 @@ resource cs 'Microsoft.Communication/communicationServices@2023-04-01' = {
   tags: tags
   properties: {
     dataLocation: dataLocation
+    // Slice 4 verify fix: without this link, every send returns
+    // 404 DomainNotLinked. The Communication Service holds the
+    // connection string, the Email Service owns the verified domain;
+    // ACS only authorises sends through linked domains.
+    linkedDomains: [
+      defaultDomain.id
+    ]
   }
 }
 
