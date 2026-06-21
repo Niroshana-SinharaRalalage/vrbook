@@ -15,6 +15,14 @@ public enum NotificationKind
     PaymentCaptured = 10,
     RefundIssued = 11,
     ReviewSubmitted = 20,
+
+    // Slice 4 C4: owner-side notifications. Reserved at 30+ so the guest-side
+    // enum values stay stable; OwnerNotificationHandlers queues these.
+    OwnerTentativeReceived = 30,
+    OwnerActionRequiredReminder = 31,
+    OwnerAutoConfirmed = 32,
+    OwnerCancellationAlert = 33,
+    OwnerSyncConflict = 34,
 }
 
 public enum NotificationStatus

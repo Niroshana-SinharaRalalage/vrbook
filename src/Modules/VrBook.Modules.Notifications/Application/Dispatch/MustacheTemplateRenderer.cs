@@ -133,8 +133,8 @@ public sealed class MustacheTemplateRenderer : ITemplateRenderer
         NotificationKind.BookingConfirmed => "booking.confirmed",
         NotificationKind.BookingRejected => "booking.rejected",
         NotificationKind.BookingCancelled => "booking.cancelled.guest",
-        // C4 adds owner-side handlers that queue these kinds explicitly. For now,
-        // any of the remaining kinds reuses the closest guest-side template.
+        // Phase 1 stand-ins: kinds without a dedicated template reuse the
+        // closest guest-side one. Real templates land in Slice 5 / 6.
         NotificationKind.BookingCheckedIn => "booking.confirmed",
         NotificationKind.BookingCheckedOut => "booking.confirmed",
         NotificationKind.BookingCompleted => "booking.confirmed",
@@ -142,6 +142,14 @@ public sealed class MustacheTemplateRenderer : ITemplateRenderer
         NotificationKind.PaymentCaptured => "booking.confirmed",
         NotificationKind.RefundIssued => "booking.cancelled.guest",
         NotificationKind.ReviewSubmitted => "booking.confirmed",
+
+        // Slice 4 C4: owner-side templates.
+        NotificationKind.OwnerTentativeReceived => "owner.tentative_received",
+        NotificationKind.OwnerActionRequiredReminder => "owner.action_required_24h_reminder",
+        NotificationKind.OwnerAutoConfirmed => "owner.auto_confirmed",
+        NotificationKind.OwnerCancellationAlert => "owner.cancellation_alert",
+        NotificationKind.OwnerSyncConflict => "owner.sync_conflict",
+
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "No template for kind."),
     };
 

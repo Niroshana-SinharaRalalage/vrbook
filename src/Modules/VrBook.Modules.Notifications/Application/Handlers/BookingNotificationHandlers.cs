@@ -27,6 +27,7 @@ internal sealed class BookingNotificationHandlers(
     ILogger<BookingNotificationHandlers> logger) :
     INotificationHandler<BookingPlaced>,
     INotificationHandler<BookingConfirmed>,
+    INotificationHandler<BookingRejected>,
     INotificationHandler<BookingCancelled>,
     INotificationHandler<BookingCompleted>
 {
@@ -37,6 +38,10 @@ internal sealed class BookingNotificationHandlers(
     public Task Handle(BookingConfirmed notification, CancellationToken cancellationToken) =>
         Queue(NotificationKind.BookingConfirmed, notification.GuestUserId,
             $"Your booking is confirmed — {notification.Reference}", notification, cancellationToken);
+
+    public Task Handle(BookingRejected notification, CancellationToken cancellationToken) =>
+        Queue(NotificationKind.BookingRejected, notification.GuestUserId,
+            $"Booking declined — {notification.Reference}", notification, cancellationToken);
 
     public Task Handle(BookingCancelled notification, CancellationToken cancellationToken) =>
         Queue(NotificationKind.BookingCancelled, notification.GuestUserId,
