@@ -178,8 +178,21 @@ public sealed class Booking : AggregateRoot
         Status = BookingStatus.CheckedOut;
         CheckedOutAt = DateTimeOffset.UtcNow;
         Raise(new BookingCheckedOut(Id, Reference));
-        // A8.1: BookingCompleted is the business event Loyalty consumes to
-        // increment the guest's completed-stay count and recompute their tier.
+    }
+
+    /// <summary>
+    /// Slice 5: the post-stay terminal transition. Called by the daily
+    /// <c>BookingCompletionWorker</c> (cron <c>0 6 * * *</c>) once
+    /// <see cref="CheckedOutAt"/> is at least a day old. Raises
+    /// <see cref="BookingCompleted"/> so Loyalty increments the stay count
+    /// and Notifications enqueues the "thanks for staying" + review-request
+    /// emails. CheckOut no longer raises this — the daily sweep is the sole
+    /// trigger so the post-stay loop is rate-limited.
+    /// </summary>
+    public void Complete()
+    {
+        Require(BookingStatus.CheckedOut);
+        Status = BookingStatus.Completed;
         Raise(new BookingCompleted(Id, Reference, GuestUserId));
     }
 

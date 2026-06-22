@@ -278,12 +278,12 @@ public sealed class BookingAggregateTests
 
         b.Status.Should().Be(BookingStatus.CheckedOut);
         b.CheckedOutAt.Should().NotBeNull();
-        // A8.1: CheckOut now raises BOTH BookingCheckedOut (lifecycle) AND BookingCompleted
-        // (business event consumed by Loyalty to increment stay count).
+        // Slice 5: CheckOut no longer raises BookingCompleted — the daily
+        // BookingCompletionWorker (cron 0 6 * * *) calls Booking.Complete()
+        // at least 24h after CheckOut, which is the new sole trigger.
         var events = b.DequeueEvents();
         events.Select(e => e.GetType().Name).Should().Equal(
-            nameof(BookingCheckedOut),
-            nameof(BookingCompleted));
+            nameof(BookingCheckedOut));
     }
 
     [Fact]
@@ -294,15 +294,52 @@ public sealed class BookingAggregateTests
         act.Should().Throw<BusinessRuleViolationException>();
     }
 
+    // ----- Complete -----
+
+    [Fact]
+    public void Complete_from_checked_out_transitions_and_raises_BookingCompleted()
+    {
+        var b = CheckedOut();
+        b.DequeueEvents();
+
+        b.Complete();
+
+        b.Status.Should().Be(BookingStatus.Completed);
+        var events = b.DequeueEvents();
+        events.Select(e => e.GetType().Name).Should().Equal(nameof(BookingCompleted));
+        var completed = events.OfType<BookingCompleted>().Single();
+        completed.BookingId.Should().Be(b.Id);
+        completed.Reference.Should().Be(b.Reference);
+        completed.GuestUserId.Should().Be(b.GuestUserId);
+    }
+
+    [Fact]
+    public void Complete_from_checked_in_throws()
+    {
+        var b = PlaceCheckedIn();
+        var act = () => b.Complete();
+        act.Should().Throw<BusinessRuleViolationException>();
+    }
+
+    [Fact]
+    public void Complete_from_completed_throws()
+    {
+        var b = CheckedOut();
+        b.Complete();
+        var act = () => b.Complete();
+        act.Should().Throw<BusinessRuleViolationException>();
+    }
+
     // ----- Full happy-path lifecycle -----
 
     [Fact]
-    public void Happy_path_Tentative_to_CheckedOut_raises_events_in_order()
+    public void Happy_path_Tentative_to_Completed_raises_events_in_order()
     {
         var b = PlaceTentative();
         b.Confirm();
         b.CheckIn();
         b.CheckOut();
+        b.Complete();
 
         var events = b.DequeueEvents();
         events.Select(e => e.GetType().Name).Should().Equal(
@@ -311,7 +348,7 @@ public sealed class BookingAggregateTests
             nameof(BookingCheckedIn),
             nameof(BookingCheckedOut),
             nameof(BookingCompleted));
-        b.Status.Should().Be(BookingStatus.CheckedOut);
+        b.Status.Should().Be(BookingStatus.Completed);
     }
 
     // ----- Helpers to construct non-public terminal states -----

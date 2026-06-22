@@ -26,15 +26,14 @@ internal sealed class OnBookingCompletedHandler(
             db.Accounts.Add(account);
         }
 
-        var beforeTier = account.Tier;
+        // RecordCompletedStay raises TierPromoted internally when the new stay
+        // crosses a tier threshold; the outbox interceptor flushes it to MediatR
+        // on SaveChanges so Notifications enqueues the promotion email.
         account.RecordCompletedStay();
         await db.SaveChangesAsync(cancellationToken);
 
-        if (account.Tier != beforeTier)
-        {
-            logger.LogInformation(
-                "Loyalty tier upgrade for user {UserId}: {OldTier} → {NewTier} after {Stays} stays.",
-                notification.GuestUserId, beforeTier, account.Tier, account.CompletedStayCount);
-        }
+        logger.LogInformation(
+            "Loyalty recorded stay for user {UserId}: tier={Tier}, stays={Stays}.",
+            notification.GuestUserId, account.Tier, account.CompletedStayCount);
     }
 }

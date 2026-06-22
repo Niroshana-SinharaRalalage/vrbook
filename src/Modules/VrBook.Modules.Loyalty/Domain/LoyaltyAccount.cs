@@ -1,4 +1,5 @@
 using VrBook.Contracts.Enums;
+using VrBook.Contracts.Events;
 using VrBook.Domain.Common;
 
 namespace VrBook.Modules.Loyalty.Domain;
@@ -38,14 +39,22 @@ public sealed class LoyaltyAccount : AggregateRoot
 
     /// <summary>
     /// Called from <c>OnBookingCompletedHandler</c>. Increments the stay count
-    /// and re-evaluates tier. Idempotency is delegated to the caller (which uses
-    /// an outbox/event-id replay check).
+    /// and re-evaluates tier. Raises <see cref="TierPromoted"/> when the new
+    /// stay crosses a tier threshold — Notifications subscribes to send the
+    /// <c>loyalty.tier_promotion</c> email (Slice 5). Idempotency is delegated
+    /// to the caller (which uses an outbox/event-id replay check).
     /// </summary>
     public void RecordCompletedStay()
     {
+        var beforeTier = Tier;
         CompletedStayCount++;
         Tier = TierDefinition.Resolve(CompletedStayCount);
         LastEvaluatedAt = DateTimeOffset.UtcNow;
+
+        if (Tier != beforeTier)
+        {
+            Raise(new TierPromoted(UserId, beforeTier, Tier, CompletedStayCount));
+        }
     }
 }
 
