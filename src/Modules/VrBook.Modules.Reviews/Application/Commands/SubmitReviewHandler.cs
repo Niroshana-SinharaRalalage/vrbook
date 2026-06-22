@@ -38,10 +38,15 @@ internal sealed class SubmitReviewHandler(
                 "review.eligible",
                 $"Reviews can only be left after the stay. Current status: {booking.Status}.");
         }
+        // Slice 5: idempotent submit. If the guest already reviewed this stay
+        // (e.g. clicked the review.request email link twice), return the
+        // existing review with 200 instead of throwing. The unique index on
+        // (BookingId) in ReviewConfiguration is the backstop against
+        // concurrent races. See SLICE5_PLAN §2.4.
         var existing = await reviews.GetByBookingIdAsync(cmd.BookingId, cancellationToken);
         if (existing is not null)
         {
-            throw new BusinessRuleViolationException("review.once", "You have already reviewed this stay.");
+            return existing.ToDto();
         }
 
         var review = Review.Submit(
