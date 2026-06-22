@@ -8,9 +8,16 @@ internal sealed class BookingEmailLookup(BookingDbContext db) : IBookingEmailLoo
 {
     public async Task<BookingEmailSnapshot?> GetAsync(Guid bookingId, CancellationToken ct = default)
     {
-        var b = await db.Bookings
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == bookingId, ct);
+        // BookingPlaced fires from inside PlaceBookingHandler's serializable
+        // transaction (via the outbox interceptor on SaveChangesAsync). The just-
+        // Added booking is in the change tracker but not yet committed, so an
+        // AsNoTracking query sees nothing. Check Local first so the queue-time
+        // enrichment finds the new row; later events (Confirmed, Cancelled) hit
+        // the DB query because the booking is already committed by then.
+        var b = db.Bookings.Local.FirstOrDefault(x => x.Id == bookingId)
+            ?? await db.Bookings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == bookingId, ct);
         if (b is null)
         {
             return null;
