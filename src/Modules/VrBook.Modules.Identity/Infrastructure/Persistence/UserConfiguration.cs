@@ -19,7 +19,11 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasMaxLength(320)
             .HasConversion(v => v.Value, v => new Email(v))
             .IsRequired();
-        b.HasIndex(u => u.Email).IsUnique();
+        // Slice 4 polish: relaxed to a non-unique index. DevAuth personas can
+        // share an inbox (e.g. niroshanaks@gmail.com) for end-to-end staging
+        // verification. Production uniqueness is enforced upstream at the
+        // Entra IdP (ADR-0012), so the DB constraint was belt-and-suspenders.
+        b.HasIndex(u => u.Email);
 
         b.Property(u => u.DisplayName).HasColumnName("display_name").HasMaxLength(200).IsRequired();
 

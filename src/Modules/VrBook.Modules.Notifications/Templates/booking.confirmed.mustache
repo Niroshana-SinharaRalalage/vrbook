@@ -1,7 +1,18 @@
-<p>Great news — your reservation <strong>{{Reference}}</strong> is confirmed.</p>
-<ul>
-  <li>Check-in: <strong>{{Checkin}}</strong></li>
-  <li>Check-out: <strong>{{Checkout}}</strong></li>
-</ul>
-<p>Your card has now been charged. Keep this email for your records.</p>
-<p>The host will be in touch closer to check-in with arrival details.</p>
+<p>Great news {{GuestDisplayName}} — your reservation <strong>{{Reference}}</strong> at <strong>{{PropertyTitle}}</strong> is confirmed.</p>
+
+<table style="margin: 12px 0; width: 100%; border-collapse: collapse;">
+  <tr><td style="padding: 4px 0;">Check-in</td><td style="padding: 4px 0; text-align: right;"><strong>{{Checkin}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Check-out</td><td style="padding: 4px 0; text-align: right;"><strong>{{Checkout}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Nights</td><td style="padding: 4px 0; text-align: right;"><strong>{{Nights}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Guests</td><td style="padding: 4px 0; text-align: right;"><strong>{{GuestCount}}</strong></td></tr>
+</table>
+
+<table style="margin: 12px 0; width: 100%; border-collapse: collapse; border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb;">
+  <tr><td style="padding: 4px 0;">Subtotal</td><td style="padding: 4px 0; text-align: right;">{{Currency}} {{Subtotal}}</td></tr>
+  <tr><td style="padding: 4px 0;">Fees</td><td style="padding: 4px 0; text-align: right;">{{Currency}} {{Fees}}</td></tr>
+  <tr><td style="padding: 4px 0;">Taxes</td><td style="padding: 4px 0; text-align: right;">{{Currency}} {{Taxes}}</td></tr>
+  <tr><td style="padding: 8px 0 4px;"><strong>Total charged</strong></td><td style="padding: 8px 0 4px; text-align: right;"><strong>{{Currency}} {{Total}}</strong></td></tr>
+</table>
+
+<p>Your card has now been charged. Cancellation policy: <strong>{{CancellationPolicy}}</strong>.</p>
+<p>The host will be in touch closer to check-in with arrival details. Keep this email for your records.</p>

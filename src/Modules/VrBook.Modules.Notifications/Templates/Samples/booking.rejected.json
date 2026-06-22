@@ -1,7 +1,11 @@
 {
   "BookingId": "00000000-0000-0000-0000-000000000001",
   "Reference": "VRB-SAMPLE",
-  "PropertyId": "00000000-0000-0000-0000-000000000002",
-  "GuestUserId": "00000000-0000-0000-0000-000000000003",
+  "PropertyTitle": "Beach Villa",
+  "GuestDisplayName": "Sample Guest",
+  "Checkin": "2026-08-12",
+  "Checkout": "2026-08-14",
+  "Currency": "USD",
+  "Total": "432.40",
   "Reason": "Property unavailable on those dates."
 }

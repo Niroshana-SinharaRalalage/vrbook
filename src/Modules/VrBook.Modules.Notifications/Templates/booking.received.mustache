@@ -1,9 +1,20 @@
-<p>Hi there,</p>
-<p>We've received your reservation request <strong>{{Reference}}</strong>. Your card has been authorized but <em>not charged</em> — we wait for the host's confirmation first.</p>
-<ul>
-  <li>Check-in: <strong>{{Checkin}}</strong></li>
-  <li>Check-out: <strong>{{Checkout}}</strong></li>
-  <li>Decision by: <strong>{{TentativeUntil}}</strong></li>
-</ul>
-<p>If the host doesn't respond by the deadline above, the booking is auto-confirmed unless there's a calendar conflict (in which case it's cancelled, your hold released, no charge).</p>
+<p>Hi {{GuestDisplayName}},</p>
+<p>We've received your reservation request <strong>{{Reference}}</strong> for <strong>{{PropertyTitle}}</strong>. Your card has been authorized but <em>not charged</em> — we wait for the host's confirmation first.</p>
+
+<table style="margin: 12px 0; width: 100%; border-collapse: collapse;">
+  <tr><td style="padding: 4px 0;">Check-in</td><td style="padding: 4px 0; text-align: right;"><strong>{{Checkin}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Check-out</td><td style="padding: 4px 0; text-align: right;"><strong>{{Checkout}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Nights</td><td style="padding: 4px 0; text-align: right;"><strong>{{Nights}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Guests</td><td style="padding: 4px 0; text-align: right;"><strong>{{GuestCount}}</strong></td></tr>
+</table>
+
+<table style="margin: 12px 0; width: 100%; border-collapse: collapse; border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb;">
+  <tr><td style="padding: 4px 0;">Subtotal</td><td style="padding: 4px 0; text-align: right;">{{Currency}} {{Subtotal}}</td></tr>
+  <tr><td style="padding: 4px 0;">Fees</td><td style="padding: 4px 0; text-align: right;">{{Currency}} {{Fees}}</td></tr>
+  <tr><td style="padding: 4px 0;">Taxes</td><td style="padding: 4px 0; text-align: right;">{{Currency}} {{Taxes}}</td></tr>
+  <tr><td style="padding: 8px 0 4px;"><strong>Total authorized</strong></td><td style="padding: 8px 0 4px; text-align: right;"><strong>{{Currency}} {{Total}}</strong></td></tr>
+</table>
+
+<p>Decision deadline: <strong>{{TentativeUntil}}</strong>. Cancellation policy: <strong>{{CancellationPolicy}}</strong>.</p>
+<p>If the host doesn't respond by the deadline, the booking is auto-confirmed unless there's a calendar conflict (in which case it's cancelled, your hold released, no charge).</p>
 <p>You'll get another email when the host responds.</p>

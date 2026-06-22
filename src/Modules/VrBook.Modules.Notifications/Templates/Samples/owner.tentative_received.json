@@ -1,9 +1,16 @@
 {
   "BookingId": "00000000-0000-0000-0000-000000000001",
   "Reference": "VRB-SAMPLE",
-  "PropertyId": "00000000-0000-0000-0000-000000000002",
-  "GuestUserId": "00000000-0000-0000-0000-000000000003",
+  "PropertyTitle": "Beach Villa",
+  "GuestDisplayName": "Sample Guest",
   "Checkin": "2026-08-12",
   "Checkout": "2026-08-14",
-  "TentativeUntil": "2026-06-16T18:00:00+00:00"
+  "Nights": 2,
+  "GuestCount": 2,
+  "Currency": "USD",
+  "Subtotal": "360.00",
+  "Fees": "40.00",
+  "Taxes": "32.40",
+  "Total": "432.40",
+  "TentativeUntil": "2026-08-12T18:00:00+00:00"
 }

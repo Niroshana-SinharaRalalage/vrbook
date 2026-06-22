@@ -1,8 +1,12 @@
-<p>A calendar conflict has been detected between a {{AppName}} direct booking and an external iCal feed.</p>
-<ul>
-  <li>Direct booking: <strong>{{BookingId}}</strong></li>
-  <li>External channel: <strong>{{Channel}}</strong></li>
-  <li>External reservation: <strong>{{ExternalReservationId}}</strong></li>
-</ul>
+<p>A calendar conflict has been detected on <strong>{{PropertyTitle}}</strong> between a {{AppName}} direct booking and an external iCal feed.</p>
+
+<table style="margin: 12px 0; width: 100%; border-collapse: collapse;">
+  <tr><td style="padding: 4px 0;">Direct booking</td><td style="padding: 4px 0; text-align: right;"><strong>{{Reference}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Guest</td><td style="padding: 4px 0; text-align: right;">{{GuestDisplayName}}</td></tr>
+  <tr><td style="padding: 4px 0;">Dates</td><td style="padding: 4px 0; text-align: right;">{{Checkin}} → {{Checkout}}</td></tr>
+  <tr><td style="padding: 4px 0;">External channel</td><td style="padding: 4px 0; text-align: right;"><strong>{{Channel}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">External reservation</td><td style="padding: 4px 0; text-align: right;">{{ExternalReservationId}}</td></tr>
+</table>
+
 <p>This needs a manual decision. Open <strong>/admin/sync</strong> and pick: keep the direct booking, cancel it in favor of the external, or manual override.</p>
 <p>While this conflict sits unresolved, new bookings on the overlapping dates are blocked.</p>

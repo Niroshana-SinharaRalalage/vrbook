@@ -1,9 +1,16 @@
-<p>You have a new reservation request awaiting your decision.</p>
-<ul>
-  <li>Reference: <strong>{{Reference}}</strong></li>
-  <li>Check-in: <strong>{{Checkin}}</strong></li>
-  <li>Check-out: <strong>{{Checkout}}</strong></li>
-  <li>Decide by: <strong>{{TentativeUntil}}</strong></li>
-</ul>
+<p>You have a new reservation request awaiting your decision on <strong>{{PropertyTitle}}</strong>.</p>
+
+<table style="margin: 12px 0; width: 100%; border-collapse: collapse;">
+  <tr><td style="padding: 4px 0;">Reference</td><td style="padding: 4px 0; text-align: right;"><strong>{{Reference}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Guest</td><td style="padding: 4px 0; text-align: right;"><strong>{{GuestDisplayName}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Check-in</td><td style="padding: 4px 0; text-align: right;"><strong>{{Checkin}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Check-out</td><td style="padding: 4px 0; text-align: right;"><strong>{{Checkout}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Nights</td><td style="padding: 4px 0; text-align: right;"><strong>{{Nights}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Guests</td><td style="padding: 4px 0; text-align: right;"><strong>{{GuestCount}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Payout (after fees)</td><td style="padding: 4px 0; text-align: right;"><strong>{{Currency}} {{Subtotal}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Guest total</td><td style="padding: 4px 0; text-align: right;">{{Currency}} {{Total}}</td></tr>
+</table>
+
+<p>Decide by: <strong>{{TentativeUntil}}</strong>.</p>
 <p>If you don't act before the deadline, the booking is auto-confirmed unless a calendar conflict shows up — in which case it's auto-cancelled.</p>
 <p>Review and confirm or reject in your {{AppName}} admin.</p>

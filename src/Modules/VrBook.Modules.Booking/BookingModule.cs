@@ -50,6 +50,10 @@ public sealed class BookingModule : IModuleRegistration
         services.AddScoped<VrBook.Contracts.Interfaces.IBookingMessagingContext,
                            VrBook.Modules.Booking.Infrastructure.Persistence.BookingMessagingContext>();
 
+        // Slice 4 polish: cross-module read for Notifications template enrichment.
+        services.AddScoped<VrBook.Contracts.Interfaces.IBookingEmailLookup,
+                           VrBook.Modules.Booking.Infrastructure.Persistence.BookingEmailLookup>();
+
         services.AddModuleAssembly(typeof(BookingModule).Assembly);
         return services;
     }

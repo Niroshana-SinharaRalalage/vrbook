@@ -24,6 +24,7 @@ namespace VrBook.Modules.Notifications.Application.Handlers;
 internal sealed class BookingNotificationHandlers(
     NotificationsDbContext db,
     IUserEmailLookup users,
+    IBookingEmailLookup bookings,
     ILogger<BookingNotificationHandlers> logger) :
     INotificationHandler<BookingPlaced>,
     INotificationHandler<BookingConfirmed>,
@@ -31,49 +32,79 @@ internal sealed class BookingNotificationHandlers(
     INotificationHandler<BookingCancelled>,
     INotificationHandler<BookingCompleted>
 {
-    public Task Handle(BookingPlaced notification, CancellationToken cancellationToken) =>
-        Queue(NotificationKind.BookingPlaced, notification.GuestUserId,
-            $"Booking received — {notification.Reference}", notification, cancellationToken);
+    public Task Handle(BookingPlaced n, CancellationToken cancellationToken) =>
+        Queue(NotificationKind.BookingPlaced, n.BookingId, n.GuestUserId,
+            $"Booking received — {n.Reference}",
+            extras: new() { ["TentativeUntil"] = n.TentativeUntil.ToString("o") },
+            cancellationToken: cancellationToken);
 
-    public Task Handle(BookingConfirmed notification, CancellationToken cancellationToken) =>
-        Queue(NotificationKind.BookingConfirmed, notification.GuestUserId,
-            $"Your booking is confirmed — {notification.Reference}", notification, cancellationToken);
+    public Task Handle(BookingConfirmed n, CancellationToken cancellationToken) =>
+        Queue(NotificationKind.BookingConfirmed, n.BookingId, n.GuestUserId,
+            $"Your booking is confirmed — {n.Reference}",
+            extras: new() { ["Trigger"] = n.Trigger },
+            cancellationToken: cancellationToken);
 
-    public Task Handle(BookingRejected notification, CancellationToken cancellationToken) =>
-        Queue(NotificationKind.BookingRejected, notification.GuestUserId,
-            $"Booking declined — {notification.Reference}", notification, cancellationToken);
+    public Task Handle(BookingRejected n, CancellationToken cancellationToken) =>
+        Queue(NotificationKind.BookingRejected, n.BookingId, n.GuestUserId,
+            $"Booking declined — {n.Reference}",
+            extras: new() { ["Reason"] = n.Reason },
+            cancellationToken: cancellationToken);
 
-    public Task Handle(BookingCancelled notification, CancellationToken cancellationToken) =>
-        Queue(NotificationKind.BookingCancelled, notification.GuestUserId,
-            $"Booking cancelled — {notification.Reference}", notification, cancellationToken);
+    public Task Handle(BookingCancelled n, CancellationToken cancellationToken) =>
+        Queue(NotificationKind.BookingCancelled, n.BookingId, n.GuestUserId,
+            $"Booking cancelled — {n.Reference}",
+            extras: new()
+            {
+                ["CancelledBy"] = n.CancelledBy,
+                ["RefundAmount"] = n.RefundAmount.ToString("F2"),
+                ["RefundCurrency"] = n.Currency,
+            },
+            cancellationToken: cancellationToken);
 
-    public Task Handle(BookingCompleted notification, CancellationToken cancellationToken) =>
-        Queue(NotificationKind.BookingCompleted, notification.GuestUserId,
-            $"Thanks for staying — {notification.Reference}", notification, cancellationToken);
+    public Task Handle(BookingCompleted n, CancellationToken cancellationToken) =>
+        Queue(NotificationKind.BookingCompleted, n.BookingId, n.GuestUserId,
+            $"Thanks for staying — {n.Reference}",
+            extras: null,
+            cancellationToken: cancellationToken);
 
-    private async Task Queue(NotificationKind kind, Guid recipient, string subject, object payload, CancellationToken ct)
+    private async Task Queue(
+        NotificationKind kind,
+        Guid bookingId,
+        Guid recipient,
+        string subject,
+        Dictionary<string, object>? extras,
+        CancellationToken cancellationToken)
     {
-        var snapshot = await users.GetAsync(recipient, ct);
-        if (snapshot is null)
+        var user = await users.GetAsync(recipient, cancellationToken);
+        if (user is null)
         {
             logger.LogWarning(
-                "User {RecipientId} not found in identity.users; cannot queue notification {Kind}. " +
-                "Booking funnel continues without an email for this event.",
+                "User {RecipientId} not found in identity.users; skipping notification {Kind}.",
                 recipient, kind);
             return;
         }
 
-        var json = JsonSerializer.Serialize(payload, payload.GetType());
+        var booking = await bookings.GetAsync(bookingId, cancellationToken);
+        if (booking is null)
+        {
+            logger.LogWarning(
+                "Booking {BookingId} not found; queueing {Kind} without enriched payload.",
+                bookingId, kind);
+        }
+
+        var payload = NotificationPayload.Build(booking, extras);
+        var json = JsonSerializer.Serialize(payload);
+
         var log = NotificationLog.Queue(
             kind,
             recipientUserId: recipient,
-            recipientEmail: snapshot.Email,
+            recipientEmail: user.Email,
             subject: subject,
             payloadJson: json);
         db.Logs.Add(log);
-        await db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(cancellationToken);
         logger.LogInformation(
             "Queued notification {Kind} for user {RecipientId} ({LogId}) -> {RecipientEmail}.",
-            kind, recipient, log.Id, snapshot.Email);
+            kind, recipient, log.Id, user.Email);
     }
 }

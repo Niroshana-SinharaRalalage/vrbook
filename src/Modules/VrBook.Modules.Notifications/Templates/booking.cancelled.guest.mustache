@@ -1,5 +1,6 @@
-<p>Your reservation <strong>{{Reference}}</strong> has been cancelled.</p>
+<p>Hi {{GuestDisplayName}},</p>
+<p>Your reservation <strong>{{Reference}}</strong> at <strong>{{PropertyTitle}}</strong> ({{Checkin}} → {{Checkout}}) has been cancelled.</p>
 {{#RefundAmount}}
-<p>A refund of <strong>{{RefundAmount}} {{Currency}}</strong> will be issued per the cancellation policy. Expect it in your account within 5–10 business days.</p>
+<p>A refund of <strong>{{RefundCurrency}} {{RefundAmount}}</strong> will be issued per the cancellation policy ({{CancellationPolicy}}). Expect it in your account within 5–10 business days.</p>
 {{/RefundAmount}}
 <p>If you didn't request this cancellation, please reply to this email and we'll investigate.</p>

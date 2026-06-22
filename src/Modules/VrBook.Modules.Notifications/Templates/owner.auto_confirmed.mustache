@@ -1,7 +1,11 @@
-<p>Heads up: we auto-confirmed reservation <strong>{{Reference}}</strong> on your listing because the decision window elapsed without a manual confirm or reject.</p>
-<ul>
-  <li>Check-in: <strong>{{Checkin}}</strong></li>
-  <li>Check-out: <strong>{{Checkout}}</strong></li>
-</ul>
+<p>Heads up: we auto-confirmed reservation <strong>{{Reference}}</strong> on <strong>{{PropertyTitle}}</strong> because the decision window elapsed without a manual confirm or reject.</p>
+
+<table style="margin: 12px 0; width: 100%; border-collapse: collapse;">
+  <tr><td style="padding: 4px 0;">Guest</td><td style="padding: 4px 0; text-align: right;"><strong>{{GuestDisplayName}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Check-in</td><td style="padding: 4px 0; text-align: right;"><strong>{{Checkin}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Check-out</td><td style="padding: 4px 0; text-align: right;"><strong>{{Checkout}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Total</td><td style="padding: 4px 0; text-align: right;"><strong>{{Currency}} {{Total}}</strong></td></tr>
+</table>
+
 <p>The guest's card has been captured per the standard flow. The guest has been notified.</p>
 <p>If this auto-confirm needs to be reversed, contact support quickly — Stripe refund cutoffs apply.</p>

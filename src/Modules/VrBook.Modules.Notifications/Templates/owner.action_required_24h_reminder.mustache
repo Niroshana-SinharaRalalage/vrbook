@@ -1,7 +1,11 @@
-<p>This is a reminder: reservation <strong>{{Reference}}</strong> needs your decision in about an hour.</p>
-<ul>
-  <li>Check-in: <strong>{{Checkin}}</strong></li>
-  <li>Check-out: <strong>{{Checkout}}</strong></li>
-  <li>Auto-decision at: <strong>{{TentativeUntil}}</strong></li>
-</ul>
+<p>Reminder: reservation <strong>{{Reference}}</strong> on <strong>{{PropertyTitle}}</strong> needs your decision in about an hour.</p>
+
+<table style="margin: 12px 0; width: 100%; border-collapse: collapse;">
+  <tr><td style="padding: 4px 0;">Guest</td><td style="padding: 4px 0; text-align: right;"><strong>{{GuestDisplayName}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Check-in</td><td style="padding: 4px 0; text-align: right;"><strong>{{Checkin}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Check-out</td><td style="padding: 4px 0; text-align: right;"><strong>{{Checkout}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Total</td><td style="padding: 4px 0; text-align: right;"><strong>{{Currency}} {{Total}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Auto-decision at</td><td style="padding: 4px 0; text-align: right;"><strong>{{TentativeUntil}}</strong></td></tr>
+</table>
+
 <p>If you don't confirm or reject in time, the booking is auto-confirmed (or auto-cancelled if a calendar conflict has appeared).</p>

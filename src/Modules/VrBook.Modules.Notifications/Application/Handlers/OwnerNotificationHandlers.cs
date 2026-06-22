@@ -29,6 +29,7 @@ namespace VrBook.Modules.Notifications.Application.Handlers;
 internal sealed class OwnerNotificationHandlers(
     NotificationsDbContext db,
     IPropertyOwnerLookup properties,
+    IBookingEmailLookup bookings,
     IUserEmailLookup users,
     IDateTimeProvider clock,
     ILogger<OwnerNotificationHandlers> logger) :
@@ -39,83 +40,74 @@ internal sealed class OwnerNotificationHandlers(
 {
     private static readonly TimeSpan ReminderOffsetBeforeDeadline = TimeSpan.FromHours(1);
 
-    public async Task Handle(BookingPlaced notification, CancellationToken cancellationToken)
+    public async Task Handle(BookingPlaced n, CancellationToken cancellationToken)
     {
-        var ownerEmail = await ResolveOwnerEmail(notification.PropertyId, cancellationToken);
+        var ownerEmail = await ResolveOwnerEmail(n.PropertyId, cancellationToken);
         if (ownerEmail is null)
         {
             return;
         }
 
-        // (1) Immediate "you have a new request" email.
-        await Queue(
-            NotificationKind.OwnerTentativeReceived,
-            ownerEmail,
-            $"Reservation request — {notification.Reference}",
-            notification, cancellationToken);
+        await Queue(NotificationKind.OwnerTentativeReceived, n.BookingId, ownerEmail,
+            $"Reservation request — {n.Reference}",
+            extras: new() { ["TentativeUntil"] = n.TentativeUntil.ToString("o") },
+            cancellationToken: cancellationToken);
 
-        // (2) Deferred 1h-before-deadline reminder. C2's NotBeforeUtc column
-        //     means the dispatcher only picks this up when the time arrives.
-        var reminderAt = notification.TentativeUntil - ReminderOffsetBeforeDeadline;
+        var reminderAt = n.TentativeUntil - ReminderOffsetBeforeDeadline;
         if (reminderAt <= clock.UtcNow)
         {
             logger.LogInformation(
                 "Reminder for {Reference} would fire in the past ({ReminderAt}); skipping.",
-                notification.Reference, reminderAt);
+                n.Reference, reminderAt);
             return;
         }
-        await Queue(
-            NotificationKind.OwnerActionRequiredReminder,
-            ownerEmail,
-            $"Decision needed soon — {notification.Reference}",
-            notification, cancellationToken,
+        await Queue(NotificationKind.OwnerActionRequiredReminder, n.BookingId, ownerEmail,
+            $"Decision needed soon — {n.Reference}",
+            extras: new() { ["TentativeUntil"] = n.TentativeUntil.ToString("o") },
+            cancellationToken: cancellationToken,
             notBeforeUtc: reminderAt);
     }
 
-    public async Task Handle(BookingConfirmed notification, CancellationToken cancellationToken)
+    public async Task Handle(BookingConfirmed n, CancellationToken cancellationToken)
     {
-        // Manual owner-driven confirm doesn't need a courtesy email back to the
-        // owner who just clicked the button.
-        if (!string.Equals(notification.Trigger, "sla", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(n.Trigger, "sla", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
-        var ownerEmail = await ResolveOwnerEmail(notification.PropertyId, cancellationToken);
+        var ownerEmail = await ResolveOwnerEmail(n.PropertyId, cancellationToken);
         if (ownerEmail is null)
         {
             return;
         }
-        await Queue(
-            NotificationKind.OwnerAutoConfirmed,
-            ownerEmail,
-            $"Auto-confirmed — {notification.Reference}",
-            notification, cancellationToken);
+        await Queue(NotificationKind.OwnerAutoConfirmed, n.BookingId, ownerEmail,
+            $"Auto-confirmed — {n.Reference}",
+            extras: new() { ["Trigger"] = n.Trigger },
+            cancellationToken: cancellationToken);
     }
 
-    public async Task Handle(BookingCancelled notification, CancellationToken cancellationToken)
+    public async Task Handle(BookingCancelled n, CancellationToken cancellationToken)
     {
-        var ownerEmail = await ResolveOwnerEmail(notification.PropertyId, cancellationToken);
+        var ownerEmail = await ResolveOwnerEmail(n.PropertyId, cancellationToken);
         if (ownerEmail is null)
         {
             return;
         }
-        await Queue(
-            NotificationKind.OwnerCancellationAlert,
-            ownerEmail,
-            $"Cancelled — {notification.Reference}",
-            notification, cancellationToken);
+        await Queue(NotificationKind.OwnerCancellationAlert, n.BookingId, ownerEmail,
+            $"Cancelled — {n.Reference}",
+            extras: new()
+            {
+                ["CancelledBy"] = n.CancelledBy,
+                ["RefundAmount"] = n.RefundAmount.ToString("F2"),
+                ["RefundCurrency"] = n.Currency,
+            },
+            cancellationToken: cancellationToken);
     }
 
-    public Task Handle(BookingConflictDetected notification, CancellationToken cancellationToken)
+    public Task Handle(BookingConflictDetected n, CancellationToken cancellationToken)
     {
-        // BookingConflictDetected carries BookingId (not PropertyId). To resolve
-        // the owner we would need the booking → property hop, which is a cross-
-        // module read we have not wired yet. For Slice 4 we log the event and
-        // defer the sync_conflict email until OPS / Slice 6 add the booking
-        // lookup. This keeps C4 acceptance criteria 1+3 unblocked.
         logger.LogInformation(
             "BookingConflictDetected received for booking {BookingId}; owner.sync_conflict email skipped until a booking->owner lookup ships.",
-            notification.BookingId);
+            n.BookingId);
         return Task.CompletedTask;
     }
 
@@ -140,16 +132,27 @@ internal sealed class OwnerNotificationHandlers(
 
     private async Task Queue(
         NotificationKind kind,
+        Guid bookingId,
         string ownerEmail,
         string subject,
-        object payload,
+        Dictionary<string, object>? extras,
         CancellationToken cancellationToken,
         DateTimeOffset? notBeforeUtc = null)
     {
-        var json = JsonSerializer.Serialize(payload, payload.GetType());
+        var booking = await bookings.GetAsync(bookingId, cancellationToken);
+        if (booking is null)
+        {
+            logger.LogWarning(
+                "Booking {BookingId} not found; queueing owner {Kind} without enriched payload.",
+                bookingId, kind);
+        }
+
+        var payload = NotificationPayload.Build(booking, extras);
+        var json = JsonSerializer.Serialize(payload);
+
         var log = NotificationLog.Queue(
             kind: kind,
-            recipientUserId: Guid.Empty, // owner-side rows carry the email only.
+            recipientUserId: Guid.Empty,
             recipientEmail: ownerEmail,
             subject: subject,
             payloadJson: json,

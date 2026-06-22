@@ -1,8 +1,14 @@
-<p>Heads up: reservation <strong>{{Reference}}</strong> on your listing was cancelled.</p>
+<p>Heads up: reservation <strong>{{Reference}}</strong> on <strong>{{PropertyTitle}}</strong> was cancelled.</p>
+
+<table style="margin: 12px 0; width: 100%; border-collapse: collapse;">
+  <tr><td style="padding: 4px 0;">Guest</td><td style="padding: 4px 0; text-align: right;"><strong>{{GuestDisplayName}}</strong></td></tr>
+  <tr><td style="padding: 4px 0;">Stay</td><td style="padding: 4px 0; text-align: right;"><strong>{{Checkin}} → {{Checkout}}</strong></td></tr>
 {{#CancelledBy}}
-<p>Cancelled by: <strong>{{CancelledBy}}</strong></p>
+  <tr><td style="padding: 4px 0;">Cancelled by</td><td style="padding: 4px 0; text-align: right;"><strong>{{CancelledBy}}</strong></td></tr>
 {{/CancelledBy}}
 {{#RefundAmount}}
-<p>Refund: <strong>{{RefundAmount}} {{Currency}}</strong>.</p>
+  <tr><td style="padding: 4px 0;">Refund</td><td style="padding: 4px 0; text-align: right;"><strong>{{RefundCurrency}} {{RefundAmount}}</strong></td></tr>
 {{/RefundAmount}}
+</table>
+
 <p>The dates are now free on your calendar.</p>
