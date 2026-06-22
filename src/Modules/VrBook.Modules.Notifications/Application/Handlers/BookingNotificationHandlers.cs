@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MediatR;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using VrBook.Contracts.Events;
 using VrBook.Contracts.Interfaces;
@@ -25,6 +26,8 @@ internal sealed class BookingNotificationHandlers(
     NotificationsDbContext db,
     IUserEmailLookup users,
     IBookingEmailLookup bookings,
+    IConfiguration configuration,
+    IDateTimeProvider clock,
     ILogger<BookingNotificationHandlers> logger) :
     INotificationHandler<BookingPlaced>,
     INotificationHandler<BookingConfirmed>,
@@ -61,11 +64,32 @@ internal sealed class BookingNotificationHandlers(
             },
             cancellationToken: cancellationToken);
 
-    public Task Handle(BookingCompleted n, CancellationToken cancellationToken) =>
-        Queue(NotificationKind.BookingCompleted, n.BookingId, n.GuestUserId,
+    public async Task Handle(BookingCompleted n, CancellationToken cancellationToken)
+    {
+        // (1) Immediate "thanks for staying" row.
+        await Queue(NotificationKind.BookingCompleted, n.BookingId, n.GuestUserId,
             $"Thanks for staying — {n.Reference}",
             extras: null,
             cancellationToken: cancellationToken);
+
+        // (2) Deferred T+1 review request. C2's NotBeforeUtc gating means the
+        //     dispatcher only picks this up 24h later — matches SLICE5_PLAN §2.3.
+        var deepLink = BuildReviewDeepLink(n.BookingId);
+        await Queue(NotificationKind.ReviewRequest, n.BookingId, n.GuestUserId,
+            $"How was your stay? — {n.Reference}",
+            extras: new() { ["DeepLink"] = deepLink },
+            cancellationToken: cancellationToken,
+            notBeforeUtc: clock.UtcNow + TimeSpan.FromHours(24));
+    }
+
+    private string BuildReviewDeepLink(Guid bookingId)
+    {
+        // DevAuth:WebBaseUrl is the existing config key (used by the persona-
+        // switch redirect handoff). Phase 2 renames to App:WebBaseUrl.
+        var webBase = configuration["DevAuth:WebBaseUrl"]?.TrimEnd('/')
+            ?? "https://example.com";
+        return $"{webBase}/account/bookings/{bookingId}/review";
+    }
 
     private async Task Queue(
         NotificationKind kind,
@@ -73,7 +97,8 @@ internal sealed class BookingNotificationHandlers(
         Guid recipient,
         string subject,
         Dictionary<string, object>? extras,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        DateTimeOffset? notBeforeUtc = null)
     {
         var user = await users.GetAsync(recipient, cancellationToken);
         if (user is null)
@@ -100,11 +125,13 @@ internal sealed class BookingNotificationHandlers(
             recipientUserId: recipient,
             recipientEmail: user.Email,
             subject: subject,
-            payloadJson: json);
+            payloadJson: json,
+            notBeforeUtc: notBeforeUtc);
         db.Logs.Add(log);
         await db.SaveChangesAsync(cancellationToken);
         logger.LogInformation(
-            "Queued notification {Kind} for user {RecipientId} ({LogId}) -> {RecipientEmail}.",
-            kind, recipient, log.Id, user.Email);
+            "Queued notification {Kind} for user {RecipientId} ({LogId}) -> {RecipientEmail}{Deferred}.",
+            kind, recipient, log.Id, user.Email,
+            notBeforeUtc is null ? "" : $" deferred until {notBeforeUtc:o}");
     }
 }

@@ -1,0 +1,9 @@
+{
+  "UserId": "00000000-0000-0000-0000-000000000003",
+  "GuestDisplayName": "Sample Guest",
+  "PropertyTitle": "Beach Villa",
+  "OldTier": "Bronze",
+  "NewTier": "Silver",
+  "CompletedStayCount": 3,
+  "NewDiscountPct": "5"
+}

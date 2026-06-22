@@ -1,0 +1,12 @@
+{
+  "BookingId": "00000000-0000-0000-0000-000000000001",
+  "Reference": "VRB-SAMPLE",
+  "PropertyTitle": "Beach Villa",
+  "GuestDisplayName": "Sample Guest",
+  "Checkin": "2026-08-12",
+  "Checkout": "2026-08-14",
+  "Nights": 2,
+  "GuestCount": 2,
+  "Currency": "USD",
+  "Total": "432.40"
+}

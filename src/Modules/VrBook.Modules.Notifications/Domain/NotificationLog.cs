@@ -16,6 +16,10 @@ public enum NotificationKind
     RefundIssued = 11,
     ReviewSubmitted = 20,
 
+    // Slice 5
+    ReviewRequest = 21,
+    LoyaltyTierPromotion = 22,
+
     // Slice 4 C4: owner-side notifications. Reserved at 30+ so the guest-side
     // enum values stay stable; OwnerNotificationHandlers queues these.
     OwnerTentativeReceived = 30,

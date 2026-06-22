@@ -137,11 +137,15 @@ public sealed class MustacheTemplateRenderer : ITemplateRenderer
         // closest guest-side one. Real templates land in Slice 5 / 6.
         NotificationKind.BookingCheckedIn => "booking.confirmed",
         NotificationKind.BookingCheckedOut => "booking.confirmed",
-        NotificationKind.BookingCompleted => "booking.confirmed",
+        NotificationKind.BookingCompleted => "booking.completed",
         NotificationKind.MessageDeliveryDeferred => "booking.received",
         NotificationKind.PaymentCaptured => "booking.confirmed",
         NotificationKind.RefundIssued => "booking.cancelled.guest",
         NotificationKind.ReviewSubmitted => "booking.confirmed",
+
+        // Slice 5
+        NotificationKind.ReviewRequest => "review.request",
+        NotificationKind.LoyaltyTierPromotion => "loyalty.tier_promotion",
 
         // Slice 4 C4: owner-side templates.
         NotificationKind.OwnerTentativeReceived => "owner.tentative_received",
