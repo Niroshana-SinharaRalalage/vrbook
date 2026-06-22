@@ -427,7 +427,7 @@ module bookingExpiryJob 'modules/container-app-job.bicep' = {
 module bookingCompletionJob 'modules/container-app-job.bicep' = {
   name: 'booking-completion-job'
   params: {
-    name: 'caj-vrbook-bookingcompletion-${env}'
+    name: 'caj-vrbook-completion-${env}'
     location: location
     tags: tags
     environmentId: cae.outputs.id
