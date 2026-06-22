@@ -390,9 +390,29 @@ jobs:
             -g ${{ env.RESOURCE_GROUP }} \
             --image ${{ vars.ACR_NAME }}.azurecr.io/vrbook-booking-worker:${{ github.sha }}
 
+  # Booking completion job — Slice 5. Same image as booking-expiry, distinguished
+  # at runtime by the --mode=completion arg baked into the job spec by Bicep.
+  deploy-booking-completion-job:
+    name: deploy booking-completion (job)
+    needs: migrate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Update booking-completion job image
+        run: |
+          az containerapp job update \
+            -n caj-vrbook-bookingcompletion-staging \
+            -g ${{ env.RESOURCE_GROUP }} \
+            --image ${{ vars.ACR_NAME }}.azurecr.io/vrbook-booking-worker:${{ github.sha }}
+
   deploy-api:
     name: deploy api
-    needs: [deploy-sync-worker, deploy-notification-worker, deploy-booking-expiry-job]
+    needs: [deploy-sync-worker, deploy-notification-worker, deploy-booking-expiry-job, deploy-booking-completion-job]
     uses: ./.github/workflows/_deploy-container-app.yml
     with:
       app_name: ca-vrbook-api-staging

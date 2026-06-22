@@ -57,6 +57,9 @@ param memory string = '1Gi'
 @description('Environment variables. Each item: { name, value? | secretRef? }.')
 param envVars array = []
 
+@description('Container entrypoint arguments (e.g. ["--mode=completion"]). Empty = use image default.')
+param commandArgs array = []
+
 @description('KV-backed secrets. Each item: { name, keyVaultSecretName }.')
 param secrets array = []
 
@@ -143,15 +146,18 @@ resource job 'Microsoft.App/jobs@2025-01-01' = {
     )
     template: {
       containers: [
-        {
-          name: 'job'
-          image: containerImage
-          resources: {
-            cpu: json(cpu)
-            memory: memory
-          }
-          env: envVars
-        }
+        union(
+          {
+            name: 'job'
+            image: containerImage
+            resources: {
+              cpu: json(cpu)
+              memory: memory
+            }
+            env: envVars
+          },
+          empty(commandArgs) ? {} : { args: commandArgs }
+        )
       ]
     }
   }

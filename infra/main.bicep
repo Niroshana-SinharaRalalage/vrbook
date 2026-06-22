@@ -394,7 +394,8 @@ module syncJob 'modules/container-app-job.bicep' = {
 // ---------- Booking SLA expiry sweep (scheduled job, */10 * * * *) ----------
 // Slice 0.4: scans Tentative bookings whose 6h window has elapsed. Auto-confirms
 // when no iCal conflict; auto-cancels (and cancels the Stripe auth-hold) when one
-// exists. See docs/REPLAN.md slice 0.4.
+// exists. Default --mode=expiry on the worker, so no args block needed.
+// See docs/REPLAN.md slice 0.4.
 module bookingExpiryJob 'modules/container-app-job.bicep' = {
   name: 'booking-expiry-job'
   params: {
@@ -414,6 +415,35 @@ module bookingExpiryJob 'modules/container-app-job.bicep' = {
     envVars: apiEnvVars
     secrets: apiSecrets
     keyVaultName: kv.outputs.name
+  }
+}
+
+// ---------- Booking completion sweep (scheduled job, 0 6 * * * UTC) ----------
+// Slice 5: scans CheckedOut bookings whose CheckedOutAt is at least 24h old,
+// calls Booking.Complete() which raises BookingCompleted -> Loyalty stay-count
+// increment + Notifications "thanks for staying" + deferred review.request
+// email. Same worker image as bookingExpiryJob, distinguished by --mode arg.
+// See docs/SLICE5_PLAN.md §2.1.
+module bookingCompletionJob 'modules/container-app-job.bicep' = {
+  name: 'booking-completion-job'
+  params: {
+    name: 'caj-vrbook-bookingcompletion-${env}'
+    location: location
+    tags: tags
+    environmentId: cae.outputs.id
+    containerImage: bookingWorkerImage
+    registryServer: acr.outputs.loginServer
+    userAssignedIdentityId: mi.outputs.id
+    workloadProfileName: 'Consumption'
+    triggerType: 'Schedule'
+    cronExpression: '0 6 * * *'
+    replicaTimeoutSeconds: 600
+    cpu: '0.5'
+    memory: '1Gi'
+    envVars: apiEnvVars
+    secrets: apiSecrets
+    keyVaultName: kv.outputs.name
+    commandArgs: ['--mode=completion']
   }
 }
 

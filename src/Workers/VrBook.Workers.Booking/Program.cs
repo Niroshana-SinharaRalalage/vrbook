@@ -18,10 +18,12 @@ using VrBook.Modules.Pricing;
 using VrBook.Modules.Sync;
 
 // =================================================================================
-// VrBook.Workers.Booking — Slice 0.4 booking SLA sweep.
-// Container App Job, cron */10 * * * *. One-shot per tick: scan Tentative
-// bookings whose TentativeUntil has passed, dispatch ExpirySweepCommand which
-// auto-confirms or auto-expires each. See docs/REPLAN.md slice 0.4.
+// VrBook.Workers.Booking — Container App Job for booking sweeps.
+// One image, two modes selected via --mode arg:
+//   --mode=expiry     Slice 0.4 SLA sweep, cron */10 * * * *. ExpirySweepCommand.
+//   --mode=completion Slice 5 daily sweep, cron 0 6 * * *. CompletionSweepCommand.
+// Default mode is 'expiry' so the existing booking-expiry-job needs no Bicep arg.
+// See docs/REPLAN.md slice 0.4 + docs/SLICE5_PLAN.md §2.1.
 // =================================================================================
 
 Log.Logger = new LoggerConfiguration()
@@ -70,24 +72,48 @@ try
     using var host = builder.Build();
     var logger = host.Services.GetRequiredService<ILogger<Program>>();
 
-    logger.LogInformation("Booking Expiry Worker — Slice 0.4 sweep starting.");
+    var mode = ReadMode(args);
+    logger.LogInformation("Booking Worker starting in mode={Mode}.", mode);
 
     using var scope = host.Services.CreateScope();
     var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
-    var result = await mediator.Send(new ExpirySweepCommand());
 
-    logger.LogInformation(
-        "Booking Expiry sweep complete. scanned={Scanned} autoConfirmed={Confirmed} autoExpired={Expired} skipped={Skipped}",
-        result.Scanned, result.AutoConfirmed, result.AutoExpired, result.Skipped);
-
-    return result.Skipped > 0 && result.AutoConfirmed == 0 && result.AutoExpired == 0 ? 2 : 0;
+    if (mode == "completion")
+    {
+        var r = await mediator.Send(new CompletionSweepCommand());
+        logger.LogInformation(
+            "Booking Completion sweep complete. scanned={Scanned} completed={Completed} skipped={Skipped}",
+            r.Scanned, r.Completed, r.Skipped);
+        return r.Skipped > 0 && r.Completed == 0 ? 2 : 0;
+    }
+    else
+    {
+        var r = await mediator.Send(new ExpirySweepCommand());
+        logger.LogInformation(
+            "Booking Expiry sweep complete. scanned={Scanned} autoConfirmed={Confirmed} autoExpired={Expired} skipped={Skipped}",
+            r.Scanned, r.AutoConfirmed, r.AutoExpired, r.Skipped);
+        return r.Skipped > 0 && r.AutoConfirmed == 0 && r.AutoExpired == 0 ? 2 : 0;
+    }
 }
 catch (Exception ex)
 {
-    Log.Fatal(ex, "Booking Expiry Worker crashed");
+    Log.Fatal(ex, "Booking Worker crashed");
     return 1;
 }
 finally
 {
     await Log.CloseAndFlushAsync();
+}
+
+static string ReadMode(string[] args)
+{
+    foreach (var a in args)
+    {
+        if (a.StartsWith("--mode=", StringComparison.OrdinalIgnoreCase))
+        {
+            var v = a["--mode=".Length..].Trim().ToLowerInvariant();
+            return v is "expiry" or "completion" ? v : "expiry";
+        }
+    }
+    return "expiry";
 }
