@@ -14,7 +14,15 @@ public static class OutboxRegistration
 {
     public static IServiceCollection AddOutbox(this IServiceCollection services)
     {
-        services.AddSingleton<IDomainEventPublisher, MediatRDomainEventPublisher>();
+        // Scoped (not Singleton) so MediatR resolves INotificationHandler<T>
+        // instances from the same DI scope as the calling DbContext/handler.
+        // A singleton publisher would force MediatR to create a fresh scope per
+        // Publish call, which gives the handler a different BookingDbContext
+        // whose ChangeTracker is empty — so cross-module lookups in the
+        // notification handlers (e.g. IBookingEmailLookup checking Local for
+        // an in-transaction booking) silently return null and queue blank
+        // emails.
+        services.AddScoped<IDomainEventPublisher, MediatRDomainEventPublisher>();
         // Scoped so each DbContext instance gets its own interceptor with its own
         // per-SaveChanges-call state buffer.
         services.AddScoped<DomainEventOutboxInterceptor>();
