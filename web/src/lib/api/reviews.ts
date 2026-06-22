@@ -37,3 +37,25 @@ export const listReviewsForProperty = (propertyId: string, cursor?: string): Pro
     query: { cursor, limit: 20 },
     anonymous: true,
   });
+
+export const respondToReview = (id: string, body: string): Promise<void> =>
+  apiFetch<void>(`/api/v1/reviews/${encodeURIComponent(id)}/response`, {
+    method: 'POST',
+    body: { body },
+  });
+
+export const adminListReviews = (status?: Review['status']): Promise<readonly Review[]> => {
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  const qs = params.toString();
+  return apiFetch<readonly Review[]>(`/api/v1/admin/reviews${qs ? `?${qs}` : ''}`);
+};
+
+export const adminHideReview = (id: string): Promise<void> =>
+  apiFetch<void>(`/api/v1/admin/reviews/${encodeURIComponent(id)}/hide`, { method: 'POST' });
+
+export const adminRestoreReview = (id: string): Promise<void> =>
+  apiFetch<void>(`/api/v1/admin/reviews/${encodeURIComponent(id)}/restore`, { method: 'POST' });
+
+export const adminRejectReview = (id: string): Promise<void> =>
+  apiFetch<void>(`/api/v1/admin/reviews/${encodeURIComponent(id)}/reject`, { method: 'POST' });
