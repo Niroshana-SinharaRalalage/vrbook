@@ -7,6 +7,9 @@ import { ArrowLeft, CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-rea
 
 import {
   adminGetBooking,
+  backdateCheckedOutAt,
+  checkInBooking,
+  checkOutBooking,
   confirmBooking,
   rejectBooking,
   type Booking,
@@ -121,6 +124,34 @@ const AdminBookingDetailPage = () => {
     }
   };
 
+  const runAction = async (
+    label: string,
+    fn: (id: string) => Promise<Booking | void>,
+    refresh = false,
+  ) => {
+    setActing(true);
+    setError(null);
+    try {
+      const result = await fn(booking.id);
+      if (result && typeof result === 'object' && 'status' in result) {
+        setBooking(result as Booking);
+      } else if (refresh) {
+        const fresh = await adminGetBooking(booking.id);
+        setBooking(fresh);
+      }
+    } catch (err) {
+      setError(
+        err instanceof ApiProblemError
+          ? err.problem.detail ?? err.message
+          : err instanceof Error
+            ? err.message
+            : `${label} failed`,
+      );
+    } finally {
+      setActing(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="text-sm text-muted-foreground">
@@ -139,6 +170,56 @@ const AdminBookingDetailPage = () => {
           {booking.status === 'Tentative' ? 'Awaiting your decision' : booking.status}
         </span>
       </div>
+
+      {(booking.status === 'Confirmed' || booking.status === 'CheckedIn' || booking.status === 'CheckedOut') && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-300 bg-blue-50 p-4 dark:border-blue-700 dark:bg-blue-900/20">
+          <div className="flex items-start gap-3">
+            <Clock className="mt-0.5 h-5 w-5 text-blue-700 dark:text-blue-300" aria-hidden />
+            <div className="text-sm">
+              <p className="font-medium text-blue-900 dark:text-blue-100">Stay lifecycle</p>
+              <p className="text-blue-800 dark:text-blue-200">
+                Move the booking through the stay lifecycle. CheckOut sets the
+                clock for the daily completion sweep (24h later it flips to
+                Completed and the post-stay loop fires). The Backdate button is
+                a dev-only shortcut so the completion sweep can run today.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {booking.status === 'Confirmed' && (
+              <button
+                onClick={() => void runAction('Check-in', checkInBooking)}
+                disabled={acting}
+                className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                <CheckCircle2 className="h-4 w-4" aria-hidden /> Check in
+              </button>
+            )}
+            {booking.status === 'CheckedIn' && (
+              <button
+                onClick={() => void runAction('Check-out', checkOutBooking)}
+                disabled={acting}
+                className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                <CheckCircle2 className="h-4 w-4" aria-hidden /> Check out
+              </button>
+            )}
+            {booking.status === 'CheckedOut' && (
+              <button
+                onClick={async () => {
+                  if (!window.confirm('Backdate CheckedOutAt by 25h so the completion sweep can run today?')) return;
+                  await runAction('Backdate', (id) => backdateCheckedOutAt(id, 25), true);
+                  window.alert('Done. Now trigger the completion sweep in Azure:\n\naz containerapp job start -n caj-vrbook-completion-staging -g rg-vrbook-staging');
+                }}
+                disabled={acting}
+                className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50 dark:text-blue-300 dark:hover:bg-blue-950/30"
+              >
+                <Clock className="h-4 w-4" aria-hidden /> Backdate -25h (dev)
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {booking.status === 'Tentative' && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-yellow-300 bg-yellow-50 p-4 dark:border-yellow-700 dark:bg-yellow-900/20">

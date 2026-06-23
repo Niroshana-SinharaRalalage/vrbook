@@ -177,6 +177,21 @@ export const rejectBooking = (id: string, reason: string): Promise<Booking> =>
     body: { reason },
   });
 
+export const checkInBooking = (id: string): Promise<Booking> =>
+  apiFetch<Booking>(`/api/v1/bookings/${encodeURIComponent(id)}/check-in`, { method: 'POST' });
+
+export const checkOutBooking = (id: string): Promise<Booking> =>
+  apiFetch<Booking>(`/api/v1/bookings/${encodeURIComponent(id)}/check-out`, { method: 'POST' });
+
+// Slice 5 dev bridge — back-dates CheckedOutAt so the completion sweep
+// predicate (CheckedOutAt <= NOW() - 24h) matches on a same-day verification.
+// DevAuth-only on the API side; 404s in production.
+export const backdateCheckedOutAt = (bookingId: string, hoursAgo = 25): Promise<void> =>
+  apiFetch<void>(
+    `/api/v1/dev-auth/backdate-checked-out-at?bookingId=${encodeURIComponent(bookingId)}&hoursAgo=${hoursAgo}`,
+    { method: 'POST' },
+  );
+
 // ---- Payment ------------------------------------------------------------
 export interface PaymentIntent {
   readonly id: string;
