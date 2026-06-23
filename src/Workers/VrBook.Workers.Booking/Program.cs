@@ -56,22 +56,17 @@ try
     builder.Services.AddOutbox();
     builder.Services.AddInfrastructureCore(builder.Configuration);
 
-    // Module assemblies for MediatR handler discovery. Loyalty + Notifications
-    // + Identity are required for --mode=completion: Booking.Complete() raises
-    // BookingCompleted which Loyalty consumes (increment stay count, raise
-    // TierPromoted) and Notifications consumes (queue thanks-for-staying +
-    // deferred review.request rows). Identity ships IUserEmailLookup that the
-    // notification handlers need to resolve recipient addresses.
-    builder.Services.AddMediatR(cfg => cfg
-        .RegisterServicesFromAssembly(typeof(BookingModule).Assembly)
-        .RegisterServicesFromAssembly(typeof(PaymentModule).Assembly)
-        .RegisterServicesFromAssembly(typeof(PricingModule).Assembly)
-        .RegisterServicesFromAssembly(typeof(CatalogModule).Assembly)
-        .RegisterServicesFromAssembly(typeof(SyncModule).Assembly)
-        .RegisterServicesFromAssembly(typeof(LoyaltyModule).Assembly)
-        .RegisterServicesFromAssembly(typeof(NotificationsModule).Assembly)
-        .RegisterServicesFromAssembly(typeof(IdentityModule).Assembly));
-
+    // Each Add*Module() extension internally calls AddModuleAssembly() which
+    // calls services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(module)).
+    // We do NOT do an explicit AddMediatR scan here — that registered every
+    // handler twice. For IRequest<TResponse> handlers MediatR resolves a single
+    // one so duplicates are silently deduped, but INotificationHandler
+    // subscribers (e.g. BookingNotificationHandlers handling BookingCompleted)
+    // get called for EACH registration, queuing duplicate emails. Loyalty +
+    // Notifications + Identity are required for --mode=completion: when the
+    // sweep calls Booking.Complete() the BookingCompleted event ripples through
+    // Loyalty (stay count + TierPromoted) and Notifications (thanks-for-staying
+    // + review request emails). Identity ships IUserEmailLookup.
     builder.Services.AddCatalogModule(builder.Configuration);
     builder.Services.AddPricingModule(builder.Configuration);
     builder.Services.AddBookingModule(builder.Configuration);
