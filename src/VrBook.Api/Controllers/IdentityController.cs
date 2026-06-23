@@ -120,6 +120,48 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
     }
 
     /// <summary>
+    /// Slice 5 dev bridge: backdate a booking's CheckedOutAt so the daily
+    /// completion sweep (predicate <c>CheckedOutAt &lt;= NOW() - 24h</c>) can
+    /// fire on it during a same-day verification walk. DevAuth-only.
+    /// </summary>
+    [HttpPost("backdate-checked-out-at")]
+    public async Task<IActionResult> BackdateCheckedOutAt(
+        [FromQuery] Guid bookingId,
+        [FromQuery] int hoursAgo,
+        [FromServices] IConfiguration cfg,
+        [FromServices] Npgsql.NpgsqlDataSource? dataSource,
+        CancellationToken ct)
+    {
+        if (!configuration.GetValue<bool>("DevAuth:AllowAnonymous"))
+        {
+            return NotFound();
+        }
+        if (hoursAgo < 1 || hoursAgo > 168)
+        {
+            return BadRequest(new { detail = "hoursAgo must be between 1 and 168 (one week)." });
+        }
+        var conn = cfg.GetConnectionString("Postgres")
+            ?? throw new InvalidOperationException("Postgres connection string not configured.");
+        await using var c = new Npgsql.NpgsqlConnection(conn);
+        await c.OpenAsync(ct);
+        await using var cmd = c.CreateCommand();
+        cmd.CommandText = """
+            UPDATE booking.bookings
+            SET checked_out_at = NOW() - make_interval(hours => @hours)
+            WHERE "Id" = @id
+              AND status = 4 -- CheckedOut
+            """;
+        cmd.Parameters.AddWithValue("@id", bookingId);
+        cmd.Parameters.AddWithValue("@hours", hoursAgo);
+        var rows = await cmd.ExecuteNonQueryAsync(ct);
+        if (rows == 0)
+        {
+            return NotFound(new { detail = "Booking not found OR not in CheckedOut state." });
+        }
+        return Ok(new { bookingId, checkedOutAtHoursAgo = hoursAgo });
+    }
+
+    /// <summary>
     /// Slice 4 dev bridge: repoint a DevAuth persona's User row at a real
     /// inbox. Future bookings placed by that persona land in the real mailbox
     /// because the notification handler resolves the email via IUserEmailLookup
