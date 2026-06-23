@@ -16,6 +16,7 @@ import {
   type BookingStatus,
 } from '@/lib/api/booking';
 import { ApiProblemError } from '@/lib/api/client';
+import { getDevPersonas } from '@/lib/api/devAuth';
 import { formatCurrency } from '@/lib/utils/currency';
 
 const STATUS_PILL: Record<BookingStatus, string> = {
@@ -40,6 +41,10 @@ const AdminBookingDetailPage = () => {
   const [acting, setActing] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  // True only when /dev-auth/personas returns 200 (DevAuth:AllowAnonymous=true).
+  // Same gate the existing DevPersonaSwitcher uses to hide itself in production,
+  // so the Backdate dev shortcut is invisible to real users.
+  const [devAuth, setDevAuth] = useState(false);
 
   const reload = async () => {
     try {
@@ -62,6 +67,14 @@ const AdminBookingDetailPage = () => {
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getDevPersonas()
+      .then(() => { if (!cancelled) setDevAuth(true); })
+      .catch(() => { /* 404 in production — leave devAuth=false */ });
+    return () => { cancelled = true; };
+  }, []);
 
   if (loading) {
     return (
@@ -179,9 +192,13 @@ const AdminBookingDetailPage = () => {
               <p className="font-medium text-blue-900 dark:text-blue-100">Stay lifecycle</p>
               <p className="text-blue-800 dark:text-blue-200">
                 Move the booking through the stay lifecycle. CheckOut sets the
-                clock for the daily completion sweep (24h later it flips to
-                Completed and the post-stay loop fires). The Backdate button is
-                a dev-only shortcut so the completion sweep can run today.
+                clock for the daily completion sweep — 24h later the booking
+                flips to Completed and the post-stay loop fires (review email,
+                loyalty count).
+                {devAuth && booking.status === 'CheckedOut' && (
+                  <> The Backdate button is a dev-only shortcut so the
+                  completion sweep can run today.</>
+                )}
               </p>
             </div>
           </div>
@@ -204,7 +221,7 @@ const AdminBookingDetailPage = () => {
                 <CheckCircle2 className="h-4 w-4" aria-hidden /> Check out
               </button>
             )}
-            {booking.status === 'CheckedOut' && (
+            {booking.status === 'CheckedOut' && devAuth && (
               <button
                 onClick={async () => {
                   if (!window.confirm('Backdate CheckedOutAt by 25h so the completion sweep can run today?')) return;
