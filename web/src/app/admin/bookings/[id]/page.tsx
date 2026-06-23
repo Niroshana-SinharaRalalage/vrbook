@@ -208,8 +208,22 @@ const AdminBookingDetailPage = () => {
               <button
                 onClick={async () => {
                   if (!window.confirm('Backdate CheckedOutAt by 25h so the completion sweep can run today?')) return;
-                  await runAction('Backdate', (id) => backdateCheckedOutAt(id, 25), true);
-                  window.alert('Done. Now trigger the completion sweep in Azure:\n\naz containerapp job start -n caj-vrbook-completion-staging -g rg-vrbook-staging');
+                  setActing(true);
+                  setError(null);
+                  try {
+                    await backdateCheckedOutAt(booking.id, 25);
+                    const fresh = await adminGetBooking(booking.id);
+                    setBooking(fresh);
+                    window.alert('Backdate applied. Now trigger the completion sweep in Azure:\n\naz containerapp job start -n caj-vrbook-completion-staging -g rg-vrbook-staging');
+                  } catch (err) {
+                    setError(
+                      err instanceof ApiProblemError
+                        ? err.problem.detail ?? err.message
+                        : err instanceof Error ? err.message : 'Backdate failed',
+                    );
+                  } finally {
+                    setActing(false);
+                  }
                 }}
                 disabled={acting}
                 className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50 dark:text-blue-300 dark:hover:bg-blue-950/30"

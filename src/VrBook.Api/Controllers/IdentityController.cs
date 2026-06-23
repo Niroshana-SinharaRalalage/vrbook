@@ -145,11 +145,14 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
         await using var c = new Npgsql.NpgsqlConnection(conn);
         await c.OpenAsync(ct);
         await using var cmd = c.CreateCommand();
+        // BookingConfiguration maps Status with HasConversion<string>(), so the
+        // column is character varying and must be compared to the enum NAME,
+        // not the int value.
         cmd.CommandText = """
             UPDATE booking.bookings
             SET checked_out_at = NOW() - make_interval(hours => @hours)
             WHERE "Id" = @id
-              AND status = 4 -- CheckedOut
+              AND status = 'CheckedOut'
             """;
         cmd.Parameters.AddWithValue("@id", bookingId);
         cmd.Parameters.AddWithValue("@hours", hoursAgo);
