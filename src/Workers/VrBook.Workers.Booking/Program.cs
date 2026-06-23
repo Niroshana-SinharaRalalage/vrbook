@@ -13,6 +13,9 @@ using VrBook.Infrastructure.Outbox;
 using VrBook.Modules.Booking;
 using VrBook.Modules.Booking.Application.Commands;
 using VrBook.Modules.Catalog;
+using VrBook.Modules.Identity;
+using VrBook.Modules.Loyalty;
+using VrBook.Modules.Notifications;
 using VrBook.Modules.Payment;
 using VrBook.Modules.Pricing;
 using VrBook.Modules.Sync;
@@ -53,21 +56,30 @@ try
     builder.Services.AddOutbox();
     builder.Services.AddInfrastructureCore(builder.Configuration);
 
-    // Module assemblies for MediatR handler discovery.
+    // Module assemblies for MediatR handler discovery. Loyalty + Notifications
+    // + Identity are required for --mode=completion: Booking.Complete() raises
+    // BookingCompleted which Loyalty consumes (increment stay count, raise
+    // TierPromoted) and Notifications consumes (queue thanks-for-staying +
+    // deferred review.request rows). Identity ships IUserEmailLookup that the
+    // notification handlers need to resolve recipient addresses.
     builder.Services.AddMediatR(cfg => cfg
         .RegisterServicesFromAssembly(typeof(BookingModule).Assembly)
         .RegisterServicesFromAssembly(typeof(PaymentModule).Assembly)
         .RegisterServicesFromAssembly(typeof(PricingModule).Assembly)
         .RegisterServicesFromAssembly(typeof(CatalogModule).Assembly)
-        .RegisterServicesFromAssembly(typeof(SyncModule).Assembly));
+        .RegisterServicesFromAssembly(typeof(SyncModule).Assembly)
+        .RegisterServicesFromAssembly(typeof(LoyaltyModule).Assembly)
+        .RegisterServicesFromAssembly(typeof(NotificationsModule).Assembly)
+        .RegisterServicesFromAssembly(typeof(IdentityModule).Assembly));
 
-    // Modules: Booking does the sweep, Payment handles capture/cancel,
-    // Sync provides the IExternalChannelConflictChecker real implementation.
     builder.Services.AddCatalogModule(builder.Configuration);
     builder.Services.AddPricingModule(builder.Configuration);
     builder.Services.AddBookingModule(builder.Configuration);
     builder.Services.AddPaymentModule(builder.Configuration);
     builder.Services.AddSyncModule(builder.Configuration);
+    builder.Services.AddLoyaltyModule(builder.Configuration);
+    builder.Services.AddNotificationsModule(builder.Configuration);
+    builder.Services.AddIdentityModule(builder.Configuration);
 
     using var host = builder.Build();
     var logger = host.Services.GetRequiredService<ILogger<Program>>();

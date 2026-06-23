@@ -26,6 +26,11 @@
     <ProjectReference Include="..\..\Modules\VrBook.Modules.Pricing\VrBook.Modules.Pricing.csproj" />
     <ProjectReference Include="..\..\Modules\VrBook.Modules.Payment\VrBook.Modules.Payment.csproj" />
     <ProjectReference Include="..\..\Modules\VrBook.Modules.Sync\VrBook.Modules.Sync.csproj" />
+    <!-- Slice 5: CompletionSweep raises BookingCompleted which Loyalty + Notifications
+         must consume in-process; Identity ships IUserEmailLookup. -->
+    <ProjectReference Include="..\..\Modules\VrBook.Modules.Loyalty\VrBook.Modules.Loyalty.csproj" />
+    <ProjectReference Include="..\..\Modules\VrBook.Modules.Notifications\VrBook.Modules.Notifications.csproj" />
+    <ProjectReference Include="..\..\Modules\VrBook.Modules.Identity\VrBook.Modules.Identity.csproj" />
   </ItemGroup>
 
   <ItemGroup>
