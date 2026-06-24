@@ -38,7 +38,10 @@ public sealed class ComputeQuoteHandlerTests
         var repo = Substitute.For<IPricingPlanRepository>();
         repo.GetByPropertyIdAsync(plan.PropertyId, Arg.Any<CancellationToken>())
             .Returns(plan);
-        return new ComputeQuoteHandler(repo);
+        var clock = Substitute.For<VrBook.Contracts.Interfaces.IDateTimeProvider>();
+        clock.UtcNow.Returns(new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero));
+        clock.Today.Returns(new DateOnly(2026, 8, 1));
+        return new ComputeQuoteHandler(repo, clock);
     }
 
     [Fact]
@@ -219,7 +222,10 @@ public sealed class ComputeQuoteHandlerTests
         var repo = Substitute.For<IPricingPlanRepository>();
         repo.GetByPropertyIdAsync(propertyId, Arg.Any<CancellationToken>())
             .Returns((PricingPlan?)null);
-        var handler = new ComputeQuoteHandler(repo);
+        var clock = Substitute.For<VrBook.Contracts.Interfaces.IDateTimeProvider>();
+        clock.UtcNow.Returns(new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero));
+        clock.Today.Returns(new DateOnly(2026, 8, 1));
+        var handler = new ComputeQuoteHandler(repo, clock);
         var cmd = new ComputeQuoteCommand(propertyId,
             new QuoteRequest(new DateOnly(2026, 8, 4), new DateOnly(2026, 8, 7), 2, false));
 
@@ -237,7 +243,10 @@ public sealed class ComputeQuoteHandlerTests
 
         var quote = await HandlerWith(plan).Handle(cmd, default);
 
-        var diff = (quote.ExpiresAt - DateTimeOffset.UtcNow).TotalMinutes;
+        // Handler uses the injected IDateTimeProvider; HandlerWith freezes that
+        // clock at 2026-08-01T00:00:00Z, so ExpiresAt is 2026-08-01T00:15:00Z.
+        var frozenNow = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
+        var diff = (quote.ExpiresAt - frozenNow).TotalMinutes;
         diff.Should().BeInRange(14.5, 15.5);
     }
 }

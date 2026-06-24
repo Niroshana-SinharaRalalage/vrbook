@@ -2,12 +2,14 @@ using MediatR;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Enums;
+using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
 using VrBook.Modules.Pricing.Infrastructure.Persistence;
+using PricingRule = VrBook.Modules.Pricing.Domain.PricingRule;
 
 namespace VrBook.Modules.Pricing.Application.Quotes.Commands;
 
-internal sealed class ComputeQuoteHandler(IPricingPlanRepository plans)
+internal sealed class ComputeQuoteHandler(IPricingPlanRepository plans, IDateTimeProvider clock)
     : IRequestHandler<ComputeQuoteCommand, QuoteDto>
 {
     public async Task<QuoteDto> Handle(ComputeQuoteCommand request, CancellationToken cancellationToken)
@@ -39,15 +41,23 @@ internal sealed class ComputeQuoteHandler(IPricingPlanRepository plans)
 
         // Build per-night lines. Friday + Saturday nights use WeekendRate.
         var nightlyLines = new List<NightlyLineDto>();
-        var subtotalAmount = 0m;
         for (var i = 0; i < nights; i++)
         {
             var date = r.Checkin.AddDays(i);
             var isWeekend = date.DayOfWeek is DayOfWeek.Friday or DayOfWeek.Saturday;
             var rate = isWeekend && plan.WeekendRate > 0 ? plan.WeekendRate : plan.BaseNightlyRate;
             nightlyLines.Add(new NightlyLineDto(date, new Money(rate, currency), isWeekend ? "weekend" : "base"));
-            subtotalAmount += rate;
         }
+
+        // Apply enabled rules in priority ascending (lower number first) — see
+        // docs/SLICE6_PLAN.md §2.4 + §2.4.1. Order matters whenever Absolute or
+        // Override appears in the stack; that's a contract, not an accident.
+        foreach (var rule in plan.Rules.Where(rl => rl.IsEnabled).OrderBy(rl => rl.Priority))
+        {
+            ApplyRule(nightlyLines, rule, r, clock, currency, nights);
+        }
+
+        var subtotalAmount = nightlyLines.Sum(n => n.Amount.Amount);
 
         // Apply fees.
         var feeLines = new List<FeeLineDto>();
@@ -78,7 +88,6 @@ internal sealed class ComputeQuoteHandler(IPricingPlanRepository plans)
             }
         }
 
-        // A3 v1: no loyalty discount, no dynamic adjustments. A3.1 work.
         var discountAmount = 0m;
         var totalAmount = subtotalAmount + cleaningAmount + taxesAmount - discountAmount;
 
@@ -92,6 +101,85 @@ internal sealed class ComputeQuoteHandler(IPricingPlanRepository plans)
             Discount: new Money(discountAmount, currency),
             Taxes: new Money(taxesAmount, currency),
             Total: new Money(totalAmount, currency),
-            ExpiresAt: DateTimeOffset.UtcNow.AddMinutes(15));
+            ExpiresAt: clock.UtcNow.AddMinutes(15));
     }
+
+    /// <summary>
+    /// Mutates <paramref name="nights"/> per the §2.4.1 matrix.
+    /// <list type="bullet">
+    ///   <item><c>DateRangeOverride</c> applies per-night within [StartDate, EndDate].</item>
+    ///   <item><c>LastMinute</c> applies to every night when (Checkin - Today) ≤ DaysBeforeCheckin.</item>
+    ///   <item><c>LengthOfStay</c> applies to every night when MinNights ≤ Nights and (MaxNights null or Nights ≤ MaxNights).</item>
+    /// </list>
+    /// The <c>RuleApplied</c> badge is preserved at the first (highest-priority)
+    /// applied rule's short name — subsequent rules that also touch a night
+    /// adjust the amount but don't rewrite the badge.
+    /// </summary>
+    private static void ApplyRule(
+        List<NightlyLineDto> nights,
+        PricingRule rule,
+        QuoteRequest req,
+        IDateTimeProvider clock,
+        string currency,
+        int totalNights)
+    {
+        var wholeStayApplies = rule.Kind switch
+        {
+            PricingRuleKind.LastMinute =>
+                (req.Checkin.DayNumber - clock.Today.DayNumber) <= rule.DaysBeforeCheckin!.Value,
+            PricingRuleKind.LengthOfStay =>
+                totalNights >= rule.MinNights!.Value
+                && (rule.MaxNights is null || totalNights <= rule.MaxNights.Value),
+            _ => false,
+        };
+
+        var label = ShortName(rule.Kind);
+
+        for (var i = 0; i < nights.Count; i++)
+        {
+            var night = nights[i];
+            var applies = rule.Kind switch
+            {
+                PricingRuleKind.DateRangeOverride =>
+                    night.Date >= rule.StartDate!.Value && night.Date <= rule.EndDate!.Value,
+                PricingRuleKind.LastMinute or PricingRuleKind.LengthOfStay => wholeStayApplies,
+                _ => throw new BusinessRuleViolationException(
+                    "quote.invalid_rule",
+                    $"Rule kind {rule.Kind} is not handled by the quote engine."),
+            };
+
+            if (!applies)
+            {
+                continue;
+            }
+
+            var newAmount = rule.AdjustmentKind switch
+            {
+                PricingAdjustmentKind.Multiplier => night.Amount.Amount * rule.AdjustmentValue,
+                PricingAdjustmentKind.Absolute => night.Amount.Amount + rule.AdjustmentValue,
+                PricingAdjustmentKind.Override => rule.AdjustmentValue,
+                _ => throw new BusinessRuleViolationException(
+                    "quote.invalid_rule",
+                    $"Unknown adjustment kind {rule.AdjustmentKind}."),
+            };
+
+            // Keep the highest-priority applied rule's name on the badge.
+            // Lower priority number wins, and we iterate ascending, so the
+            // FIRST rule to touch this night sets the badge — later rules
+            // adjust the amount but leave the label alone.
+            var newBadge = night.RuleApplied is "base" or "weekend"
+                ? label
+                : night.RuleApplied;
+
+            nights[i] = new NightlyLineDto(night.Date, new Money(newAmount, currency), newBadge);
+        }
+    }
+
+    private static string ShortName(PricingRuleKind kind) => kind switch
+    {
+        PricingRuleKind.DateRangeOverride => "seasonal",
+        PricingRuleKind.LastMinute => "last_minute",
+        PricingRuleKind.LengthOfStay => "length_of_stay",
+        _ => "rule",
+    };
 }
