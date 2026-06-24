@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
@@ -14,7 +15,7 @@ internal sealed class UpdatePricingRuleHandler(
     ICurrentUser currentUser,
     IPropertyOwnerLookup ownerLookup,
     IPricingPlanRepository plans,
-    IUnitOfWork uow) : IRequestHandler<UpdatePricingRuleCommand, PricingRuleDto>
+    PricingDbContext db) : IRequestHandler<UpdatePricingRuleCommand, PricingRuleDto>
 {
     public async Task<PricingRuleDto> Handle(UpdatePricingRuleCommand request, CancellationToken cancellationToken)
     {
@@ -24,13 +25,14 @@ internal sealed class UpdatePricingRuleHandler(
         var plan = await plans.GetByPropertyIdAsync(request.PropertyId, cancellationToken)
             ?? throw new NotFoundException("PricingPlan", request.PropertyId);
 
-        if (plan.Rules.All(r => r.Id != request.RuleId))
+        if (plan.Rules.All(rl => rl.Id != request.RuleId))
         {
             throw new NotFoundException("PricingRule", request.RuleId);
         }
 
-        // Update via Remove + Add through the aggregate. Both events fire,
-        // matching the semantic that the rule's structure changed.
+        // Validate via the aggregate (throws on §2.4.1) - the resulting rule
+        // entity is then persisted via raw SQL DELETE + INSERT (same SLICE6
+        // §2.9 contingency as Add/Remove).
         var r = request.Request ?? throw new ArgumentException("Request body is required.", nameof(request));
         plan.RemoveRule(request.RuleId);
         var rule = plan.AddRule(
@@ -46,7 +48,22 @@ internal sealed class UpdatePricingRuleHandler(
             adjustmentValue: r.AdjustmentValue,
             isEnabled: r.IsEnabled);
 
-        await uow.SaveChangesAsync(cancellationToken);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $@"DELETE FROM pricing.pricing_rules WHERE ""Id"" = {request.RuleId} AND pricing_plan_id = {plan.Id}",
+            cancellationToken);
+        await db.Database.ExecuteSqlInterpolatedAsync($@"
+INSERT INTO pricing.pricing_rules (
+  ""Id"", pricing_plan_id, kind, priority,
+  start_date, end_date,
+  day_of_week_mask, min_nights, max_nights, days_before_checkin,
+  adjustment_kind, adjustment_value, is_enabled
+) VALUES (
+  {rule.Id}, {plan.Id}, {rule.Kind.ToString()}, {rule.Priority},
+  {rule.StartDate}, {rule.EndDate},
+  {rule.DayOfWeekMask}, {rule.MinNights}, {rule.MaxNights}, {rule.DaysBeforeCheckin},
+  {rule.AdjustmentKind.ToString()}, {rule.AdjustmentValue}, {rule.IsEnabled}
+)", cancellationToken);
+
         return new PricingRuleDto(
             rule.Id, rule.Kind, rule.Priority, rule.StartDate, rule.EndDate,
             rule.DayOfWeekMask, rule.MinNights, rule.MaxNights, rule.DaysBeforeCheckin,

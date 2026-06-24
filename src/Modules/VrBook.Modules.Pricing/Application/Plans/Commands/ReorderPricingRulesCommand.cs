@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
@@ -14,7 +15,7 @@ internal sealed class ReorderPricingRulesHandler(
     ICurrentUser currentUser,
     IPropertyOwnerLookup ownerLookup,
     IPricingPlanRepository plans,
-    IUnitOfWork uow) : IRequestHandler<ReorderPricingRulesCommand, PricingPlanDto>
+    PricingDbContext db) : IRequestHandler<ReorderPricingRulesCommand, PricingPlanDto>
 {
     public async Task<PricingPlanDto> Handle(ReorderPricingRulesCommand request, CancellationToken cancellationToken)
     {
@@ -24,9 +25,20 @@ internal sealed class ReorderPricingRulesHandler(
         var plan = await plans.GetByPropertyIdAsync(request.PropertyId, cancellationToken)
             ?? throw new NotFoundException("PricingPlan", request.PropertyId);
 
+        // Validate via the aggregate (throws on size mismatch / unknown ids),
+        // then UPDATE each priority via raw SQL per SLICE6 §2.9 contingency.
         plan.ReorderRules(request.RuleIds);
-        await uow.SaveChangesAsync(cancellationToken);
+        for (var i = 0; i < request.RuleIds.Count; i++)
+        {
+            var rid = request.RuleIds[i];
+            var pri = i;
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $@"UPDATE pricing.pricing_rules SET priority = {pri} WHERE ""Id"" = {rid} AND pricing_plan_id = {plan.Id}",
+                cancellationToken);
+        }
 
-        return plan.ToDto();
+        var fresh = await plans.GetByPropertyIdAsync(request.PropertyId, cancellationToken)
+            ?? throw new InvalidOperationException("Plan disappeared after reorder.");
+        return fresh.ToDto();
     }
 }

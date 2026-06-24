@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
@@ -14,7 +15,7 @@ internal sealed class SetPricingRuleEnabledHandler(
     ICurrentUser currentUser,
     IPropertyOwnerLookup ownerLookup,
     IPricingPlanRepository plans,
-    IUnitOfWork uow) : IRequestHandler<SetPricingRuleEnabledCommand, PricingRuleDto>
+    PricingDbContext db) : IRequestHandler<SetPricingRuleEnabledCommand, PricingRuleDto>
 {
     public async Task<PricingRuleDto> Handle(SetPricingRuleEnabledCommand request, CancellationToken cancellationToken)
     {
@@ -27,12 +28,14 @@ internal sealed class SetPricingRuleEnabledHandler(
         var rule = plan.Rules.FirstOrDefault(r => r.Id == request.RuleId)
             ?? throw new NotFoundException("PricingRule", request.RuleId);
 
-        plan.SetRuleEnabled(request.RuleId, request.IsEnabled);
-        await uow.SaveChangesAsync(cancellationToken);
+        // Raw SQL UPDATE - same SLICE6 §2.9 contingency. Does NOT raise an event.
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $@"UPDATE pricing.pricing_rules SET is_enabled = {request.IsEnabled} WHERE ""Id"" = {request.RuleId} AND pricing_plan_id = {plan.Id}",
+            cancellationToken);
 
         return new PricingRuleDto(
             rule.Id, rule.Kind, rule.Priority, rule.StartDate, rule.EndDate,
             rule.DayOfWeekMask, rule.MinNights, rule.MaxNights, rule.DaysBeforeCheckin,
-            rule.AdjustmentKind, rule.AdjustmentValue, rule.IsEnabled);
+            rule.AdjustmentKind, rule.AdjustmentValue, request.IsEnabled);
     }
 }

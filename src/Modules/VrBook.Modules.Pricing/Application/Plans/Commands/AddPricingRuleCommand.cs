@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
@@ -14,7 +15,7 @@ internal sealed class AddPricingRuleHandler(
     ICurrentUser currentUser,
     IPropertyOwnerLookup ownerLookup,
     IPricingPlanRepository plans,
-    IUnitOfWork uow) : IRequestHandler<AddPricingRuleCommand, PricingRuleDto>
+    PricingDbContext db) : IRequestHandler<AddPricingRuleCommand, PricingRuleDto>
 {
     public async Task<PricingRuleDto> Handle(AddPricingRuleCommand request, CancellationToken cancellationToken)
     {
@@ -25,6 +26,11 @@ internal sealed class AddPricingRuleHandler(
             ?? throw new NotFoundException("PricingPlan", request.PropertyId);
 
         var r = request.Request ?? throw new ArgumentException("Request body is required.", nameof(request));
+
+        // Validate per-kind invariants via the aggregate (throws on §2.4.1 reject).
+        // The entity is then persisted via raw SQL INSERT because EF tracking
+        // silently no-ops on the new rule row - same SLICE6_PLAN §2.9
+        // contingency that UpdatePricingPlanHandler uses for fees.
         var rule = plan.AddRule(
             kind: r.Kind,
             priority: r.Priority,
@@ -38,7 +44,19 @@ internal sealed class AddPricingRuleHandler(
             adjustmentValue: r.AdjustmentValue,
             isEnabled: r.IsEnabled);
 
-        await uow.SaveChangesAsync(cancellationToken);
+        await db.Database.ExecuteSqlInterpolatedAsync($@"
+INSERT INTO pricing.pricing_rules (
+  ""Id"", pricing_plan_id, kind, priority,
+  start_date, end_date,
+  day_of_week_mask, min_nights, max_nights, days_before_checkin,
+  adjustment_kind, adjustment_value, is_enabled
+) VALUES (
+  {rule.Id}, {plan.Id}, {rule.Kind.ToString()}, {rule.Priority},
+  {rule.StartDate}, {rule.EndDate},
+  {rule.DayOfWeekMask}, {rule.MinNights}, {rule.MaxNights}, {rule.DaysBeforeCheckin},
+  {rule.AdjustmentKind.ToString()}, {rule.AdjustmentValue}, {rule.IsEnabled}
+)", cancellationToken);
+
         return new PricingRuleDto(
             rule.Id, rule.Kind, rule.Priority, rule.StartDate, rule.EndDate,
             rule.DayOfWeekMask, rule.MinNights, rule.MaxNights, rule.DaysBeforeCheckin,
