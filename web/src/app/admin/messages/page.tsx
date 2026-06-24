@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getCurrentUser } from '@/lib/api/me';
 import { listThreads, type Thread } from '@/lib/api/messaging';
@@ -15,7 +15,10 @@ const extractErr = (e: unknown, fallback: string): string => {
   return fallback;
 };
 
-const AdminMessagesPage = () => {
+// useSearchParams() opts the page out of static prerendering unless wrapped
+// in a Suspense boundary (Next 14). Split the body out so the default export
+// can provide the boundary.
+const AdminMessagesBody = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const threadFromQuery = searchParams.get('thread');
@@ -96,5 +99,11 @@ const AdminMessagesPage = () => {
     </div>
   );
 };
+
+const AdminMessagesPage = () => (
+  <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+    <AdminMessagesBody />
+  </Suspense>
+);
 
 export default AdminMessagesPage;
