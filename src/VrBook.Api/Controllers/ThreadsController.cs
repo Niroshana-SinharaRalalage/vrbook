@@ -17,8 +17,10 @@ public sealed class ThreadsController(IMediator mediator) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ThreadDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<ThreadDto>>> MyThreads(CancellationToken cancellationToken) =>
-        Ok(await mediator.Send(new ListMyThreadsQuery(), cancellationToken));
+    public async Task<ActionResult<IReadOnlyList<ThreadDto>>> MyThreads(
+        [FromQuery] Guid? bookingId,
+        CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(new ListMyThreadsQuery(bookingId), cancellationToken));
 
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(ThreadDto), StatusCodes.Status200OK)]

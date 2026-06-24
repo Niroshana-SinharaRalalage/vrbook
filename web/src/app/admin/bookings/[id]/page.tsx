@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, Clock, AlertCircle, MessageSquare } from 'lucide-react';
 
 import {
   adminGetBooking,
@@ -17,6 +17,7 @@ import {
 } from '@/lib/api/booking';
 import { ApiProblemError } from '@/lib/api/client';
 import { getDevPersonas } from '@/lib/api/devAuth';
+import { listThreads, type Thread } from '@/lib/api/messaging';
 import { formatCurrency } from '@/lib/utils/currency';
 
 const STATUS_PILL: Record<BookingStatus, string> = {
@@ -45,6 +46,10 @@ const AdminBookingDetailPage = () => {
   // Same gate the existing DevPersonaSwitcher uses to hide itself in production,
   // so the Backdate dev shortcut is invisible to real users.
   const [devAuth, setDevAuth] = useState(false);
+  // Slice 6 C5: the thread auto-created on BookingConfirmed. Resolved via the
+  // new `?bookingId=` filter on GET /api/v1/threads. Null while loading or
+  // when this booking has no thread yet.
+  const [thread, setThread] = useState<Thread | null>(null);
 
   const reload = async () => {
     try {
@@ -75,6 +80,18 @@ const AdminBookingDetailPage = () => {
       .catch(() => { /* 404 in production — leave devAuth=false */ });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    listThreads(id)
+      .then((threads) => {
+        const first = threads[0];
+        if (!cancelled && first) setThread(first);
+      })
+      .catch(() => { /* swallow — the card just stays hidden */ });
+    return () => { cancelled = true; };
+  }, [id]);
 
   if (loading) {
     return (
@@ -377,6 +394,28 @@ const AdminBookingDetailPage = () => {
         </div>
 
         <aside className="space-y-6">
+          {thread && (
+            <section className="rounded-xl border border-border bg-card p-6">
+              <h2 className="mb-3 flex items-center gap-2 text-sm font-medium">
+                <MessageSquare className="h-4 w-4" /> Messages
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Thread with <span className="font-medium text-foreground">{thread.guestDisplayName}</span>
+                {thread.unreadCount > 0 && (
+                  <span className="ml-2 rounded-full bg-brand-maroon-700 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                    {thread.unreadCount} unread
+                  </span>
+                )}
+              </p>
+              <a
+                href={`/admin/messages?thread=${encodeURIComponent(thread.id)}`}
+                className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-brand-maroon-700 hover:underline dark:text-brand-maroon-300"
+              >
+                Open thread <ArrowLeft className="h-3 w-3 rotate-180" />
+              </a>
+            </section>
+          )}
+
           <section className="rounded-xl border border-border bg-card p-6">
             <h2 className="mb-3 text-sm font-medium">Timeline</h2>
             <ol className="space-y-3 text-sm">

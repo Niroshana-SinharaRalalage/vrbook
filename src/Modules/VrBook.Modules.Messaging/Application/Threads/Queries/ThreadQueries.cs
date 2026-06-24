@@ -7,7 +7,7 @@ using VrBook.Modules.Messaging.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Messaging.Application.Threads.Queries;
 
-public sealed record ListMyThreadsQuery : IRequest<IReadOnlyList<ThreadDto>>;
+public sealed record ListMyThreadsQuery(Guid? BookingId = null) : IRequest<IReadOnlyList<ThreadDto>>;
 
 public sealed record GetThreadQuery(Guid ThreadId) : IRequest<ThreadDto>;
 
@@ -24,9 +24,14 @@ internal sealed class ListMyThreadsHandler(MessagingDbContext db, ICurrentUser c
         }
         var me = currentUser.UserId.Value;
 
-        var threads = await db.Threads
+        var q = db.Threads
             .AsNoTracking()
-            .Where(t => t.GuestUserId == me || t.OwnerUserId == me)
+            .Where(t => t.GuestUserId == me || t.OwnerUserId == me);
+        if (request.BookingId is { } bid)
+        {
+            q = q.Where(t => t.BookingId == bid);
+        }
+        var threads = await q
             .OrderByDescending(t => t.LastMessageAt ?? t.CreatedAt)
             .ToListAsync(cancellationToken);
 
