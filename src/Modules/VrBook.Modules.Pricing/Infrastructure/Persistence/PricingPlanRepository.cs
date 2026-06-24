@@ -8,6 +8,7 @@ internal sealed class PricingPlanRepository(PricingDbContext db) : IPricingPlanR
     public Task<PricingPlan?> GetByPropertyIdAsync(Guid propertyId, CancellationToken cancellationToken = default) =>
         db.PricingPlans
             .Include(p => p.Fees)
+            .Include(p => p.Rules)
             .FirstOrDefaultAsync(p => p.PropertyId == propertyId, cancellationToken);
 
     public Task AddAsync(PricingPlan plan, CancellationToken cancellationToken = default)

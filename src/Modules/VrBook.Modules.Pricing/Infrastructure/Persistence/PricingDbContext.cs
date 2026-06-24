@@ -15,6 +15,7 @@ public sealed class PricingDbContext(
 
     public DbSet<PricingPlan> PricingPlans => Set<PricingPlan>();
     public DbSet<Fee> Fees => Set<Fee>();
+    public DbSet<PricingRule> PricingRules => Set<PricingRule>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

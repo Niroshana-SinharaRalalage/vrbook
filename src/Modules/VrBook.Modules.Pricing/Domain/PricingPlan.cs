@@ -22,6 +22,9 @@ public sealed class PricingPlan : AggregateRoot
     private readonly List<Fee> _fees = new();
     public IReadOnlyList<Fee> Fees => _fees;
 
+    private readonly List<PricingRule> _rules = new();
+    public IReadOnlyList<PricingRule> Rules => _rules;
+
     private PricingPlan() { } // EF
 
     public static PricingPlan Create(Guid propertyId, decimal baseRate, string currency)
@@ -69,5 +72,96 @@ public sealed class PricingPlan : AggregateRoot
         }
 
         Raise(new PricingPlanUpdated(Id, PropertyId));
+    }
+
+    /// <summary>
+    /// Append a new rule. Priority defaults to <c>max(existing) + 1</c> when
+    /// the caller passes <see langword="null"/> — keeps the new rule lowest-
+    /// priority (last to apply) so it can't surprise an existing stack.
+    /// </summary>
+    public PricingRule AddRule(
+        PricingRuleKind kind,
+        int? priority,
+        DateOnly? startDate,
+        DateOnly? endDate,
+        int? dayOfWeekMask,
+        int? minNights,
+        int? maxNights,
+        int? daysBeforeCheckin,
+        PricingAdjustmentKind adjustmentKind,
+        decimal adjustmentValue,
+        bool isEnabled)
+    {
+        var resolvedPriority = priority ?? (_rules.Count == 0 ? 0 : _rules.Max(r => r.Priority) + 1);
+        var rule = new PricingRule(
+            Id,
+            kind,
+            resolvedPriority,
+            startDate,
+            endDate,
+            dayOfWeekMask,
+            minNights,
+            maxNights,
+            daysBeforeCheckin,
+            adjustmentKind,
+            adjustmentValue,
+            isEnabled);
+        _rules.Add(rule);
+        Raise(new PricingRuleAdded(Id, rule.Id));
+        return rule;
+    }
+
+    /// <summary>Remove a rule by id. No-op on unknown id (idempotent).</summary>
+    public void RemoveRule(Guid ruleId)
+    {
+        var rule = _rules.FirstOrDefault(r => r.Id == ruleId);
+        if (rule is null)
+        {
+            return;
+        }
+        _rules.Remove(rule);
+        Raise(new PricingRuleRemoved(Id, ruleId));
+    }
+
+    /// <summary>
+    /// Rewrite all priorities to <c>0..N-1</c> in the order given. The id list
+    /// must be a permutation of this plan's current rule ids; unknown ids and
+    /// missing ids are rejected (caller has the wrong view of the plan).
+    /// Last-write-wins under concurrent drag (see SLICE6_PLAN §2.5).
+    /// </summary>
+    public void ReorderRules(IReadOnlyList<Guid> orderedIds)
+    {
+        ArgumentNullException.ThrowIfNull(orderedIds);
+        if (orderedIds.Count != _rules.Count)
+        {
+            throw new ArgumentException(
+                $"orderedIds count ({orderedIds.Count}) does not match current rule count ({_rules.Count}).",
+                nameof(orderedIds));
+        }
+        var byId = _rules.ToDictionary(r => r.Id);
+        for (var i = 0; i < orderedIds.Count; i++)
+        {
+            if (!byId.TryGetValue(orderedIds[i], out var rule))
+            {
+                throw new ArgumentException(
+                    $"Rule {orderedIds[i]} is not part of this plan.",
+                    nameof(orderedIds));
+            }
+            rule.SetPriority(i);
+        }
+    }
+
+    /// <summary>
+    /// Toggle a rule's enabled flag. Does NOT raise an event — see SLICE6_PLAN
+    /// §2.6 (PATCH .../enabled is semantically a flag flip, not a structural
+    /// change, so re-emitting <see cref="PricingRuleAdded"/> would be noisy).
+    /// </summary>
+    public void SetRuleEnabled(Guid ruleId, bool isEnabled)
+    {
+        var rule = _rules.FirstOrDefault(r => r.Id == ruleId)
+            ?? throw new ArgumentException(
+                $"Rule {ruleId} is not part of this plan.",
+                nameof(ruleId));
+        rule.SetEnabled(isEnabled);
     }
 }

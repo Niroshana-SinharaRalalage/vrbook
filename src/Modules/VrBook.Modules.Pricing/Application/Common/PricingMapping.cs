@@ -15,6 +15,21 @@ internal static class PricingMapping
             MinStayNights: p.MinStayNights,
             MaxStayNights: p.MaxStayNights,
             DynamicEnabled: p.DynamicEnabled,
-            Rules: Array.Empty<PricingRuleDto>(),
+            Rules: p.Rules
+                .OrderBy(r => r.Priority)
+                .Select(r => new PricingRuleDto(
+                    r.Id,
+                    r.Kind,
+                    r.Priority,
+                    r.StartDate,
+                    r.EndDate,
+                    r.DayOfWeekMask,
+                    r.MinNights,
+                    r.MaxNights,
+                    r.DaysBeforeCheckin,
+                    r.AdjustmentKind,
+                    r.AdjustmentValue,
+                    r.IsEnabled))
+                .ToArray(),
             Fees: p.Fees.Select(f => new FeeDto(f.Id, f.Kind, f.Amount, f.Basis, f.FreeThreshold, f.Label)).ToArray());
 }

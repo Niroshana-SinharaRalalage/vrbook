@@ -35,5 +35,10 @@ internal sealed class PricingPlanConfiguration : IEntityTypeConfiguration<Pricin
             .WithOne()
             .HasForeignKey(f => f.PricingPlanId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        b.HasMany(p => p.Rules)
+            .WithOne()
+            .HasForeignKey(r => r.PricingPlanId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }
