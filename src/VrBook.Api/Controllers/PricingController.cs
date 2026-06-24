@@ -37,15 +37,71 @@ public sealed class PricingController(IMediator mediator) : ControllerBase
 
     [HttpPost("rules")]
     [Authorize(Roles = "Owner,Admin")]
+    [SwaggerOperation(Summary = "Add a pricing rule to the plan.")]
     [ProducesResponseType(typeof(PricingRuleDto), StatusCodes.Status201Created)]
-    public IActionResult AddRule(Guid propertyId, [FromBody] CreatePricingRuleRequest request) =>
-        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Pricing rules land in A3.1." });
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PricingRuleDto>> AddRule(
+        Guid propertyId,
+        [FromBody] CreatePricingRuleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var dto = await mediator.Send(new AddPricingRuleCommand(propertyId, request), cancellationToken);
+        return Created($"/api/v1/properties/{propertyId}/pricing/rules/{dto.Id}", dto);
+    }
+
+    [HttpPut("rules/{ruleId:guid}")]
+    [Authorize(Roles = "Owner,Admin")]
+    [SwaggerOperation(Summary = "Replace a pricing rule's fields. Re-emits PricingRuleAdded/Removed.")]
+    [ProducesResponseType(typeof(PricingRuleDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PricingRuleDto>> UpdateRule(
+        Guid propertyId,
+        Guid ruleId,
+        [FromBody] CreatePricingRuleRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(new UpdatePricingRuleCommand(propertyId, ruleId, request), cancellationToken));
 
     [HttpDelete("rules/{ruleId:guid}")]
     [Authorize(Roles = "Owner,Admin")]
-    public IActionResult DeleteRule(Guid propertyId, Guid ruleId) =>
-        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Pricing rules land in A3.1." });
+    [SwaggerOperation(Summary = "Remove a pricing rule. Idempotent on unknown id.")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> DeleteRule(Guid propertyId, Guid ruleId, CancellationToken cancellationToken)
+    {
+        await mediator.Send(new RemovePricingRuleCommand(propertyId, ruleId), cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPatch("rules/{ruleId:guid}/enabled")]
+    [Authorize(Roles = "Owner,Admin")]
+    [SwaggerOperation(Summary = "Toggle a rule's IsEnabled flag. Does NOT raise PricingRuleAdded/Removed.")]
+    [ProducesResponseType(typeof(PricingRuleDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PricingRuleDto>> SetRuleEnabled(
+        Guid propertyId,
+        Guid ruleId,
+        [FromBody] SetRuleEnabledRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(new SetPricingRuleEnabledCommand(propertyId, ruleId, request.IsEnabled), cancellationToken));
+
+    [HttpPost("rules/reorder")]
+    [Authorize(Roles = "Owner,Admin")]
+    [SwaggerOperation(Summary = "Rewrite rule priorities 0..N-1. Last-write-wins on concurrent drag.")]
+    [ProducesResponseType(typeof(PricingPlanDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PricingPlanDto>> ReorderRules(
+        Guid propertyId,
+        [FromBody] ReorderRulesRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await mediator.Send(new ReorderPricingRulesCommand(propertyId, request.RuleIds), cancellationToken));
 }
+
+public sealed record SetRuleEnabledRequest([property: System.Text.Json.Serialization.JsonRequired] bool IsEnabled);
+public sealed record ReorderRulesRequest(IReadOnlyList<Guid> RuleIds);
 
 [Route("api/v1/properties/{propertyId:guid}/quotes")]
 [Tags("Pricing")]
