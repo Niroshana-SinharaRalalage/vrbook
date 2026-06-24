@@ -186,6 +186,7 @@ module sigr 'modules/signalr.bicep' = {
     env: env
     location: location
     tags: tags
+    keyVaultName: kv.outputs.name
   }
 }
 
