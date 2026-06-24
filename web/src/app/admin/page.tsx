@@ -1,16 +1,26 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, ChevronRight, Clock, Home, CalendarCheck } from 'lucide-react';
 
 import { adminListBookings, type AdminBookingSummary } from '@/lib/api/booking';
 import { adminListMyProperties, type AdminPropertySummary } from '@/lib/api/catalog';
+import { useTentativeBookingPush } from '@/hooks/useTentativeBookingPush';
 
 const AdminDashboardPage = () => {
   const [bookings, setBookings] = useState<readonly AdminBookingSummary[]>([]);
   const [properties, setProperties] = useState<readonly AdminPropertySummary[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const refetchBookings = useCallback(async () => {
+    try {
+      const bs = await adminListBookings();
+      setBookings(bs);
+    } catch {
+      /* dashboard degrades gracefully */
+    }
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -26,6 +36,26 @@ const AdminDashboardPage = () => {
     })();
   }, []);
 
+  // Realtime push: when a new tentative booking lands, refetch the canonical
+  // list (single source of truth — see SLICE7_PLAN §2.5 step 5). The pill
+  // increments naturally on the next render.
+  const { connected } = useTentativeBookingPush(() => {
+    void refetchBookings();
+  });
+
+  // Always-on safety net (§2.11): on tab-focus, refetch once regardless of
+  // SignalR state. Catches both "long background + connected" staleness AND
+  // "SignalR down + user came back" degradation.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void refetchBookings();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [refetchBookings]);
+
   const tentative = bookings.filter((b) => b.status === 'Tentative');
   const confirmed = bookings.filter((b) => b.status === 'Confirmed');
   const publishedProps = properties.filter((p) => p.isActive).length;
@@ -36,7 +66,18 @@ const AdminDashboardPage = () => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        <span
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+          title={connected ? 'Realtime push is connected' : 'Realtime push offline; tab-focus refresh active'}
+        >
+          <span
+            className={`h-2 w-2 rounded-full ${connected ? 'bg-green-500' : 'bg-muted-foreground/40'}`}
+          />
+          {connected ? 'Live' : 'Polling'}
+        </span>
+      </div>
 
       {tentative.length > 0 && (
         <div className="flex items-start justify-between gap-3 rounded-xl border border-yellow-300 bg-yellow-50 p-4 dark:border-yellow-700 dark:bg-yellow-900/20">
