@@ -51,6 +51,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VrBook.Workers.Booking", "W
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VrBook.Workers.Notifications", "Workers\VrBook.Workers.Notifications\VrBook.Workers.Notifications.csproj", "{D791D324-D9C4-43B6-9A59-9AE3635AEEEC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VrBook.Modules.Reports", "Modules\VrBook.Modules.Reports\VrBook.Modules.Reports.csproj", "{01932867-4AA1-4C20-9A79-B737785EBEAD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -148,6 +150,10 @@ Global
 		{D791D324-D9C4-43B6-9A59-9AE3635AEEEC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D791D324-D9C4-43B6-9A59-9AE3635AEEEC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D791D324-D9C4-43B6-9A59-9AE3635AEEEC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{01932867-4AA1-4C20-9A79-B737785EBEAD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{01932867-4AA1-4C20-9A79-B737785EBEAD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{01932867-4AA1-4C20-9A79-B737785EBEAD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{01932867-4AA1-4C20-9A79-B737785EBEAD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{9B4592B7-6CC8-45DD-BB8F-7FE95B825303} = {E4951728-CEE3-46DE-93A4-193D26ED33FD}
@@ -164,5 +170,6 @@ Global
 		{44F5AF80-76C3-4882-98B9-14CF7F0A0440} = {620514FC-D2EC-4FE7-A180-97D2111895DB}
 		{7AABCBF5-2F91-4DA0-B7F7-CF94F5C41969} = {620514FC-D2EC-4FE7-A180-97D2111895DB}
 		{D791D324-D9C4-43B6-9A59-9AE3635AEEEC} = {620514FC-D2EC-4FE7-A180-97D2111895DB}
+		{01932867-4AA1-4C20-9A79-B737785EBEAD} = {E4951728-CEE3-46DE-93A4-193D26ED33FD}
 	EndGlobalSection
 EndGlobal

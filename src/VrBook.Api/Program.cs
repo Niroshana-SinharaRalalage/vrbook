@@ -18,6 +18,7 @@ using VrBook.Modules.Messaging;
 using VrBook.Modules.Notifications;
 using VrBook.Modules.Payment;
 using VrBook.Modules.Pricing;
+using VrBook.Modules.Reports;
 using VrBook.Modules.Reviews;
 using VrBook.Modules.Sync;
 
@@ -119,7 +120,8 @@ builder.Services
     .AddReviewsModule(builder.Configuration)
     .AddLoyaltyModule(builder.Configuration)
     .AddNotificationsModule(builder.Configuration)
-    .AddAdminModule(builder.Configuration);
+    .AddAdminModule(builder.Configuration)
+    .AddReportsModule(builder.Configuration);
 
 // ---- Health probes (Container Apps Liveness + Readiness; see proposal §23.5) ----
 builder.Services.AddHealthChecks()

@@ -27,3 +27,17 @@ Next major step
 A2 (Catalog & Search) per the proposal — Property aggregate, search API, image storage, listing pages. Roughly 2–3 days of work. Ready to start when you are.
 
 Want me to dive into A2 now, or fix the /health/ready Degraded first?
+
+
+Real AirBnB feed — log into AirBnB host account → open the listing's Calendar → Availability → Sync calendars → Export calendar → copy. The URL looks like https://www.airbnb.com/calendar/ical/12345.ics?s=... (placeholder format the field hints at).
+
+Outbound iCal (give this to AirBnB)
+Copy URL
+http://ca-vrbook-api-staging.icydesert-abf3fa4e.eastus2.azurecontainerapps.io/feeds/57d2e238edbe41ca99cfed32e60350b7.ics
+How to subscribe AirBnB to this URL
+Open the AirBnB host calendar for this listing.
+Go to Availability → Sync calendars → Import calendar.
+Paste the URL above. Name it “VrBook”.
+AirBnB will block these dates on its side within 2–3 hours.
+Inbound URL (you pasted this from AirBnB)
+https://calendar.google.com/calendar/ical/niroshhh%40gmail.com/private-8180edeed869804b1fbf095a48ae7d27/basic.ics

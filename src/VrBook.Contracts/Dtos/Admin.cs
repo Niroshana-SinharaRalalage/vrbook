@@ -13,32 +13,6 @@ public sealed record UpdateFeatureToggleRequest(
     Guid? ScopeId,
     bool Enabled);
 
-public sealed record OccupancyReportRow(
-    Guid PropertyId,
-    string PropertyTitle,
-    DateOnly Date,
-    decimal OccupancyPct,
-    int BookedNights,
-    int AvailableNights);
-
-public sealed record RevenueReportRow(
-    Guid PropertyId,
-    string PropertyTitle,
-    DateOnly Date,
-    BookingSource Source,
-    decimal Gross,
-    decimal Net,
-    int Nights,
-    string Currency);
-
-public sealed record AdrReportRow(
-    Guid PropertyId,
-    string PropertyTitle,
-    DateOnly Period,
-    BookingSource Source,
-    decimal Adr,
-    int Nights);
-
 public sealed record AlertDto(
     Guid Id,
     string Severity,        // "Sev2" | "Sev3"

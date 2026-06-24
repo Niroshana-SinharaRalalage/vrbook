@@ -27,6 +27,7 @@
     <ProjectReference Include="..\Modules\VrBook.Modules.Loyalty\VrBook.Modules.Loyalty.csproj" />
     <ProjectReference Include="..\Modules\VrBook.Modules.Notifications\VrBook.Modules.Notifications.csproj" />
     <ProjectReference Include="..\Modules\VrBook.Modules.Admin\VrBook.Modules.Admin.csproj" />
+    <ProjectReference Include="..\Modules\VrBook.Modules.Reports\VrBook.Modules.Reports.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -25,27 +25,6 @@ public sealed class AdminUsersController(IMediator mediator) : ControllerBase
         Ok(await mediator.Send(new SearchUsersQuery(q, page, size), ct));
 }
 
-[Route("api/v1/admin/reports")]
-[Tags("Admin — Reports")]
-[Authorize(Roles = "Owner,Admin")]
-public sealed class ReportsController : StubController
-{
-    [HttpGet("occupancy")]
-    [ProducesResponseType(typeof(IReadOnlyList<OccupancyReportRow>), StatusCodes.Status200OK)]
-    public IActionResult Occupancy([FromQuery] DateOnly from, [FromQuery] DateOnly to, [FromQuery] Guid? propertyId) =>
-        NotImplementedYet("O1");
-
-    [HttpGet("revenue")]
-    [ProducesResponseType(typeof(IReadOnlyList<RevenueReportRow>), StatusCodes.Status200OK)]
-    public IActionResult Revenue([FromQuery] DateOnly from, [FromQuery] DateOnly to, [FromQuery] Guid? propertyId) =>
-        NotImplementedYet("O1");
-
-    [HttpGet("adr")]
-    [ProducesResponseType(typeof(IReadOnlyList<AdrReportRow>), StatusCodes.Status200OK)]
-    public IActionResult Adr([FromQuery] DateOnly from, [FromQuery] DateOnly to, [FromQuery] Guid? propertyId) =>
-        NotImplementedYet("O1");
-}
-
 [Route("api/v1/admin/toggles")]
 [Tags("Admin — Feature toggles")]
 [Authorize(Roles = "Owner,Admin")]
