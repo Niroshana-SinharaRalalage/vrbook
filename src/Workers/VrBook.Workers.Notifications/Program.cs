@@ -44,12 +44,17 @@ try
     builder.Services.AddOutbox();
     builder.Services.AddInfrastructureCore(builder.Configuration);
 
-    builder.Services.AddMediatR(cfg => cfg
-        .RegisterServicesFromAssembly(typeof(NotificationsModule).Assembly));
-
-    // The dispatcher only needs IEmailSender + NotificationsDbContext; the row
-    // already carries a resolved RecipientEmail from the API-side queue handler
-    // (Slice 4 C1). Identity is NOT registered here on purpose.
+    // Notifications module's AddModuleAssembly() (called inside
+    // AddNotificationsModule below) already registers MediatR for this
+    // assembly. The explicit AddMediatR block that used to live here was
+    // redundant - latent on this worker because it only Send()s
+    // IRequest<TResponse> handlers (last-wins dedup) but a real bug on the
+    // Booking worker (Slice 5 hotfix 9c580b6) where INotificationHandler
+    // subscribers fired twice. Mirror that fix here for consistency.
+    //
+    // The dispatcher only needs IEmailSender + NotificationsDbContext; the
+    // row already carries a resolved RecipientEmail from the API-side queue
+    // handler (Slice 4 C1). Identity is NOT registered here on purpose.
     builder.Services.AddNotificationsModule(builder.Configuration);
 
     using var host = builder.Build();

@@ -46,12 +46,15 @@ try
     builder.Services.AddOutbox();
     builder.Services.AddHttpClient();
 
-    // MediatR for RunSyncForFeedCommand. The Sync module's AddModuleAssembly
-    // call inside AddSyncModule registers the handler.
-    builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(SyncModule).Assembly));
-
+    // AddSyncModule -> AddModuleAssembly() already registers MediatR for the
+    // Sync assembly. The explicit AddMediatR block that used to live here was
+    // redundant - latent on this worker because it only dispatches
+    // RunSyncForFeedCommand as IRequest<> (last-wins dedup) but a real bug on
+    // the Booking worker (Slice 5 hotfix 9c580b6) where INotificationHandler
+    // subscribers fired twice. Mirror that fix here for consistency.
+    //
     // Wire just the Sync module so we get SyncDbContext + repositories + the
-    // AirBnBICalChannel HTTP client. We do NOT pull every module here — the
+    // AirBnBICalChannel HTTP client. We do NOT pull every module here - the
     // worker has a single bounded job.
     builder.Services.AddSyncModule(builder.Configuration);
 
