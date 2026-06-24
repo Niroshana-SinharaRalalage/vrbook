@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 using VrBook.Contracts.Interfaces;
 using VrBook.Infrastructure.Common;
+using VrBook.Infrastructure.Realtime;
 using VrBook.Infrastructure.Redis;
 using VrBook.Infrastructure.Stubs;
 
@@ -30,6 +32,22 @@ public static class DependencyInjection
             services.AddSingleton<IConnectionMultiplexer>(_ =>
                 ConnectionMultiplexer.Connect(redisCs));
             services.AddSingleton<IDistributedLock, RedisDistributedLock>();
+        }
+
+        // Slice 7 — SignalR Service realtime notifier. Falls back to a null
+        // logger when the connection string isn't configured so dev hosts boot
+        // without an Azure SignalR Service. See SLICE7_PLAN §2.5.
+        var signalrCs = configuration["SignalR:ConnectionString"];
+        if (!string.IsNullOrWhiteSpace(signalrCs))
+        {
+            services.AddSingleton<IRealtimeNotifier>(sp =>
+                new SignalRRealtimeNotifier(
+                    signalrCs,
+                    sp.GetRequiredService<ILogger<SignalRRealtimeNotifier>>()));
+        }
+        else
+        {
+            services.AddSingleton<IRealtimeNotifier, NullRealtimeNotifier>();
         }
 
         // A0 stubs — modules replace these as they ship (A5, A6, A8, A9).

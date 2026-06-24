@@ -19,6 +19,9 @@ param tags object = {
 @description('Capacity in units.')
 param capacity int = 1
 
+@description('Key Vault name to write the connection string into (signalr-cs secret). See SLICE7_PLAN §2.7.')
+param keyVaultName string
+
 var sigrName = 'sr-vrbook-${env}'
 
 resource sigr 'Microsoft.SignalRService/signalR@2024-03-01' = {
@@ -56,6 +59,22 @@ resource sigr 'Microsoft.SignalRService/signalR@2024-03-01' = {
     }
     publicNetworkAccess: 'Enabled'
     disableLocalAuth: false
+  }
+}
+
+// Slice 7 — write the connection string into KV automatically. Replaces the
+// 'pending-bicep-deploy' placeholder that 10-store-secrets.ps1 seeds at
+// provision time. Mirrors the ACS pattern (infra/modules/acs.bicep:72-79).
+resource kv 'Microsoft.KeyVault/vaults@2024-04-01-preview' existing = {
+  name: keyVaultName
+}
+
+resource signalrSecret 'Microsoft.KeyVault/vaults/secrets@2024-04-01-preview' = {
+  parent: kv
+  name: 'signalr-cs'
+  properties: {
+    value: sigr.listKeys().primaryConnectionString
+    contentType: 'text/plain'
   }
 }
 

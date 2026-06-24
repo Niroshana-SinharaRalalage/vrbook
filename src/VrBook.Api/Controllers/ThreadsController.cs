@@ -76,11 +76,38 @@ public sealed class ThreadsController(IMediator mediator) : ControllerBase
 [Route("api/v1/realtime")]
 [Tags("Messaging")]
 [Authorize]
-public sealed class RealtimeController : StubController
+public sealed class RealtimeController(
+    VrBook.Contracts.Interfaces.IRealtimeNotifier notifier,
+    VrBook.Contracts.Interfaces.ICurrentUser currentUser,
+    Microsoft.Extensions.Logging.ILogger<RealtimeController> logger) : ControllerBase
 {
     [HttpGet("negotiate")]
     [SwaggerOperation(Summary = "SignalR negotiate handshake. Returns Service URL + scoped access token.")]
     [ProducesResponseType(typeof(RealtimeNegotiateResponse), StatusCodes.Status200OK)]
-    public IActionResult Negotiate() => NotImplementedYet("A7.6",
-        "SignalR Serverless requires an Azure SignalR Service resource — deferred from A7 v1.");
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<RealtimeNegotiateResponse>> Negotiate(CancellationToken ct)
+    {
+        if (currentUser.UserId is not { } uid)
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            // 1-second CTS guard so a hung SignalR endpoint doesn't hold the
+            // negotiate request (SLICE7_PLAN §2.6). The token TTL itself is
+            // 1h - this CTS only bounds the negotiate-API hop, not the token.
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(2));
+            var result = await notifier.NegotiateForUserAsync(uid, cts.Token);
+            return Ok(new RealtimeNegotiateResponse(result.Url, result.AccessToken, result.ExpiresAt));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException or HttpRequestException)
+        {
+            logger.LogWarning(ex, "SignalR negotiate failed for user {UserId}", uid);
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { detail = "realtime.unavailable" });
+        }
+    }
 }
