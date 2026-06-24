@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { HubConnectionState } from '@microsoft/signalr';
 import {
-  getRealtimeConnection,
+  peekRealtimeConnection,
   startConnection,
   stopConnection,
 } from '@/lib/realtime/connection';
@@ -19,7 +19,7 @@ export interface TentativeAddedPayload {
 /**
  * Slice 7 — subscribes to the `tentativeBookingAdded` SignalR event and
  * pauses the connection while the tab is hidden. Returns `{ connected }`
- * so the dashboard can render a "Live" indicator and decide whether to
+ * so the dashboard can render a Live indicator and decide whether to
  * fall back to visibility-refetch polling.
  */
 export const useTentativeBookingPush = (
@@ -28,38 +28,45 @@ export const useTentativeBookingPush = (
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const c = getRealtimeConnection();
-    if (!c) return; // SSR
+    if (typeof window === 'undefined') return;
+
+    let cancelled = false;
+    let attachedConnection: ReturnType<typeof peekRealtimeConnection> | null = null;
 
     const handler = (payload: TentativeAddedPayload) => {
       onPushed(payload);
     };
-    c.on('tentativeBookingAdded', handler);
 
-    const onStateChange = () => {
-      setConnected(c.state === HubConnectionState.Connected);
+    const wireHandlers = () => {
+      const c = peekRealtimeConnection();
+      if (!c || c === attachedConnection) return;
+      attachedConnection = c;
+      c.on('tentativeBookingAdded', handler);
+      c.onreconnected(() => setConnected(true));
+      c.onreconnecting(() => setConnected(false));
+      c.onclose(() => setConnected(false));
     };
-    c.onreconnected(onStateChange);
-    c.onreconnecting(onStateChange);
-    c.onclose(onStateChange);
 
-    let cancelled = false;
     void (async () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      if (document.visibilityState === 'hidden') {
         return; // don't connect while backgrounded
       }
-      await startConnection();
-      if (!cancelled) {
-        setConnected(c.state === HubConnectionState.Connected);
-      }
+      const conn = await startConnection();
+      if (cancelled) return;
+      wireHandlers();
+      setConnected(conn?.state === HubConnectionState.Connected);
     })();
 
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') {
-        void stopConnection().then(() => setConnected(false));
+        void stopConnection().then(() => {
+          if (!cancelled) setConnected(false);
+        });
       } else {
-        void startConnection().then(() => {
-          setConnected(c.state === HubConnectionState.Connected);
+        void startConnection().then((conn) => {
+          if (cancelled) return;
+          wireHandlers();
+          setConnected(conn?.state === HubConnectionState.Connected);
         });
       }
     };
@@ -67,11 +74,12 @@ export const useTentativeBookingPush = (
 
     return () => {
       cancelled = true;
-      c.off('tentativeBookingAdded', handler);
+      if (attachedConnection) {
+        attachedConnection.off('tentativeBookingAdded', handler);
+      }
       document.removeEventListener('visibilitychange', onVisibility);
-      // We intentionally do NOT stop the connection on unmount — keeping
-      // the singleton alive across SPA navigations avoids reconnect
-      // churn. Page close terminates the WebSocket naturally.
+      // We intentionally do NOT stop the singleton on unmount — keeping it
+      // alive across SPA navigations avoids reconnect churn.
     };
   }, [onPushed]);
 
