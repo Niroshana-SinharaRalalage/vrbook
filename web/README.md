@@ -42,8 +42,8 @@ The full env-var inventory across API + workers + web lives in proposal §23.3.
 | ------------------------------------ | ------------------------------------------------------- |
 | `NEXT_PUBLIC_API_BASE_URL`           | Versioned API root, e.g. `https://api…/api/v1`         |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe.js publishable key                               |
-| `NEXT_PUBLIC_B2C_AUTHORITY`          | AD B2C SignUpSignIn policy URL                          |
-| `NEXT_PUBLIC_B2C_CLIENT_ID`          | App registration client id                              |
+| `NEXT_PUBLIC_ENTRA_AUTHORITY`          | Entra External ID v2.0 authority URL                          |
+| `NEXT_PUBLIC_ENTRA_CLIENT_ID`          | App registration client id                              |
 | `NEXT_PUBLIC_MAPBOX_TOKEN`           | Map tiles for property location previews                |
 | `NEXT_PUBLIC_SIGNALR_NEGOTIATE_URL`  | SignalR Serverless negotiate endpoint (proposal §10)    |
 

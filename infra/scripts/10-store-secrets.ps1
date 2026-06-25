@@ -75,6 +75,21 @@ Set-KvSecret -Name 'signalr-cs' -Value 'pending-bicep-deploy' `
 Set-KvSecret -Name 'appi-cs' -Value 'pending-bicep-deploy' `
     -Description 'Application Insights connection string. Overwritten by Bicep post-deploy.'
 
+# OPS.M.0 — Entra External ID placeholders. Bicep secretRefs resolve at
+# container-start time; without these seeds the first deploy fails before
+# docs/identity/setup.md §7 has been run. The real values are written by
+# the operator via the setup runbook.
+Set-KvSecret -Name 'entra-instance' -Value 'pending-identity-setup' `
+    -Description 'Entra External ID tenant instance URL. Overwritten by docs/identity/setup.md §7.'
+Set-KvSecret -Name 'entra-tenant-id' -Value 'pending-identity-setup' `
+    -Description 'Entra External ID tenant GUID. Overwritten by docs/identity/setup.md §7.'
+Set-KvSecret -Name 'entra-api-client-id' -Value 'pending-identity-setup' `
+    -Description 'vrbook-api app registration appId. Overwritten by docs/identity/setup.md §7.'
+Set-KvSecret -Name 'entra-web-authority' -Value 'pending-identity-setup' `
+    -Description 'NEXT_PUBLIC_ENTRA_AUTHORITY: full v2.0 authority URL for MSAL. Overwritten by setup.md §7.'
+Set-KvSecret -Name 'entra-web-client-id' -Value 'pending-identity-setup' `
+    -Description 'vrbook-web SPA app registration appId. Overwritten by docs/identity/setup.md §7.'
+
 # ---- Prompted external secrets ----
 Write-Step "External providers -- enter values now (press Enter to skip & set later)"
 

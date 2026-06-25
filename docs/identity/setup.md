@@ -212,6 +212,10 @@ az keyvault secret set --vault-name kv-vrbook-staging --name entra-instance     
 az keyvault secret set --vault-name kv-vrbook-staging --name entra-tenant-id     --value $externalTenantId                | Out-Null
 az keyvault secret set --vault-name kv-vrbook-staging --name entra-api-client-id --value $apiAppId                        | Out-Null
 az keyvault secret set --vault-name kv-vrbook-staging --name entra-web-client-id --value $webAppId                        | Out-Null
+
+# OPS.M.0 — full v2.0 authority URL the SPA's MSAL config consumes. Distinct
+# from entra-instance which is only the hostname prefix.
+az keyvault secret set --vault-name kv-vrbook-staging --name entra-web-authority --value "https://vrbookcid.ciamlogin.com/$externalTenantId/v2.0" | Out-Null
 ```
 
 Then **disable DevAuth** when an environment has real Entra wiring:

@@ -480,6 +480,11 @@ var webEnvVars = [
   { name: 'HOSTNAME', value: '0.0.0.0' }
   { name: 'NEXT_TELEMETRY_DISABLED', value: '1' }
   { name: 'NEXT_PUBLIC_API_BASE_URL', value: 'https://${apiApp.outputs.fqdn}' }
+  // OPS.M.0 — these reach Next.js server components / middleware at runtime.
+  // The browser bundle (where MSAL actually executes) is sealed at `next build`
+  // and reads the build-args; see cd-staging-web.yml + web/Dockerfile.
+  { name: 'NEXT_PUBLIC_ENTRA_AUTHORITY', secretRef: 'entra-web-authority' }
+  { name: 'NEXT_PUBLIC_ENTRA_CLIENT_ID', secretRef: 'entra-web-client-id' }
 ]
 
 module webApp 'modules/container-app.bicep' = {
@@ -500,7 +505,10 @@ module webApp 'modules/container-app.bicep' = {
     cpu: '0.5'
     memory: '1Gi'
     envVars: webEnvVars
-    secrets: []
+    secrets: [
+      { name: 'entra-web-authority', keyVaultSecretName: 'entra-web-authority' }
+      { name: 'entra-web-client-id', keyVaultSecretName: 'entra-web-client-id' }
+    ]
     keyVaultName: kv.outputs.name
     scaleRuleType: 'http'
     httpConcurrentRequests: 50
