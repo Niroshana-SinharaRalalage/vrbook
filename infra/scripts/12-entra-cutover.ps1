@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     OPS.M.0 Entra External ID cutover automation. Wraps the steps from
     docs/identity/setup.md §2-§4 + §7 + state-file update + container restart.
@@ -167,7 +167,15 @@ if (-not $SkipRegister) {
     Write-Ok "vrbook-web appId = $webAppId"
 
     Write-Host "  Granting access_as_user permission..." -ForegroundColor Gray
-    $resolvedScopeId = az ad app show --id $apiAppId --query "api.oauth2PermissionScopes[?value=='access_as_user'].id | [0]" -o tsv
+    # Avoid JMESPath pipe + [0] inside --query - Windows PowerShell 5.1's parser
+    # mis-tokenises the bracket as a type cast. Pull all scopes as JSON, filter
+    # in PowerShell where the syntax is unambiguous.
+    $apiScopesJson = az ad app show --id $apiAppId --query "api.oauth2PermissionScopes" -o json
+    $apiScopesArr = $apiScopesJson | ConvertFrom-Json
+    $resolvedScopeId = ($apiScopesArr | Where-Object { $_.value -eq 'access_as_user' } | Select-Object -First 1).id
+    if (-not $resolvedScopeId) {
+        throw "No 'access_as_user' scope found on $apiDisplayName ($apiAppId)."
+    }
     az ad app permission add --id $webAppId --api $apiAppId --api-permissions "$resolvedScopeId=Scope" | Out-Null
     az ad app permission admin-consent --id $webAppId | Out-Null
     Write-Ok "$webDisplayName granted access_as_user on $apiDisplayName"
@@ -208,7 +216,7 @@ Write-Host "      Name: SignUpAndSignIn" -ForegroundColor Yellow
 Write-Host "      Identity providers: check 'Email signup' (one-time passcode or password)" -ForegroundColor Yellow
 Write-Host "      User attributes:   check Display Name + Email Address" -ForegroundColor Yellow
 Write-Host "      Application claims (the load-bearing list):" -ForegroundColor Yellow
-Write-Host "        - User's Object ID"                                                       -ForegroundColor Yellow
+Write-Host "        - User Object ID (oid claim)"                                             -ForegroundColor Yellow
 Write-Host "        - Display Name"                                                            -ForegroundColor Yellow
 Write-Host "        - Email Addresses"                                                         -ForegroundColor Yellow
 Write-Host "        - Email Verified"                                                          -ForegroundColor Yellow
