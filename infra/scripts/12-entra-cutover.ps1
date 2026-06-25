@@ -99,9 +99,11 @@ if (-not $SkipRegister) {
     $externalTenantId = az account show --query tenantId -o tsv
     Write-Ok "External tenant id: $externalTenantId"
 
-    Write-Step "Phase A.2 — register vrbook-api"
+    $apiDisplayName = "vrbook-api-$Env"
+    $webDisplayName = "vrbook-web-$Env"
+    Write-Step "Phase A.2 — register $apiDisplayName"
     $apiAppRaw = az ad app create `
-        --display-name 'vrbook-api' `
+        --display-name $apiDisplayName `
         --sign-in-audience AzureADMyOrg `
         --identifier-uris 'api://vrbook' `
         -o json
@@ -151,9 +153,9 @@ if (-not $SkipRegister) {
         }
     }
 
-    Write-Step "Phase A.3 — register vrbook-web"
+    Write-Step "Phase A.3 — register $webDisplayName"
     $webAppRaw = az ad app create `
-        --display-name 'vrbook-web' `
+        --display-name $webDisplayName `
         --sign-in-audience AzureADMyOrg `
         --is-fallback-public-client true `
         --web-redirect-uris 'http://localhost:3000/auth/callback' $WebRedirectUri `
@@ -168,7 +170,7 @@ if (-not $SkipRegister) {
     $resolvedScopeId = az ad app show --id $apiAppId --query "api.oauth2PermissionScopes[?value=='access_as_user'].id | [0]" -o tsv
     az ad app permission add --id $webAppId --api $apiAppId --api-permissions "$resolvedScopeId=Scope" | Out-Null
     az ad app permission admin-consent --id $webAppId | Out-Null
-    Write-Ok "vrbook-web granted access_as_user on vrbook-api"
+    Write-Ok "$webDisplayName granted access_as_user on $apiDisplayName"
 
     # Cache values now so a resumption after the portal pause survives a fresh shell.
     Update-State -Env $Env -Updates @{
@@ -215,7 +217,7 @@ Write-Host "        - extension_${apiAppIdNoDashes}_isAdmin"                    
 Write-Host "      MFA: Off (staging); Required for Owners (prod)." -ForegroundColor Yellow
 Write-Host ""
 Write-Host "  §6. Open the SignUpAndSignIn user flow -> Applications -> + Add application" -ForegroundColor Yellow
-Write-Host "      Pick: vrbook-web ($webAppId)" -ForegroundColor Yellow
+Write-Host "      Pick: vrbook-web-$Env ($webAppId)" -ForegroundColor Yellow
 Write-Host ""
 Read-Host "Press Enter once both user-flow + application association are done"
 
