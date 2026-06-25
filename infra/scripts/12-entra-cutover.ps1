@@ -268,8 +268,20 @@ if ($SkipRestart) {
     Write-Step "Phase B.4 — API container restart SKIPPED"
 } else {
     Write-Step "Phase B.4 — restart $apiContainerApp so JwtBearer reads the new KV values"
-    az containerapp revision restart -n $apiContainerApp -g $resourceGroup | Out-Null
-    Write-Ok "Restarted $apiContainerApp"
+    # `az containerapp revision restart` requires --revision <name>; without
+    # it the CLI errors out with "the following arguments are required:
+    # --revision". Fetch the latest (== active) revision name first.
+    $latestRevision = az containerapp show -n $apiContainerApp -g $resourceGroup `
+        --query "properties.latestRevisionName" -o tsv
+    if (-not $latestRevision) {
+        throw "Could not resolve latest revision for $apiContainerApp in $resourceGroup."
+    }
+    az containerapp revision restart -n $apiContainerApp -g $resourceGroup `
+        --revision $latestRevision | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to restart revision $latestRevision (exit code $LASTEXITCODE)."
+    }
+    Write-Ok "Restarted $apiContainerApp revision $latestRevision"
 }
 
 Write-Step "Done."
