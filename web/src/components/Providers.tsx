@@ -6,7 +6,7 @@ import { MsalProvider } from '@azure/msal-react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 
-import { msalConfig } from '@/lib/auth/msalConfig';
+import { msalConfig, apiScopes } from '@/lib/auth/msalConfig';
 import { setTokenProvider } from '@/lib/api/client';
 
 interface ProvidersProps {
@@ -59,12 +59,16 @@ export const Providers = ({ children }: ProvidersProps) => {
 
   useEffect(() => {
     // Wire MSAL into the API client so apiFetch() injects bearer tokens.
+    // The scope MUST be the API app registration's exposed scope (apiScopes),
+    // NOT `${clientId}/.default` - the latter would target the SPA itself
+    // and every authenticated /api/* call would 401 with audience mismatch.
+    // See msalConfig.ts:64 + docs/OPS_M_0_PLAN.md §2.4.
     setTokenProvider(async () => {
       const account = msalInstance.getActiveAccount();
       if (!account) return null;
       try {
         const result = await msalInstance.acquireTokenSilent({
-          scopes: msalConfig.auth.clientId ? [`${msalConfig.auth.clientId}/.default`] : ['openid'],
+          scopes: apiScopes,
           account,
         });
         return result.accessToken;

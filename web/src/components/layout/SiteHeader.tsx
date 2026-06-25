@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Search, User, Calendar } from 'lucide-react';
 
 import { cn } from '@/lib/utils/cn';
+import { SiteHeaderAuth } from './SiteHeaderAuth';
 
 const navLinks = [
   { href: '/properties', label: 'Stays', icon: Search },
@@ -18,21 +19,24 @@ export const SiteHeader = () => {
           <span className="text-brand-maroon-700 dark:text-brand-orange-500">VrBook</span>
         </Link>
 
-        <nav className="hidden items-center gap-6 md:flex" aria-label="Primary">
-          {navLinks.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                'flex items-center gap-1.5 text-sm text-muted-foreground transition-colors',
-                'hover:text-brand-orange-600 focus-visible:text-brand-orange-600',
-              )}
-            >
-              <Icon className="h-4 w-4" aria-hidden />
-              {label}
-            </Link>
-          ))}
-        </nav>
+        <div className="flex items-center gap-6">
+          <nav className="hidden items-center gap-6 md:flex" aria-label="Primary">
+            {navLinks.map(({ href, label, icon: Icon }) => (
+              <Link
+                key={href}
+                href={href}
+                className={cn(
+                  'flex items-center gap-1.5 text-sm text-muted-foreground transition-colors',
+                  'hover:text-brand-orange-600 focus-visible:text-brand-orange-600',
+                )}
+              >
+                <Icon className="h-4 w-4" aria-hidden />
+                {label}
+              </Link>
+            ))}
+          </nav>
+          <SiteHeaderAuth />
+        </div>
       </div>
     </header>
   );
