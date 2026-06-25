@@ -74,10 +74,14 @@ function Assert-AzLogin {
 
 function Get-StateFilePath {
     param([string]$Env)
-    $dir = Join-Path $PSScriptRoot '..' '.state' | Resolve-Path -ErrorAction SilentlyContinue
+    # Windows PowerShell 5.1's Join-Path only accepts 2 positional args
+    # (Path + ChildPath). The 3+ arg form is PS 7+. Nest the calls so
+    # this works on both.
+    $stateRoot = Join-Path (Join-Path $PSScriptRoot '..') '.state'
+    $dir = $stateRoot | Resolve-Path -ErrorAction SilentlyContinue
     if (-not $dir) {
-        $dir = Join-Path $PSScriptRoot '..' '.state'
-        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        New-Item -ItemType Directory -Force -Path $stateRoot | Out-Null
+        $dir = $stateRoot
     }
     Join-Path $dir "$Env.json"
 }
