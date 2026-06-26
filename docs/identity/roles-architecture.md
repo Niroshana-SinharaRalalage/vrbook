@@ -1,18 +1,32 @@
-# Roles Architecture — DB-backed roles, identity-only tokens
+# Roles Architecture — App Roles for global, DB for per-tenant
 
 > Status: Proposed — awaiting user review.
-> Author: Architect consult, 2026-06-25.
+> Author: Architect consult, 2026-06-25. **Revised 2026-06-26** after re-consult flagged App Roles as the simpler primary path.
 > Supersedes the role-claim flow described in [`docs/OPS_M_0_PLAN.md`](../OPS_M_0_PLAN.md) §1 and [`docs/identity/setup.md`](./setup.md) §3 / §5 / §8.
-> Companion ADR: **ADR-0014 — DB-backed roles over Entra extension claims** (to be written alongside this doc).
+> Companion ADR: **ADR-0014 — App Roles for global roles, DB for per-tenant roles** (to be written alongside this doc).
 > Does **not** supersede [ADR-0012](../adr/0012-entra-external-id-over-b2c.md) — Entra External ID stays as the identity provider. Only the role-flow changes.
 
 ---
 
-## 1. Decision
+## 1. Decision (revised)
 
-**Roles live in our Postgres `identity.users` and `identity.tenant_memberships` tables, not in Entra.** Access tokens carry **identity claims only** (`oid`, `email`, `name`); `UserProvisioningMiddleware` (already on the request pipeline) loads role state from the DB on every authenticated request and synthesizes the ASP.NET `ClaimTypes.Role` claims that `[Authorize(Roles=...)]` already consumes. Entra extension attributes for `isOwner`/`isAdmin` are abandoned.
+**Split by role scope:**
 
-This is Option B in the prompt's framing. Option A (chase CIAM extension-claim emission) is rejected — under-documented and empirically non-emitting. Option C (Custom Authentication Extension webhook) is rejected for OPS.M.0 close-out — it would solve the symptom but adds a publicly-reachable token-time webhook, a second deploy surface, and a hard dependency on a still-evolving Entra preview feature; we can adopt it later if a use case appears that requires roles in the token itself.
+- **Global roles (`Owner`, `Admin`)** ship as **Entra App Roles** on the `vrbook-api-staging` / `vrbook-api-prod` app registrations. Entra emits a native `roles` claim in the access token; ASP.NET's JwtBearer maps it to `ClaimTypes.Role` automatically. `[Authorize(Roles="Owner,Admin")]` works with zero code changes.
+- **Per-tenant role (`tenant_admin`, OPS.M.5)** ships as a `identity.tenant_memberships(user_id, tenant_id, role)` DB row — a token can't express "admin on tenant X" without per-tenant token re-issue. `UserProvisioningMiddleware` is extended in OPS.M.1 to enrich the request's `ClaimsPrincipal` with these per-tenant claims; this is also where the doc's previous middleware-mutation pattern lands.
+
+### Why this split
+
+The previous draft of this doc recommended DB-backed roles for **everything**, abandoning Entra entirely. Re-consult surfaced that the previous draft was over-correcting: we ran into trouble with `extension_*` attributes (custom user data) but never tried Entra's purpose-built **App Roles** feature (authorization). App Roles is the platform-native mechanism for "what role is this user." It emits a `roles` claim natively — no `optionalClaims` PATCH, no extension property creation, no user-flow application-claims fiddling.
+
+Option-tree:
+
+| Option | Verdict |
+|---|---|
+| A. Chase extension claims | Rejected — empirically non-emitting in CIAM access tokens issued via user flows. |
+| B. DB-backed roles (everything) | Demoted to per-tenant only. Over-corrects for the global Owner/Admin case. |
+| C. Custom Authentication Extension webhook | Rejected — adds public webhook, second deploy surface, still-evolving preview feature. |
+| **D. App Roles (global) + DB (per-tenant)** | **Chosen.** Zero code for OPS.M.0; DB plumbing arrives in OPS.M.1 already-needed for `tenant_memberships`. |
 
 ---
 
@@ -202,19 +216,50 @@ Subdomain routing (`tenantA.vrbook.example.com`) is explicitly out of scope per 
 
 ---
 
-## 7. Implementation plan (4-6 steps in execution order)
+## 7. Implementation plan (revised — App Roles primary)
 
-**Steps 1-2 are runnable in this same session** (single-file edits, deterministic).
+### OPS.M.0 close-out (today, ~10 minutes, portal only)
 
-### Step 1 — Patch `UserProvisioningMiddleware` to load roles from DB
+#### Step 1 — Define App Roles on `vrbook-api-staging`
+*Path*: Entra admin center → App registrations → `vrbook-api-staging` → **App roles** → **+ Create app role**
+*Action*: Add two roles:
+- Display name `Owner`, value `Owner`, allowed members `Users/Groups`, description "Property owner; can manage their listings + bookings."
+- Display name `Admin`, value `Admin`, allowed members `Users/Groups`, description "Platform admin; cross-tenant access."
+
+#### Step 2 — Assign current user to both roles
+*Path*: Entra admin center → Enterprise applications → `vrbook-api-staging` → **Users and groups** → **+ Add user/group**
+*Action*: Pick `niroshanaks@gmail.com`, select role `Owner`. Repeat for `Admin`.
+*Fallback*: if portal UI is greyed out (CIAM preview rotation), use one Graph call: `POST /users/{userId}/appRoleAssignments` with `{ "principalId": "<userId>", "resourceId": "<vrbook-api-staging servicePrincipal objectId>", "appRoleId": "<roleId>" }`.
+
+#### Step 3 — Verify
+1. Close incognito; fresh sign-in.
+2. DevTools Console — decode the access token. Expect `roles: ["Owner", "Admin"]` (order may differ).
+3. Visit `/admin` — loads via Entra without DevAuth fallback.
+4. Once verified, set `DevAuth__AllowAnonymous=false` in staging Container App env so DevAuth can't silently authorize anymore.
+
+### OPS.M.1 — DB plumbing for `tenant_admin` (deferred; not now)
+
+Lands as part of the tenant aggregate work in OPS.M.1, NOT in OPS.M.0 close-out:
+
+#### Step 4 — Add `identity.tenant_memberships` table (EF migration)
+Per shape defined in §3.2 above.
+
+#### Step 5 — Extend `UserProvisioningMiddleware` to load tenant memberships
 *File*: `src/Modules/VrBook.Modules.Identity/Infrastructure/Auth/UserProvisioningMiddleware.cs`
-*Change*: Add `IUserRepository users` parameter to `InvokeAsync`. After `ctx.Items[...] = userId;`, re-fetch the user, mutate the request's `ClaimsIdentity` to add `ClaimTypes.Role` for `Owner` / `Admin` based on DB flags. Wrap the new code in the same `try/catch` shape.
-*Acceptance*: existing integration tests stay green (they use DevAuth which already adds the role claims). New integration test added in Step 4.
+*Change*: After `ProvisionUserCommand` returns `userId`, load `tenant_memberships` for the user, add `ClaimTypes.Role` claims for each membership role (e.g. `tenant_admin`), and add `app_tenant_id` claim if a primary membership exists. Wrap in the existing try/catch.
+*Acceptance*: integration test asserts a user with a `tenant_admin` membership for tenant X can access `/tenants/{X}/admin/*` and is rejected for tenant Y.
 
-### Step 2 — Rewrite `infra/scripts/grant-self-admin.ps1` as a SQL UPDATE
-*File*: `infra/scripts/grant-self-admin.ps1`
-*Change*: Drop the `az login --tenant <external>`, drop the Graph PATCH, replace with a `psql UPDATE identity.users SET is_owner=true, is_admin=true WHERE email=...`. Keep the `-Env` + `-UserEmail` parameter shape so the OPS.M.0 runbook (`docs/OPS_M_0_PLAN.md` operational task 12) calls the same line.
-*Acceptance*: run against staging — `niroshanaks@gmail.com` row in `identity.users` shows `is_owner=true, is_admin=true`. Sign out + back in via Entra; hit `/api/v1/me` — `isOwner: true, isAdmin: true` and `/admin/*` returns 200 over Entra (not DevAuth).
+#### Step 6 — Per-tenant grant API
+*Files (new)*:
+- `src/Modules/VrBook.Modules.Identity/Application/Memberships/Commands/GrantTenantRoleCommand.cs`
+- Admin endpoint `POST /api/v1/admin/tenants/{tenantId}/members` in `AdminController`.
+
+### What this slice (today) does NOT touch
+
+- `UserProvisioningMiddleware.cs` — no code change today.
+- `infra/scripts/grant-self-admin.ps1` — no rewrite needed for the global role bootstrap; App Role assignment in Step 2 is the bootstrap. The script can be kept for compatibility or quietly retired.
+- Any DB migration — `users.is_owner` / `is_admin` columns remain but go unused for the Entra path. They stay populated for the DevAuth path (which uses them when a real DB-backed persona seeds data).
+- No new ASP.NET role policies — the existing `OwnerOrAdmin` / `Admin` policies in `AuthExtensions.cs` already match the App Role values one-to-one.
 
 ### Step 3 — Add `SetUserRolesCommand` + admin endpoint
 *Files (new)*:
@@ -275,6 +320,6 @@ Subdomain routing (`tenantA.vrbook.example.com`) is explicitly out of scope per 
 
 ## 10. Open questions for review
 
-1. Confirm `Step 2`'s SQL-update approach (vs requiring an interactive `psql` prompt or a one-shot management API endpoint with `Allow:127.0.0.1` ACL). Recommendation: SQL update is simplest and consistent with `infra/scripts/_common.ps1` patterns; the alternative is a small `dotnet run --project src/VrBook.Migrator -- grant-self-admin` subcommand if direct DB access from the runner is unwanted.
-2. Confirm `Owner` role stays the API contract value for OPS.M.0 close-out (matches every existing `[Authorize(Roles="Owner,Admin")]`). Rename to `TenantAdmin` happens in OPS.M.4 across all controllers; do not start the rename here.
-3. Confirm we want to leave the Entra extension definitions in place on the staging tenant (recommended: leave them — removal costs no value and reverting them later if we add a CAE is awkward).
+1. Confirm the staging App Role values stay exactly `Owner` and `Admin` (case-sensitive — JwtBearer matches verbatim against `[Authorize(Roles="Owner,Admin")]`).
+2. Confirm the Entra extension artifacts from the previous direction (extension properties on `vrbook-api-staging`, `optionalClaims.accessToken` PATCH, extension values set on `niroshanaks@gmail.com`) stay in place as inert (recommended) vs are cleaned up. Recommendation: leave inert; cleanup is zero value.
+3. Confirm `DevAuth__AllowAnonymous=false` flip is part of OPS.M.0 close-out (it should be — leaving DevAuth open in staging defeats the verification).
