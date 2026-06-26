@@ -11,6 +11,11 @@ internal sealed class ReviewConfiguration : IEntityTypeConfiguration<Review>
         b.ToTable("reviews", ReviewsDbContext.SchemaName);
         b.HasKey(x => x.Id);
 
+        // OPS.M.3a — tenant_id column; nullable until 3c. Cross-schema FK to
+        // identity.tenants("Id") declared via raw SQL in the migration body.
+        b.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        b.HasIndex(x => x.TenantId);
+
         b.Property(x => x.BookingId).HasColumnName("booking_id").IsRequired();
         b.HasIndex(x => x.BookingId).IsUnique();
         b.Property(x => x.PropertyId).HasColumnName("property_id").IsRequired();

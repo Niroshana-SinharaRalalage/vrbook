@@ -13,8 +13,11 @@ namespace VrBook.Api.IntegrationTests.Domain;
 [Trait("Category", "Unit")]
 public sealed class ReviewAggregateTests
 {
+    private static readonly Guid AnyTenantId = new("00000000-0000-0000-0000-000000000001");
+
     private static Review SubmitDefault(int rating = 5, string body = "Loved it") =>
         Review.Submit(
+            tenantId: AnyTenantId,
             bookingId: Guid.NewGuid(),
             propertyId: Guid.NewGuid(),
             guestUserId: Guid.NewGuid(),
@@ -62,7 +65,7 @@ public sealed class ReviewAggregateTests
     public void Submit_with_blank_display_name_throws()
     {
         var act = () => Review.Submit(
-            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            AnyTenantId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
             "", 5, "body");
         act.Should().Throw<ArgumentException>();
     }

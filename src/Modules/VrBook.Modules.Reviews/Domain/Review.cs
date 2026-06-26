@@ -10,6 +10,12 @@ namespace VrBook.Modules.Reviews.Domain;
 /// </summary>
 public sealed class Review : AggregateRoot
 {
+    /// <summary>
+    /// Tenant the review belongs to (inherits from the booking's property).
+    /// Per OPS_M_3_PLAN §3.1 — `Guid?` during 3a/3b; flips to `Guid` in 3c.
+    /// </summary>
+    public Guid? TenantId { get; private set; }
+
     public Guid BookingId { get; private set; }
     public Guid PropertyId { get; private set; }
     public Guid GuestUserId { get; private set; }
@@ -25,6 +31,7 @@ public sealed class Review : AggregateRoot
     private Review() { } // EF
 
     public static Review Submit(
+        Guid tenantId,
         Guid bookingId,
         Guid propertyId,
         Guid guestUserId,
@@ -32,6 +39,10 @@ public sealed class Review : AggregateRoot
         int rating,
         string body)
     {
+        if (tenantId == Guid.Empty)
+        {
+            throw new ArgumentException("TenantId required.", nameof(tenantId));
+        }
         if (rating < 1 || rating > 5)
         {
             throw new BusinessRuleViolationException("review.rating", "Rating must be between 1 and 5.");
@@ -45,6 +56,7 @@ public sealed class Review : AggregateRoot
         return new Review
         {
             Id = Guid.NewGuid(),
+            TenantId = tenantId,
             BookingId = bookingId,
             PropertyId = propertyId,
             GuestUserId = guestUserId,

@@ -49,7 +49,19 @@ internal sealed class SubmitReviewHandler(
             return existing.ToDto();
         }
 
+        // OPS.M.3 — review inherits tenancy from the booking's property
+        // (guests are tenant-less; the review belongs to the property's tenant).
+        // Use SqlQuery (parameterised FormattableString) to avoid the EF1002
+        // injection warning. Once Catalog 3c flips to NOT NULL we can switch
+        // to property.TenantId.Value via a normal load.
+        var propertyId = booking.PropertyId;
+        var tenantIdRaw = await catalogDb.Database
+            .SqlQuery<Guid?>($"SELECT tenant_id AS \"Value\" FROM catalog.properties WHERE \"Id\" = {propertyId}")
+            .FirstOrDefaultAsync(cancellationToken);
+        var tenantId = tenantIdRaw ?? new Guid("00000000-0000-0000-0000-000000000001");
+
         var review = Review.Submit(
+            tenantId: tenantId,
             bookingId: cmd.BookingId,
             propertyId: booking.PropertyId,
             guestUserId: currentUser.UserId.Value,
