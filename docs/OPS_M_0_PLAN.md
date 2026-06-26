@@ -1,6 +1,6 @@
 # OPS.M.0 ≡ OPS.7 — Entra External ID cutover (Plan)
 
-**Status**: Proposed — awaiting user review.
+**Status**: Staging cutover **COMPLETE** (2026-06-26). Prod cutover deferred — see [`identity/runbooks/entra-prod-cutover-prerequisites.md`](identity/runbooks/entra-prod-cutover-prerequisites.md) for the gating gap.
 **Author**: Plan agent (architect) consult, 2026-06-24.
 **MASTER_PLAN reference**: `docs/MASTER_PLAN.md` §2 row 5 ("OPS.M.0 ≡ OPS.7 — Entra External ID cutover").
 **REPLAN reference**: `docs/REPLAN.md` line 459 ("OPS.7 (Entra) is a prerequisite for OPS.M.2 and folds into the OPS.M critical path.").
@@ -394,3 +394,16 @@ OPS.M.0 C2 produced three runbooks under `docs/identity/runbooks/`:
 - [`entra-incident-triage.md`](identity/runbooks/entra-incident-triage.md) — symptom-to-cause-to-fix diagnostic playbook drawn from this cutover's debugging session.
 
 `docs/identity/setup.md` is kept for historical reference but its §3 (extension attribute creation), §5 (application claims emission), and §8 (Graph PATCH bootstrap) are explicitly superseded by the runbooks + `roles-architecture.md`.
+
+OPS.M.0 C3 produced three production guard runbooks:
+- [`entra-prod-cutover-prerequisites.md`](identity/runbooks/entra-prod-cutover-prerequisites.md) — what must exist before prod cutover starts (including 11 prerequisites currently ❌ — most notably the missing `cd-prod-*` workflows and prod foundation deploy).
+- [`entra-prod-cutover-checklist.md`](identity/runbooks/entra-prod-cutover-checklist.md) — go/no-go gates for cutover day, walked top-to-bottom with explicit halt-and-rollback decision matrix.
+- [`entra-cutover-rollback.md`](identity/runbooks/entra-cutover-rollback.md) — recovery playbook: revision rollback (~30 sec restore), temporary DevAuth re-enable (last-resort), KV secret version restore, Entra portal state restore.
+
+### OPS.M.0 status (final)
+
+- **C1 — Staging cutover infrastructure**: ✅ Complete. App Roles assigned; access token carries `roles: ["Owner","Admin"]`; `/admin` loads via Entra alone (DevAuth flipped off + persisted in Bicep `be897bc`).
+- **C2 — Operational runbooks**: ✅ Complete. 3 runbooks + ADR/setup/plan footers (commit `b26e46a`).
+- **C3 — Production cutover guards**: ✅ Complete (this commit). 3 prod runbooks document the gating gap (`cd-prod-*` workflows, `infra/.state/prod.json`, and prod foundation deploy must be built before prod cutover can proceed).
+
+**Unblocks**: OPS.M.1 (multi-tenancy) is no longer blocked on OPS.M.0. Per `roles-architecture.md` §7 Step 4-5, the `UserProvisioningMiddleware` middleware enrichment + `tenant_memberships` table land in OPS.M.1 (NOT OPS.M.0 — they were originally proposed in this scope but recategorized to OPS.M.1 when App Roles simplified the close-out).
