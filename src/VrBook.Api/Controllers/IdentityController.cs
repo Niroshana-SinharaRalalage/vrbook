@@ -59,14 +59,19 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
             return NotFound();
         }
         var current = DevAuthPersonas.Resolve(Request.Cookies[DevAuthPersonas.CookieName]);
+        // OPS.M.2: Owner + Admin personas are seeded to the default tenant by
+        // Slice5b_DevAuth_Default_Tenant_Membership; Guest is tenant-less by
+        // design (per docs/MULTI_TENANCY_OPS_PLAN.md §1). Surface the tenantId
+        // alongside the persona for the future tenant-switcher UX (OPS.M.7).
+        const string defaultTenantId = "00000000-0000-0000-0000-000000000001";
         return Ok(new
         {
             current = current.Persona.ToString(),
             options = new[]
             {
-                new { value = "Owner", displayName = DevAuthPersonas.Owner.DisplayName, email = DevAuthPersonas.Owner.Email, roles = new[] { "Owner" } },
-                new { value = "Guest", displayName = DevAuthPersonas.Guest.DisplayName, email = DevAuthPersonas.Guest.Email, roles = Array.Empty<string>() },
-                new { value = "Admin", displayName = DevAuthPersonas.Admin.DisplayName, email = DevAuthPersonas.Admin.Email, roles = new[] { "Owner", "Admin" } },
+                new { value = "Owner", displayName = DevAuthPersonas.Owner.DisplayName, email = DevAuthPersonas.Owner.Email, roles = new[] { "Owner", "tenant_admin" }, tenantId = (string?)defaultTenantId },
+                new { value = "Guest", displayName = DevAuthPersonas.Guest.DisplayName, email = DevAuthPersonas.Guest.Email, roles = Array.Empty<string>(), tenantId = (string?)null },
+                new { value = "Admin", displayName = DevAuthPersonas.Admin.DisplayName, email = DevAuthPersonas.Admin.Email, roles = new[] { "Owner", "Admin", "tenant_admin" }, tenantId = (string?)defaultTenantId },
             },
         });
     }
