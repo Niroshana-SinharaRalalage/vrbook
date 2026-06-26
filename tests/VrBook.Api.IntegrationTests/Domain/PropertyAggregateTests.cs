@@ -20,12 +20,15 @@ public sealed class PropertyAggregateTests
     private static CheckInWindow AnyCheckInWindow() =>
         new(new TimeOnly(15, 0), new TimeOnly(22, 0), new TimeOnly(11, 0));
 
+    private static readonly Guid AnyTenantId = new("00000000-0000-0000-0000-000000000001");
+
     private static Property Create(
         IEnumerable<string>? houseRules = null,
         IEnumerable<Guid>? amenityIds = null,
         string title = "Cozy Cabin",
         string description = "A great place.") =>
         Property.Create(
+            tenantId: AnyTenantId,
             ownerUserId: Guid.NewGuid(),
             title: title,
             description: description,

@@ -16,5 +16,11 @@ internal sealed class PropertyImageConfiguration : IEntityTypeConfiguration<Prop
         b.Property(i => i.SortOrder).HasColumnName("sort_order");
         b.Property(i => i.IsPrimary).HasColumnName("is_primary").HasDefaultValue(false);
         b.HasIndex(i => new { i.PropertyId, i.SortOrder });
+
+        // OPS.M.3a — denormalised tenant_id, nullable until 3c. Per
+        // OPS_M_3_PLAN.md §1 the denorm lives so OPS.M.9 RLS policies don't
+        // have to join catalog.properties at read.
+        b.Property(i => i.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        b.HasIndex(i => i.TenantId);
     }
 }

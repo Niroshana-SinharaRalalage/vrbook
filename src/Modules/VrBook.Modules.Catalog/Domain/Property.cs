@@ -21,6 +21,17 @@ public sealed class Property : AggregateRoot
 
     public Guid OwnerUserId { get; private set; }
 
+    /// <summary>
+    /// Tenant the property belongs to. Per `docs/OPS_M_3_PLAN.md` §3 — populated
+    /// from <c>ICurrentUser.TenantId</c> when the owner creates the property.
+    /// Typed nullable to mirror the DB column shape during OPS.M.3a/3b (the
+    /// architect plan §3.1's "stay Guid non-nullable" intent isn't compatible
+    /// with EF Core's value-type mapping rules — nullable C# is required for
+    /// nullable DB column). The factory enforces non-empty so new rows always
+    /// carry a real tenant; existing rows get backfilled in 3b.
+    /// </summary>
+    public Guid? TenantId { get; private set; }
+
     public bool IsActive { get; private set; }
     public bool ReviewsEnabled { get; private set; }
     public bool DynamicPricingEnabled { get; private set; }
@@ -52,6 +63,7 @@ public sealed class Property : AggregateRoot
     private Property() { } // EF
 
     public static Property Create(
+        Guid tenantId,
         Guid ownerUserId,
         string title,
         string description,
@@ -63,6 +75,10 @@ public sealed class Property : AggregateRoot
         IEnumerable<Guid> amenityIds,
         string slug)
     {
+        if (tenantId == Guid.Empty)
+        {
+            throw new ArgumentException("TenantId required.", nameof(tenantId));
+        }
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
@@ -70,6 +86,7 @@ public sealed class Property : AggregateRoot
         var p = new Property
         {
             Id = Guid.NewGuid(),
+            TenantId = tenantId,
             OwnerUserId = ownerUserId,
             Slug = slug,
             Title = title.Trim(),
@@ -160,7 +177,11 @@ public sealed class Property : AggregateRoot
     {
         var nextSort = _images.Count == 0 ? 0 : _images.Max(i => i.SortOrder) + 1;
         var isFirst = _images.Count == 0;
-        var img = new PropertyImage(Id, blobPath, caption, nextSort, isFirst);
+        // TenantId is set by Property.Create and never reset — the null check
+        // here exists only to satisfy the compiler's nullable analysis.
+        var imageTenantId = TenantId ?? throw new InvalidOperationException(
+            "Property has no TenantId; cannot add image. Aggregate invariant violated.");
+        var img = new PropertyImage(imageTenantId, Id, blobPath, caption, nextSort, isFirst);
         _images.Add(img);
         Raise(new PropertyImageAdded(Id, img.Id, blobPath));
         return img;

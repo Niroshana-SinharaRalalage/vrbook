@@ -21,6 +21,10 @@ internal sealed class CreatePropertyHandler(
         {
             throw new ForbiddenException("Sign-in required to create a property.");
         }
+        if (currentUser.TenantId is null)
+        {
+            throw new ForbiddenException("Tenant context required to create a property.");
+        }
 
         var r = request.Request ?? throw new ArgumentException("Request body is required.", nameof(request));
         if (r.Address is null)
@@ -51,6 +55,7 @@ internal sealed class CreatePropertyHandler(
         var validIds = validAmenities.Select(a => a.Id).ToArray();
 
         var p = Property.Create(
+            tenantId: currentUser.TenantId.Value,
             ownerUserId: currentUser.UserId.Value,
             title: r.Title,
             description: r.Description,
