@@ -104,3 +104,13 @@ What does **not** change:
 - [Microsoft Entra External ID — External Tenant Quickstart](https://learn.microsoft.com/en-us/entra/external-id/customers/quickstart-tenant-setup)
 - [Microsoft Entra External ID — App registration](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app)
 - [docs/identity/setup.md](../identity/setup.md) — the operational runbook for this environment
+
+---
+
+## Post-cutover correction (2026-06-26)
+
+The role-claim flow originally described under "Claim names are stable" (custom `extension_*` attributes on the API app registration) **was abandoned during OPS.M.0 close-out**. Entra External ID's user-flow-issued access tokens do not reliably emit app-level `extension_*` claims even when `optionalClaims.accessToken` is configured.
+
+Roles now ship as **Entra App Roles** on the API app registration. Tokens carry a native `roles` claim that ASP.NET JwtBearer maps to `ClaimTypes.Role` automatically. See [`docs/identity/roles-architecture.md`](../identity/roles-architecture.md) for the design and [`docs/identity/runbooks/entra-external-id-setup.md`](../identity/runbooks/entra-external-id-setup.md) §7 for the operational procedure.
+
+This correction does **not** change the provider decision in this ADR — Entra External ID remains the identity provider. Only the role-bearing claim channel changed.

@@ -363,3 +363,34 @@ If you reject or want changes: point at the specific decision in §2 or the spec
 - Confirm prod tenant is deferred to a separate task at prod cutover time.
 - Confirm Google IdP at staging sign-up — yes/no.
 - Confirm MFA on staging Owners — default off.
+
+---
+
+## Post-cutover correction (2026-06-26)
+
+OPS.M.0 closed end-to-end on staging. Three things diverged from the original plan during execution; this section records them so future replans don't regress.
+
+### Role-claim flow changed: App Roles, not extension attributes
+
+§1 "Backend auth — done in code, awaiting config" assumed `extension_*_isOwner` / `_isAdmin` claims would emit in the access token. They don't — Entra External ID's CIAM user flows don't reliably emit app-level extension claims even with `optionalClaims.accessToken` configured. After ~1h of trying to make extension claims work, the architect was re-consulted and Entra's native **App Roles** feature was identified as the right knob.
+
+Roles now ship as App Roles defined on `vrbook-api-<env>`. The access token carries a `roles: ["Owner", "Admin"]` claim that ASP.NET JwtBearer maps to `ClaimTypes.Role` automatically. Zero code changes; three portal/CLI steps per environment. See [`docs/identity/roles-architecture.md`](identity/roles-architecture.md) for the design and [`docs/identity/runbooks/entra-external-id-setup.md`](identity/runbooks/entra-external-id-setup.md) §7 for the operational procedure.
+
+Operational step 12 of this plan (`grant-self-admin.ps1`) is therefore obsolete in its original form — the bootstrap is now an App Role assignment via Graph (one `POST /users/{id}/appRoleAssignments` call), not a `PATCH /users/{id}` with `extension_*` attributes. The script can be repurposed or quietly retired; the canonical procedure is now [`entra-external-id-setup.md`](identity/runbooks/entra-external-id-setup.md) §7.2.
+
+### Real bugs surfaced + fixed during the cutover
+
+These weren't in the plan but were necessary to ship:
+
+1. **`web/Dockerfile` was missing `ARG NEXT_PUBLIC_ENTRA_AUTHORITY` + `ARG NEXT_PUBLIC_ENTRA_CLIENT_ID`** (C1 phantom-edit; commit `989104d` is the fix). Without these, Docker silently drops the workflow's `--build-arg`, the browser bundle bakes in the msalConfig fallback constants, and MSAL redirects to `login.microsoftonline.com/common` with `client_id=00000000-...`. Symptom: `AADSTS700038`.
+2. **`vrbook-web-staging` redirect URIs registered on the `web` platform instead of `spa`.** MSAL.js uses PKCE — public client only. Symptom: `AADSTS9002326: Cross-origin token redemption is permitted only for the 'Single-Page Application' client-type` at the token exchange. Fix: Graph PATCH to move URIs from `web` to `spa`. The cutover script (`12-entra-cutover.ps1`) should use `--set` to write `spa.redirectUris` directly — currently it uses `--web-redirect-uris` which is wrong. Captured in [`entra-incident-triage.md`](identity/runbooks/entra-incident-triage.md) §2.2.
+3. **`Providers.tsx` second instance of the C1 MSAL scope bug.** The token provider that `apiFetch` uses was passing `${msalConfig.auth.clientId}/.default` (the SPA's id) as the scope. Fixed in commit `63cd52a` by importing the same `apiScopes` constant. Regression test in `msalConfig.test.ts`.
+
+### Runbook structure
+
+OPS.M.0 C2 produced three runbooks under `docs/identity/runbooks/`:
+- [`entra-external-id-setup.md`](identity/runbooks/entra-external-id-setup.md) — first-time provisioning (provides what `setup.md` was attempting; supersedes its §3/§5/§8).
+- [`entra-key-rotation.md`](identity/runbooks/entra-key-rotation.md) — ongoing credential & App Role membership management.
+- [`entra-incident-triage.md`](identity/runbooks/entra-incident-triage.md) — symptom-to-cause-to-fix diagnostic playbook drawn from this cutover's debugging session.
+
+`docs/identity/setup.md` is kept for historical reference but its §3 (extension attribute creation), §5 (application claims emission), and §8 (Graph PATCH bootstrap) are explicitly superseded by the runbooks + `roles-architecture.md`.

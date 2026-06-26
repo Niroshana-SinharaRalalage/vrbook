@@ -228,31 +228,11 @@ DevAuth__AllowAnonymous = false
 
 ## 8. Bootstrap yourself as Owner + Admin (one-off)
 
-Sign up via the user flow ([sign-in URL in the user flow blade — "Run user flow"](https://entra.microsoft.com)).
-Then back at the CLI:
-
-```powershell
-az login --tenant vrbookcid.onmicrosoft.com --allow-no-subscriptions
-
-# Find your user object id
-$myOid = az ad user list --query "[?mail=='you@example.com'].id | [0]" -o tsv
-"My oid = $myOid"
-
-$apiAppIdNoDashes = $apiAppId.Replace("-", "")
-$patch = @"
-{
-  "extension_${apiAppIdNoDashes}_isOwner": true,
-  "extension_${apiAppIdNoDashes}_isAdmin": true
-}
-"@
-az rest --method PATCH `
-    --uri "https://graph.microsoft.com/v1.0/users/$myOid" `
-    --body $patch --headers 'Content-Type=application/json'
-```
-
-Sign out + back in to refresh your token. Hit `/me` — `isOwner: true, isAdmin: true`.
-
-Or run [`infra/scripts/grant-self-admin.ps1`](../../infra/scripts/grant-self-admin.ps1) — it wraps the same calls.
+> ⚠️ **Superseded as of 2026-06-26.** This section originally PATCHed `extension_*_isOwner` / `_isAdmin` attributes on the Entra user. Roles now ship as Entra App Roles, not extension attributes — empirically the extension-attribute approach doesn't propagate into CIAM access tokens. See [`roles-architecture.md`](./roles-architecture.md) for the design rationale.
+>
+> **Use this procedure instead**: [`runbooks/entra-external-id-setup.md`](./runbooks/entra-external-id-setup.md) §7 — define `Owner` + `Admin` as App Roles on `vrbook-api-<env>`, then assign your user via Graph (`POST /users/{id}/appRoleAssignments`).
+>
+> The old extension-attribute procedure that was here previously is preserved in git history (pre-commit `<this commit>`) for archaeological reference only — do not run it. `grant-self-admin.ps1` is similarly obsolete.
 
 ---
 
