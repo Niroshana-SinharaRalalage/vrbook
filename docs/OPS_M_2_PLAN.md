@@ -203,7 +203,7 @@ Down() deletes those rows. The migration is dev-safe in prod too: `tenant_member
 
 ### Step 3 — `UserProvisioningMiddleware` enrichment (M, ~2h)
 
-**File (edit)**: `UserProvisioningMiddleware.cs` — after the existing `ctx.Items[...] = userId;`, add membership read + role/`app_tenant_id` claim stamping. Inject `IdentityDbContext db` as a new `InvokeAsync` parameter. Guard with `alreadyStamped` check so DevAuth's synthetic claim is not double-stamped or trampled. Wrap in the existing try/catch so DB failures don't break sign-in (logs warning, continues without role claims).
+**File (edit)**: `UserProvisioningMiddleware.cs` — after the existing `ctx.Items[...] = userId;`, add membership read + role/`app_tenant_id` claim stamping. Inject `IdentityDbContext db` as a new `InvokeAsync` parameter. **No `alreadyStamped` guard** (per §2.7 DB-wins revision — `tenant_memberships` is the sole source of truth). Wrap in the existing try/catch so DB failures don't break sign-in (logs warning, continues without role claims).
 
 **Acceptance**: `dotnet build` green. Existing `IdentityFlowTests` continue to pass — DevAuth Owner persona's `IsOwner` path is unchanged.
 
