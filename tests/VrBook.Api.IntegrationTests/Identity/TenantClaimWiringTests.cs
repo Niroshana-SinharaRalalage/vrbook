@@ -20,7 +20,6 @@ namespace VrBook.Api.IntegrationTests.Identity;
 public sealed class TenantClaimWiringTests(IdentityApiFixture fixture)
 {
     private static readonly Guid DefaultTenantId = new("00000000-0000-0000-0000-000000000001");
-    private static readonly Guid RandomTenantId = new("99999999-9999-9999-9999-999999999999");
 
     private sealed record CurrentTenantResponse(
         Guid? TenantId, bool IsTenantAdminOfDefault, bool IsTenantAdminOfRandom);
@@ -116,6 +115,9 @@ public sealed class TenantClaimWiringTests(IdentityApiFixture fixture)
         return user.Id;
     }
 
+    // Test-only raw SQL with controlled GUID + literal values. EF1002 doesn't
+    // apply here (no user input ever reaches these strings) - suppress for clarity.
+#pragma warning disable EF1002
     private async Task SeedMembershipAsync(Guid userId, Guid tenantId, string role, bool isPrimary)
     {
         using var scope = fixture.Services.CreateScope();
@@ -149,4 +151,5 @@ public sealed class TenantClaimWiringTests(IdentityApiFixture fixture)
         ");
         return secondTenantId;
     }
+#pragma warning restore EF1002
 }
