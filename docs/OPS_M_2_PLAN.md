@@ -1,6 +1,6 @@
 # OPS.M.2 — TenantId claim wiring + ICurrentUser shape update (Plan)
 
-**Status**: Proposed — awaiting user review.
+**Status**: ✅ **Shipped 2026-06-26**. Step 1 = `84d6c05`. Step 2 = `afbfb61`. Step 3 = `9d13cb3`. Step 4 = this commit. DB-wins precedence (see §2.7 revised).
 **Author**: Plan agent (architect) consult, 2026-06-26.
 **MASTER_PLAN reference**: `docs/MASTER_PLAN.md` §2 row OPS.M.2.
 **MULTI_TENANCY reference**: `docs/MULTI_TENANCY_OPS_PLAN.md` §10 row OPS.M.2 + §2.

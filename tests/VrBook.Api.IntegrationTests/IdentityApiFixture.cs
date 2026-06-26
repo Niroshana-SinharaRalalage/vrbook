@@ -72,7 +72,11 @@ public sealed class IdentityApiFixture : WebApplicationFactory<Program>, IAsyncL
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
-        await db.Database.ExecuteSqlRawAsync("TRUNCATE TABLE identity.users, identity.audit_log CASCADE;");
+        // OPS.M.2 — also truncate tenant_memberships so integration tests that seed
+        // memberships are repeatable (the partial unique index from OPS.M.1 would
+        // otherwise reject re-seeds across test runs sharing the fixture).
+        await db.Database.ExecuteSqlRawAsync(
+            "TRUNCATE TABLE identity.users, identity.audit_log, identity.tenant_memberships CASCADE;");
     }
 
     public HttpClient CreateClientWith(bool devAuth)

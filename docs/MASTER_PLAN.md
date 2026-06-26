@@ -38,7 +38,7 @@ This document is the single index. It points at the detailed plans for each phas
 | **= Phase 1 demo-able** | | **10** | | All seven slices' acceptance criteria met. |
 | 5 | OPS.M.0 ≡ OPS.7 — Entra External ID cutover (folded into OPS.M critical path) | 2 | 12 | Hard prerequisite for OPS.M.2. Moves out of OPS.1–8 launch-readiness because OPS.M depends on it. |
 | 6 | OPS.M.1 — Tenant aggregate + memberships | 2 | 14 | ✅ **Shipped 2026-06-26** (b7ae589, 74aaf64, 3ce5f96). Aggregates + Slice5 migration + default-tenant seed + ADR-0014. See `docs/OPS_M_1_PLAN.md`. |
-| 7 | OPS.M.2 — `TenantId` claim wiring + `ICurrentUser` shape | 1.5 | 15.5 | Depends on OPS.M.1 + Entra. |
+| 7 | OPS.M.2 — `TenantId` claim wiring + `ICurrentUser` shape | 1.5 | 15.5 | ✅ **Shipped 2026-06-26** (84d6c05, afbfb61, 9d13cb3, this commit). DB-wins precedence per ADR-0014. See `docs/OPS_M_2_PLAN.md`. |
 | 8 | OPS.M.3 — `tenant_id` column rollout (3a/b/c/d) | 4 | 19.5 | The work. Slice 3–7 tables already have the column nullable; OPS.M.3 backfills + tightens NOT NULL. |
 | 9 | OPS.M.4 — `TenantAuthorizationBehavior` + drop per-handler owner checks | 1.5 | 21 | Net code reduction. |
 | 10 | OPS.M.5 — Stripe Connect Express | 4 | 25 | Parallel with M.7. |

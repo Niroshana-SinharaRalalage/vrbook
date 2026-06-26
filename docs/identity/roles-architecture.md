@@ -124,9 +124,9 @@ This change is enough for `[Authorize(Roles="Owner,Admin")]` to succeed for an E
 
 ASP.NET's role check (`IsInRole`) reads claims via the principal's `RoleClaimType`. JwtBearer sets that to `ClaimTypes.Role` by default for the principal it builds. Adding `Claim(ClaimTypes.Role, "Owner")` directly is the smallest possible change. We do NOT touch `JwtBearerOptions.TokenValidationParameters.RoleClaimType` — the standard wiring is fine.
 
-### 4.3 What changes in OPS.M.1+ (forward look)
+### 4.3 OPS.M.1 + OPS.M.2 — what landed
 
-When `tenant_memberships` lands, the middleware extends the same block:
+✅ **Shipped 2026-06-26.** OPS.M.1 created the `identity.tenant_memberships` table (commit `74aaf64`); OPS.M.2 implemented the middleware enrichment (commit `9d13cb3`). Per `docs/OPS_M_2_PLAN.md` §2.7 the DB is the **sole source of truth** for `app_tenant_id` — DevAuth does NOT stamp the claim directly; the Slice5b seed migration inserts memberships for dev personas so the DB-read path resolves correctly. The middleware enrichment block looks like this:
 
 ```csharp
 foreach (var m in user.Memberships.Where(m => m.DeletedAt is null))

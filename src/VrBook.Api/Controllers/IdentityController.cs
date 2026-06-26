@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Swashbuckle.AspNetCore.Annotations;
 using VrBook.Contracts.Dtos;
+using VrBook.Contracts.Interfaces;
 using VrBook.Modules.Identity.Application.Users.Commands;
 using VrBook.Modules.Identity.Application.Users.Queries;
 using VrBook.Modules.Identity.Infrastructure.Auth;
@@ -73,6 +74,32 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
                 new { value = "Guest", displayName = DevAuthPersonas.Guest.DisplayName, email = DevAuthPersonas.Guest.Email, roles = Array.Empty<string>(), tenantId = (string?)null },
                 new { value = "Admin", displayName = DevAuthPersonas.Admin.DisplayName, email = DevAuthPersonas.Admin.Email, roles = new[] { "Owner", "Admin", "tenant_admin" }, tenantId = (string?)defaultTenantId },
             },
+        });
+    }
+
+    /// <summary>
+    /// OPS.M.2 — diagnostic helper that reports the calling principal's resolved
+    /// <see cref="ICurrentUser.TenantId"/> and <see cref="ICurrentUser.HasTenantRole"/>
+    /// answers for the default tenant + a known-bad tenant id. Gated by the same
+    /// <c>DevAuth:AllowAnonymous</c> flag as the rest of this controller so it 404s
+    /// in production. Primary consumer is the OPS.M.2 integration test pack
+    /// (<c>TenantClaimWiringTests.cs</c>) which uses this to assert the middleware
+    /// enrichment + DB-wins precedence without having to spin up a MediatR handler.
+    /// </summary>
+    [HttpGet("current-tenant")]
+    public ActionResult<object> CurrentTenant([FromServices] ICurrentUser currentUser)
+    {
+        if (!configuration.GetValue<bool>("DevAuth:AllowAnonymous"))
+        {
+            return NotFound();
+        }
+        var defaultTenant = new Guid("00000000-0000-0000-0000-000000000001");
+        var randomTenant = new Guid("99999999-9999-9999-9999-999999999999");
+        return Ok(new
+        {
+            tenantId = currentUser.TenantId,
+            isTenantAdminOfDefault = currentUser.HasTenantRole(defaultTenant, "tenant_admin"),
+            isTenantAdminOfRandom = currentUser.HasTenantRole(randomTenant, "tenant_admin"),
         });
     }
 
