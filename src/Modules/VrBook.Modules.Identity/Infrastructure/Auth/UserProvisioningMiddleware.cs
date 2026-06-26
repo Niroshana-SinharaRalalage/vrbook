@@ -1,8 +1,11 @@
 using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using VrBook.Modules.Identity.Application.Users.Commands;
+using VrBook.Modules.Identity.Domain;
+using VrBook.Modules.Identity.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Identity.Infrastructure.Auth;
 
@@ -12,10 +15,16 @@ namespace VrBook.Modules.Identity.Infrastructure.Auth;
 /// LastLoginAt + DisplayName + EmailVerified from the latest token. Stamps
 /// <c>HttpCurrentUser.AppUserIdItemKey</c> on <see cref="HttpContext.Items"/> so downstream
 /// handlers can read <see cref="VrBook.Contracts.Interfaces.ICurrentUser.UserId"/>.
+///
+/// OPS.M.2: after provisioning, reads the caller's <c>tenant_memberships</c> rows and
+/// stamps <c>ClaimTypes.Role</c> (one per membership) + <c>app_tenant_id</c> (from the
+/// <c>IsPrimary=true</c> row) onto the request's <see cref="ClaimsPrincipal"/>. DB is the
+/// sole source of truth per `docs/OPS_M_2_PLAN.md` §2.7 (DB-wins precedence) — no
+/// claim-already-present guard; the DB read always runs.
 /// </summary>
 public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<UserProvisioningMiddleware> logger)
 {
-    public async Task InvokeAsync(HttpContext ctx, IMediator mediator)
+    public async Task InvokeAsync(HttpContext ctx, IMediator mediator, IdentityDbContext db)
     {
         if (ctx.User?.Identity?.IsAuthenticated == true)
         {
@@ -51,6 +60,28 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<Use
                         oid, email, displayName, emailVerified, isOwner, isAdmin));
 
                     ctx.Items[HttpCurrentUser.AppUserIdItemKey] = userId;
+
+                    // OPS.M.2 — DB-wins per-tenant claim enrichment.
+                    var memberships = await db.Set<TenantMembership>()
+                        .Where(m => m.UserId == userId && m.DeletedAt == null)
+                        .Select(m => new { m.TenantId, m.Role, m.IsPrimary })
+                        .ToListAsync(ctx.RequestAborted);
+
+                    if (memberships.Count > 0 && ctx.User.Identity is ClaimsIdentity primaryIdentity)
+                    {
+                        foreach (var m in memberships)
+                        {
+                            // Duplicate role-name claims across tenants are OK — IsInRole is set membership.
+                            primaryIdentity.AddClaim(new Claim(ClaimTypes.Role, m.Role));
+                        }
+
+                        var primary = memberships.FirstOrDefault(m => m.IsPrimary);
+                        if (primary is not null)
+                        {
+                            primaryIdentity.AddClaim(new Claim(
+                                HttpCurrentUser.TenantIdClaimType, primary.TenantId.ToString()));
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
