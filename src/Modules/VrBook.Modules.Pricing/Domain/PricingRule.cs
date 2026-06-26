@@ -10,6 +10,12 @@ namespace VrBook.Modules.Pricing.Domain;
 /// </summary>
 public sealed class PricingRule : Entity
 {
+    /// <summary>
+    /// Denormalised tenant id (inherits from PricingPlan.TenantId). Per
+    /// OPS_M_3_PLAN §1, the denorm lives so RLS doesn't have to join pricing_plans.
+    /// </summary>
+    public Guid? TenantId { get; private set; }
+
     public Guid PricingPlanId { get; private set; }
     public PricingRuleKind Kind { get; private set; }
     public int Priority { get; private set; }
@@ -26,6 +32,7 @@ public sealed class PricingRule : Entity
     private PricingRule() { } // EF
 
     internal PricingRule(
+        Guid tenantId,
         Guid pricingPlanId,
         PricingRuleKind kind,
         int priority,
@@ -39,6 +46,10 @@ public sealed class PricingRule : Entity
         decimal adjustmentValue,
         bool isEnabled)
     {
+        if (tenantId == Guid.Empty)
+        {
+            throw new ArgumentException("TenantId required.", nameof(tenantId));
+        }
         ValidateForKind(
             kind,
             startDate,
@@ -49,6 +60,7 @@ public sealed class PricingRule : Entity
             adjustmentKind);
 
         Id = Guid.NewGuid();
+        TenantId = tenantId;
         PricingPlanId = pricingPlanId;
         Kind = kind;
         Priority = priority;

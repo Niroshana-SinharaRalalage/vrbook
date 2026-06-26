@@ -21,7 +21,7 @@ public sealed class ComputeQuoteWithRulesTests
 {
     private static PricingPlan FreshPlan(decimal baseRate = 100m, decimal weekendRate = 0m)
     {
-        var plan = PricingPlan.Create(Guid.NewGuid(), baseRate, "USD");
+        var plan = PricingPlan.Create(new Guid("00000000-0000-0000-0000-000000000001"), Guid.NewGuid(), baseRate, "USD");
         plan.Replace(baseRate, weekendRate, "USD", minStay: 1, maxStay: 365, dynamicEnabled: false,
             fees: Array.Empty<(FeeKind, decimal, FeeBasis, int?, string)>());
         _ = plan.DequeueEvents();

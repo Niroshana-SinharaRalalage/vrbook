@@ -11,6 +11,10 @@ internal sealed class PricingPlanConfiguration : IEntityTypeConfiguration<Pricin
         b.ToTable("pricing_plans", PricingDbContext.SchemaName);
         b.HasKey(p => p.Id);
 
+        // OPS.M.3a — tenant_id, nullable until 3c; cross-schema FK in migration body.
+        b.Property(p => p.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        b.HasIndex(p => p.TenantId);
+
         b.Property(p => p.PropertyId).HasColumnName("property_id").IsRequired();
         b.HasIndex(p => p.PropertyId).IsUnique();
 

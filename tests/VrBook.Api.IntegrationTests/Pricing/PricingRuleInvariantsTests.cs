@@ -16,7 +16,7 @@ public sealed class PricingRuleInvariantsTests
 {
     private static PricingPlan FreshPlan()
     {
-        var plan = PricingPlan.Create(Guid.NewGuid(), 100m, "USD");
+        var plan = PricingPlan.Create(new Guid("00000000-0000-0000-0000-000000000001"), Guid.NewGuid(), 100m, "USD");
         _ = plan.DequeueEvents(); // drain the Create-time PricingPlanUpdated
         return plan;
     }

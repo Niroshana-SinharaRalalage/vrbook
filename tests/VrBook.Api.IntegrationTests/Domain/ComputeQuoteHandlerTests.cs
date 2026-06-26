@@ -27,7 +27,7 @@ public sealed class ComputeQuoteHandlerTests
         int maxStay = 30,
         IEnumerable<(FeeKind kind, decimal amount, FeeBasis basis, int? freeThreshold, string label)>? fees = null)
     {
-        var p = PricingPlan.Create(propertyId, baseRate, "USD");
+        var p = PricingPlan.Create(new Guid("00000000-0000-0000-0000-000000000001"), propertyId, baseRate, "USD");
         p.Replace(baseRate, weekendRate, "USD", minStay, maxStay, dynamicEnabled: false,
             fees ?? []);
         return p;

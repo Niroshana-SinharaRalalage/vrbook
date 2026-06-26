@@ -20,6 +20,10 @@ internal sealed class UpdatePricingPlanHandler(
         {
             throw new ForbiddenException("Sign-in required.");
         }
+        if (currentUser.TenantId is null)
+        {
+            throw new ForbiddenException("Tenant context required.");
+        }
         var r = request.Request ?? throw new ArgumentException("Request body is required.", nameof(request));
 
         var existing = await plans.GetByPropertyIdAsync(request.PropertyId, cancellationToken);
@@ -27,7 +31,7 @@ internal sealed class UpdatePricingPlanHandler(
         if (existing is null)
         {
             // First time set - create a new plan.
-            var plan = PricingPlan.Create(request.PropertyId, r.BaseNightlyRate, r.Currency);
+            var plan = PricingPlan.Create(currentUser.TenantId.Value, request.PropertyId, r.BaseNightlyRate, r.Currency);
             plan.Replace(
                 r.BaseNightlyRate,
                 r.WeekendRate,

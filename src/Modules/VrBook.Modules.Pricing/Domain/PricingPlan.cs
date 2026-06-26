@@ -11,6 +11,12 @@ namespace VrBook.Modules.Pricing.Domain;
 /// </summary>
 public sealed class PricingPlan : AggregateRoot
 {
+    /// <summary>
+    /// Tenant the pricing plan belongs to (inherits from the property's owner).
+    /// Per OPS_M_3_PLAN §3.1 — `Guid?` during 3a/3b; flips to `Guid` in 3c.
+    /// </summary>
+    public Guid? TenantId { get; private set; }
+
     public Guid PropertyId { get; private set; }
     public decimal BaseNightlyRate { get; private set; }
     public decimal WeekendRate { get; private set; }
@@ -27,13 +33,18 @@ public sealed class PricingPlan : AggregateRoot
 
     private PricingPlan() { } // EF
 
-    public static PricingPlan Create(Guid propertyId, decimal baseRate, string currency)
+    public static PricingPlan Create(Guid tenantId, Guid propertyId, decimal baseRate, string currency)
     {
+        if (tenantId == Guid.Empty)
+        {
+            throw new ArgumentException("TenantId required.", nameof(tenantId));
+        }
         ArgumentException.ThrowIfNullOrWhiteSpace(currency);
         ArgumentOutOfRangeException.ThrowIfNegative(baseRate);
         var p = new PricingPlan
         {
             Id = Guid.NewGuid(),
+            TenantId = tenantId,
             PropertyId = propertyId,
             BaseNightlyRate = baseRate,
             WeekendRate = baseRate,
@@ -93,7 +104,10 @@ public sealed class PricingPlan : AggregateRoot
         bool isEnabled)
     {
         var resolvedPriority = priority ?? (_rules.Count == 0 ? 0 : _rules.Max(r => r.Priority) + 1);
+        var ruleTenantId = TenantId ?? throw new InvalidOperationException(
+            "PricingPlan has no TenantId; cannot add rule. Aggregate invariant violated.");
         var rule = new PricingRule(
+            ruleTenantId,
             Id,
             kind,
             resolvedPriority,

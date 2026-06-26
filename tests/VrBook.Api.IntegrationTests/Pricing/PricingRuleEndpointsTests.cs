@@ -29,7 +29,7 @@ public sealed class PricingRuleEndpointsTests
         Guid? propertyOwnerId = null)
     {
         var propertyId = Guid.NewGuid();
-        var plan = PricingPlan.Create(propertyId, 100m, "USD");
+        var plan = PricingPlan.Create(new Guid("00000000-0000-0000-0000-000000000001"), propertyId, 100m, "USD");
         _ = plan.DequeueEvents();
 
         var repo = Substitute.For<IPricingPlanRepository>();

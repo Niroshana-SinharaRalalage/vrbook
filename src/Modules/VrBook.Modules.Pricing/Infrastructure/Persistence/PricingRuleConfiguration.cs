@@ -11,6 +11,10 @@ internal sealed class PricingRuleConfiguration : IEntityTypeConfiguration<Pricin
         b.ToTable("pricing_rules", PricingDbContext.SchemaName);
         b.HasKey(r => r.Id);
 
+        // OPS.M.3a — denormalised tenant_id, nullable until 3c.
+        b.Property(r => r.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        b.HasIndex(r => r.TenantId);
+
         b.Property(r => r.PricingPlanId).HasColumnName("pricing_plan_id").IsRequired();
         b.Property(r => r.Kind).HasColumnName("kind").HasConversion<string>().HasMaxLength(40).IsRequired();
         b.Property(r => r.Priority).HasColumnName("priority").IsRequired();
