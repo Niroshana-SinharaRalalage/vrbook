@@ -1,6 +1,6 @@
 # OPS.M.1 — Tenant aggregate + memberships schema (Plan)
 
-**Status**: Proposed — awaiting user review.
+**Status**: **Approved 2026-06-26** — executing. User decisions on open questions: migration name = `Slice5_Tenant_Membership_Schema`, ADR-0014 written in this slice, `is_primary` enforced app-level only, default seed uses USD + UTC.
 **Author**: Plan agent (architect) consult, 2026-06-26.
 **MASTER_PLAN reference**: `docs/MASTER_PLAN.md` §2 row 6 ("OPS.M.1 — Tenant aggregate + memberships").
 **MULTI_TENANCY reference**: `docs/MULTI_TENANCY_OPS_PLAN.md` §10 row OPS.M.1 + §1 (tenant attributes).
@@ -72,7 +72,7 @@ INSERT INTO identity.tenants (
   support_email, platform_fee_bps, created_at, updated_at, row_version)
 VALUES (
   '00000000-0000-0000-0000-000000000001',
-  'default', 'VrBook Default', 'Active', 'EUR', 'Europe/Dublin',
+  'default', 'VrBook Default', 'Active', 'USD', 'UTC',
   'support@vrbook.example.com', 1500,
   NOW(), NOW(), 0)
 ON CONFLICT ("Id") DO NOTHING;
@@ -97,8 +97,8 @@ Added in OPS.M.1:
 | Column | Type | Nullable | Default | Notes |
 |---|---|---|---|---|
 | `status` | `text` | NOT NULL | `'PendingOnboarding'` | CHECK in 4 values per §2.5 |
-| `default_currency` | `char(3)` | NOT NULL | `'EUR'` | ISO 4217 |
-| `default_timezone` | `text` | NOT NULL | `'Europe/Dublin'` | IANA |
+| `default_currency` | `char(3)` | NOT NULL | `'USD'` | ISO 4217. USA-focused marketplace per user direction 2026-06-26 (originally `'EUR'` in the architect draft). Tenants in other regions can override at onboarding (OPS.M.7). |
+| `default_timezone` | `text` | NOT NULL | `'UTC'` | IANA. **Fallback only** — actual display timezones are derived from each property's location (catalog enhancement, likely Slice 6/7). UTC is the safe canonical for admin reports when no property context is available. Originally `'Europe/Dublin'` in the architect draft; corrected per user direction. |
 | `support_email` | `varchar(320)` | NOT NULL | `'support@vrbook.example.com'` | Per §8 of MTOP, separate from auth-principal email |
 | `platform_fee_bps` | `int` | NOT NULL | `1500` | Basis points; 1500 = 15%; Super-Admin overridable later |
 | `stripe_account_id` | `varchar(64)` | NULL | — | Set in OPS.M.5 |
@@ -358,7 +358,7 @@ Never falls: Step 1 (the Tenant + TenantMembership aggregates) and Step 2 (the m
 ## 10. Open questions for reviewer
 
 1. **Migration name**: `Slice5_Tenant_Membership_Schema` (aligns with current dev-phase context) vs `OpsM1_Tenant_Membership_Schema` (aligns with OPS.M lineage). Pick one as the convention going forward — OPS.M.3 will produce one migration per module, and the convention is going to repeat a dozen times.
-2. **`tenants.default_timezone` initial value**: I propose `'Europe/Dublin'` because staging is single-tenant and that's the user's locale signal (per ADR-0013 staging-vs-prod). Reviewer may prefer UTC. The default cascades into the seeded default-tenant row.
+2. **`tenants.default_timezone` initial value**: **Decided 2026-06-26** — `'UTC'`. Per-property timezones from location data are the right answer; the tenant column is a fallback only. App is USA-focused (originally proposed `Europe/Dublin` which was wrong). Same flow for `default_currency` — settled on `'USD'`, not `'EUR'`.
 3. **`tenants.support_email` initial value for the seed row**: `'support@vrbook.example.com'` is a placeholder. Should the seed value be your real support inbox so OPS.M.5+ bounce alerts go somewhere live? Email is configurable post-seed via `Tenant.UpdateSupportEmail()` (which I should also add to the aggregate — currently the plan doesn't include it; flag in review).
 4. **`is_primary` enforcement**: app-level only in OPS.M.1, or do we ship the partial unique index (`WHERE is_primary AND deleted_at IS NULL`) now? I lean app-level. Reviewer call.
 5. **Confirm Step 1 commit can ship before Step 2** even though the migration isn't there yet (EF pending-changes warning vs hard fail). I believe warning-only on `dotnet ef migrations has-pending-model-changes`. Worth a 30s check before committing the split.
