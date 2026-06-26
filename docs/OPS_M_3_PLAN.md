@@ -261,15 +261,17 @@ Never falls: **`properties`, `bookings`, `payment_intents`, `pricing_plans`, `th
 
 ---
 
-## 10. Open questions for reviewer
+## 10. Open questions — RESOLVED 2026-06-26 (architect defaults adopted)
 
-1. **Domain event payload extensions for `TenantId`** — add `Guid TenantId` to `BookingPlaced`, `BookingConfirmed`, `PropertyCreated`, etc.? Pro: cleaner consumer code, no cross-module read. Con: Slice 7+ event-schema change with replay implications (local-only today). Default: yes, add now.
-2. **Redis hold key — include `tenant_id`?** Per MTOP §7. Default: defer to M.6.
-3. **MTOP §3 corrections** — edit MTOP §3 to fix the five inaccuracies (§1.2/§1.3/§1.5/§1.6/§1.7), or leave intact and document deviations here only? Default: leave MTOP, document here.
-4. **3c default-value strategy** — column-level DEFAULT to default tenant ("silent fallback") or no DEFAULT ("loud NOT NULL violation if app forgets")? Default: **no DEFAULT, loud failure.**
-5. **Migration naming convention** — `OpsM3a_<Module>_TenantIdColumn`, `OpsM3b_<Module>_TenantIdBackfill`, `OpsM3c_<Module>_TenantIdNotNull`? Breaks from Slice-N pattern. Confirm.
-6. **`audit_log_entries.tenant_id` source** — write `currentUser.TenantId` (actor scope) or action-target tenant? Default: store actor's, let M.8 join targets.
-7. **Booking-derived tenant id authority** — `PlaceBookingHandler` uses `property.TenantId` not `currentUser.TenantId` (guest is tenant-less). M.4's behavior plan must account for this.
+User feedback: technical decisions belong with the architect, not the reviewer. Per [`feedback_proactive_architect_consult`](../../memory/feedback_proactive_architect_consult.md). All 7 questions are now **decided** with the architect's recommended defaults; documented here for the record.
+
+1. **Domain event payload extensions for `TenantId`** — ✅ **YES, add now.** `BookingPlaced`, `BookingConfirmed`, `BookingCancelled`, `PropertyCreated`, and any downstream-consumed event gain `Guid TenantId`. Events are pre-bus (Outbox interceptor) so replay implications are local-only; schema bump is cheap. Consumers (Messaging thread-create, Notification queue) avoid cross-module DB lookups.
+2. **Redis hold key — include `tenant_id`?** ✅ **Defer to M.6.** Not load-bearing for M.3.
+3. **MTOP §3 corrections** — ✅ **Leave MTOP intact; deviations documented here only** (§1.2 / §1.3 / §1.5 / §1.6 / §1.7).
+4. **3c default-value strategy** — ✅ **No DEFAULT, loud NOT NULL violation if app forgets.** Surfacing the bug fast > silent fallback.
+5. **Migration naming** — ✅ **`OpsM3a_<Module>_TenantIdColumn` / `OpsM3b_<Module>_TenantIdBackfill` / `OpsM3c_<Module>_TenantIdNotNull`.** Breaks from Slice-N pattern because slice numbers don't carry meaning for cross-module migration sets.
+6. **`audit_log_entries.tenant_id` source** — ✅ **Actor's `currentUser.TenantId` (nullable).** Super Admin actions = null. Target-tenant joins happen at read time in M.8.
+7. **Booking-derived tenant id authority** — ✅ **Aggregate is authoritative.** `PlaceBookingHandler` reads `property.TenantId`. M.4's behavior plan must respect this for guest-placed bookings.
 
 ---
 
