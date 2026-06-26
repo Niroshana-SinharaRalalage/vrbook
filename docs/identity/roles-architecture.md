@@ -3,7 +3,7 @@
 > Status: Proposed — awaiting user review.
 > Author: Architect consult, 2026-06-25. **Revised 2026-06-26** after re-consult flagged App Roles as the simpler primary path.
 > Supersedes the role-claim flow described in [`docs/OPS_M_0_PLAN.md`](../OPS_M_0_PLAN.md) §1 and [`docs/identity/setup.md`](./setup.md) §3 / §5 / §8.
-> Companion ADR: **ADR-0014 — App Roles for global roles, DB for per-tenant roles** (to be written alongside this doc).
+> Companion ADR: [**ADR-0014 — App Roles for global Owner/Admin, DB-backed memberships for per-tenant roles**](../adr/0014-app-roles-global-db-per-tenant.md) (written 2026-06-26 alongside OPS.M.1 Step 3).
 > Does **not** supersede [ADR-0012](../adr/0012-entra-external-id-over-b2c.md) — Entra External ID stays as the identity provider. Only the role-flow changes.
 
 ---

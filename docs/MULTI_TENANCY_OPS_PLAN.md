@@ -188,7 +188,7 @@ opts.OnBehalfOf = tenant.StripeAccountId; // for VAT/tax determination
 
 | # | Sub-deliverable | Est. days | Depends on | Notes |
 |---|---|---|---|---|
-| OPS.M.1 | Tenant aggregate + schema (identity.tenants, memberships) | 2 | — | Empty table; no app code uses it yet. |
+| OPS.M.1 | Tenant aggregate + schema (identity.tenants, memberships) | 2 | — | ✅ **Shipped 2026-06-26.** Aggregates + Slice5 migration + default-tenant seed. See `docs/OPS_M_1_PLAN.md` + ADR-0014. |
 | OPS.M.2 | `TenantId` claim wiring + `ICurrentUser` shape update | 1.5 | M.1 | DevAuth populates `TenantId` from a cookie for testing. |
 | OPS.M.3 | `tenant_id` column rollout (3a/3b/3c/3d) across all tables | 4 | M.1, M.2 | The work. Parallelisable across modules. |
 | OPS.M.4 | `TenantAuthorizationBehavior` + remove per-handler owner checks | 1.5 | M.3 | Net code reduction. |

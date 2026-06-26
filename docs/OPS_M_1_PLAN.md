@@ -1,6 +1,6 @@
 # OPS.M.1 — Tenant aggregate + memberships schema (Plan)
 
-**Status**: **Approved 2026-06-26** — executing. User decisions on open questions: migration name = `Slice5_Tenant_Membership_Schema`, ADR-0014 written in this slice, `is_primary` enforced app-level only, default seed uses USD + UTC.
+**Status**: ✅ **Shipped 2026-06-26**. Step 1 = `b7ae589`. Step 2 = `74aaf64`. Step 3 = this commit. ADR-0014 + migration round-trip tests + close-out footers landed. User decisions on open questions: migration name = `Slice5_Tenant_Membership_Schema`, ADR-0014 written in this slice, `is_primary` enforced app-level only, default seed uses USD + UTC.
 **Author**: Plan agent (architect) consult, 2026-06-26.
 **MASTER_PLAN reference**: `docs/MASTER_PLAN.md` §2 row 6 ("OPS.M.1 — Tenant aggregate + memberships").
 **MULTI_TENANCY reference**: `docs/MULTI_TENANCY_OPS_PLAN.md` §10 row OPS.M.1 + §1 (tenant attributes).
