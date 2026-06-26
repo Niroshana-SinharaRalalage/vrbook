@@ -69,9 +69,17 @@ Claim type: `"app_tenant_id"` (lowercase, prefix `app_` to avoid future Entra cl
 
 `DevAuthPersonas.Snapshot` gains `Guid? TenantId`. The existing `vrbook-dev-persona` cookie selects the persona; tenant id is derived from the snapshot. One source of truth per persona — flipping the cookie atomically swaps identity + tenant. All three personas map to the default tenant (`00000000-...-0001`) by default; Guest's `TenantId` stays `null`.
 
-### 2.7 Membership seeding for DevAuth Owner — **claim-only, no DB row**
+### 2.7 Membership seeding for DevAuth — **DB-wins (revised 2026-06-26)**
 
-DevAuth Owner gets `app_tenant_id` stamped directly by `DevAuthHandler` without inserting a `tenant_memberships` row. The middleware enrichment is **additive only**: if `app_tenant_id` already exists on the principal (DevAuth path), it does NOT re-stamp. If `tenant_memberships` returns rows (Entra path with grants in place), it stamps both `role` claims and `app_tenant_id` from primary. Keeps DevAuth a "synthetic identity"; staging Entra cutover uses the real grant path; integration tests cover both.
+> **Direction reversed** after re-consult. Original §2.7 had `DevAuthHandler` stamp `app_tenant_id` directly on the synthetic principal, with the middleware skipping re-stamping if the claim was already present. Re-consult flagged the foot-gun: an operator who seeds a `tenant_memberships` row for the `dev-owner-00000000` OID would be silently ignored. The plan flips to **`tenant_memberships` is the sole source of truth for `app_tenant_id`**.
+
+Concretely:
+
+- `DevAuthHandler` does **not** stamp `app_tenant_id` and does **not** stamp `tenant_admin` role claims. It continues stamping `oid`, name, email, and `Owner`/`Admin` role claims exactly as today.
+- A new seed migration (`Slice5b_DevAuth_Default_Tenant_Membership`) idempotently inserts a `tenant_memberships` row for each DevAuth Owner/Admin persona OID against the default tenant (`00000000-...-0001`) with `role=tenant_admin, is_primary=true`. The seed is `INSERT ... ON CONFLICT DO NOTHING`-safe so re-runs are no-ops. Guest persona is NOT seeded (per `MULTI_TENANCY_OPS_PLAN.md` §1 — guests are tenant-less).
+- `UserProvisioningMiddleware` is the sole stamper of `app_tenant_id` and the `tenant_admin` role claim. No `alreadyStamped` guard; always reads from DB.
+
+Cost: one extra short migration; one fewer field on the `DevAuthPersonas.Snapshot` record; ~5 fewer lines in the middleware. Behavior: any operator-seeded membership row takes effect immediately for the matching OID, whether DevAuth or Entra.
 
 ### 2.8 `ICurrentUser` surface area — **add exactly two members**
 
@@ -118,8 +126,8 @@ public interface ICurrentUser
 
 | Claim type | Value shape | Stamped by | Read by |
 |---|---|---|---|
-| `app_tenant_id` | lowercase canonical UUID string | `UserProvisioningMiddleware` (Entra path, primary membership's `TenantId`) OR `DevAuthHandler` (DevAuth path, persona snapshot's `TenantId`) | `HttpCurrentUser.TenantId`, `HttpCurrentUser.HasTenantRole` |
-| `ClaimTypes.Role` = `"tenant_admin"` | constant | `UserProvisioningMiddleware` per membership (Entra) OR `DevAuthHandler` directly (DevAuth, for Owner/Admin personas) | `HttpCurrentUser.HasTenantRole` and existing `[Authorize(Roles=...)]` machinery |
+| `app_tenant_id` | lowercase canonical UUID string | `UserProvisioningMiddleware` only (reads `tenant_memberships` where `IsPrimary=true`) | `HttpCurrentUser.TenantId`, `HttpCurrentUser.HasTenantRole` |
+| `ClaimTypes.Role` = `"tenant_admin"` | constant | `UserProvisioningMiddleware` per membership row (live, not soft-deleted) | `HttpCurrentUser.HasTenantRole` and existing `[Authorize(Roles=...)]` machinery |
 | `ClaimTypes.Role` = `"tenant_member"` | constant | Same as above (no consumer in OPS.M.2; UI in Phase 2) | Reserved |
 
 `ClaimTypes.Role = "Owner"` and `"Admin"` continue to be stamped exactly as today (Entra App Roles → JwtBearer auto-map, plus DevAuth's existing `claims.Add` block). The new claims are additive; nothing is removed.
@@ -154,15 +162,44 @@ public bool HasTenantRole(Guid tenantId, string role)
 
 **Acceptance**: `dotnet build` green. No behavior change yet (no stamping side). All existing tests continue to pass.
 
-### Step 2 — DevAuth persona-snapshot extension + tenant claim stamping (S, ~45m)
+### Step 2 — DevAuth dev-seed migration + persona API response extension (S, ~45m)
 
-**File (edit)**: `DevAuthHandler.cs` — add `Guid? TenantId` to `DevAuthPersonas.Snapshot`. Owner + Admin snapshots get default-tenant id; Guest stays null. In `HandleAuthenticateAsync`, after existing role claim additions: conditionally add `app_tenant_id` claim if persona has tenant id; add `ClaimTypes.Role = "tenant_admin"` for IsOwner personas.
+**Revised per §2.7 DB-wins direction.** `DevAuthHandler.cs` is NOT modified. The dev personas get their `app_tenant_id` via a seed migration that inserts membership rows.
 
-**File (edit)**: `IdentityController.DevAuthController.Personas` — extend response shape with `tenantId`.
+**File (new)**: `src/Modules/VrBook.Modules.Identity/Infrastructure/Persistence/Migrations/<timestamp>_Slice5b_DevAuth_Default_Tenant_Membership.cs` — a migration whose Up() inserts (idempotently, via `ON CONFLICT DO NOTHING`) two rows in `tenant_memberships`:
+- `(user_id = dev-owner uuid, tenant_id = default, role=tenant_admin, is_primary=true)` — but only IF the corresponding `users` row exists. Use a `WHERE EXISTS` clause so the seed is safe to run before any DevAuth user has signed in (in which case it's a no-op until the user appears).
+- `(user_id = dev-admin uuid, tenant_id = default, role=tenant_admin, is_primary=true)` — same.
+- Guest persona is NOT seeded — guests are tenant-less per `MULTI_TENANCY_OPS_PLAN.md` §1.
 
-**File (edit, web FE)**: `web/src/lib/api/devAuth.ts` — extend `DevPersonaInfo` with `readonly tenantId: string | null;`. (Visual UI unchanged; field is for future tenant-switcher.)
+Implementation sketch (the dev-owner/dev-admin OIDs are baked into `DevAuthHandler`; the `users.Id` to seed against is whatever `ProvisionUserCommand` allocated on first DevAuth login — so the seed migration's INSERT needs to JOIN `users` on `b2c_object_id`):
 
-**Acceptance**: `dotnet build` green; existing `IdentityFlowTests` still pass.
+```sql
+INSERT INTO identity.tenant_memberships
+    ("Id", user_id, tenant_id, role, is_primary,
+     created_at, updated_at, row_version)
+SELECT
+    gen_random_uuid(),
+    u."Id",
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    'tenant_admin', true,
+    NOW(), NOW(), 0
+  FROM identity.users u
+ WHERE u.b2c_object_id IN ('dev-owner-00000000', 'dev-admin-00000000')
+   AND NOT EXISTS (
+     SELECT 1 FROM identity.tenant_memberships m
+      WHERE m.user_id = u."Id"
+        AND m.tenant_id = '00000000-0000-0000-0000-000000000001'::uuid
+        AND m.deleted_at IS NULL
+   );
+```
+
+Down() deletes those rows. The migration is dev-safe in prod too: `tenant_memberships` for `b2c_object_id LIKE 'dev-%'` will not exist there (DevAuth is off; no users with those OIDs were ever provisioned).
+
+**File (edit)**: `IdentityController.DevAuthController.Personas` — extend response shape with `tenantId` (computed from the seeded membership; the FE doesn't need to call this, it's metadata for future tenant-switcher UX).
+
+**File (edit, web FE)**: `web/src/lib/api/devAuth.ts` — extend `DevPersonaInfo` with `readonly tenantId: string | null;`.
+
+**Acceptance**: `dotnet build` green; `IdentityFlowTests` still pass (DevAuth claim path unchanged for Owner/Admin role; the new tenant claim arrives via the membership read in Step 3).
 
 ### Step 3 — `UserProvisioningMiddleware` enrichment (M, ~2h)
 
@@ -272,7 +309,7 @@ Never falls: Step 1 (contract), Step 3 (middleware enrichment).
 2. **DevAuth Admin persona**: also gets `tenant_admin` of default tenant per §2.6 (recommended), OR super-admin is tenant-less in dev? Flag preference.
 3. **`current-tenant` debug endpoint**: ship gated by `DevAuth:AllowAnonymous` (recommended), OR use `ConfigureTestServices` injection only (no production-shipped endpoint)?
 4. **Membership read pattern**: direct `db.Set<TenantMembership>()` query in middleware (recommended), OR `User.Memberships` EF nav with `Include`?
-5. **Source-of-truth precedence**: DevAuth's `app_tenant_id` claim wins over later DB memberships per §2.7. Confirm this is correct (or flip in OPS.M.4).
+5. ~~**Source-of-truth precedence**: DevAuth's `app_tenant_id` claim wins over later DB memberships per §2.7.~~ **RESOLVED 2026-06-26 — flipped to DB-wins** per re-consult. See §2.7 revised. The plan changes documented in §2.7 + Step 2 + Step 3 + §3.2 claim-stamper table reflect the flip.
 6. **Test isolation**: confirm no concurrency hazard with existing tests sharing `IdentityApiCollection`.
 
 ---
