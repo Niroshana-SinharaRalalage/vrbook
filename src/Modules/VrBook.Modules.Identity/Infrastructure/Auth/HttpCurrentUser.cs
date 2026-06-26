@@ -20,6 +20,15 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
     public const string OwnerClaim = "extension_isOwner";
     public const string AdminClaim = "extension_isAdmin";
 
+    /// <summary>
+    /// Claim type carrying the caller's primary-tenant id (per OPS.M.2 /
+    /// `docs/OPS_M_2_PLAN.md` §2.5). String-formatted GUID, lowercase
+    /// canonical (`d` format). Stamped by <c>UserProvisioningMiddleware</c>
+    /// when the caller has an <c>IsPrimary=true</c> membership in
+    /// <c>tenant_memberships</c>.
+    /// </summary>
+    public const string TenantIdClaimType = "app_tenant_id";
+
     public Guid? UserId
     {
         get
@@ -52,6 +61,34 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
 
     public bool IsOwner => ReadBoolClaim(OwnerClaim) || HasRole("Owner");
     public bool IsAdmin => ReadBoolClaim(AdminClaim) || HasRole("Admin");
+
+    public Guid? TenantId
+    {
+        get
+        {
+            var raw = accessor.HttpContext?.User.FindFirstValue(TenantIdClaimType);
+            return Guid.TryParse(raw, out var id) ? id : null;
+        }
+    }
+
+    public bool HasTenantRole(Guid tenantId, string role)
+    {
+        if (tenantId == Guid.Empty || string.IsNullOrWhiteSpace(role))
+        {
+            return false;
+        }
+        var user = accessor.HttpContext?.User;
+        if (user is null || user.Identity?.IsAuthenticated != true)
+        {
+            return false;
+        }
+        if (!HasRole(role))
+        {
+            return false;
+        }
+        var raw = user.FindFirstValue(TenantIdClaimType);
+        return Guid.TryParse(raw, out var claimTenant) && claimTenant == tenantId;
+    }
 
     public bool HasRole(string role)
     {
