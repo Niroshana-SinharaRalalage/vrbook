@@ -84,12 +84,14 @@ Sequencing:
 
 ### 3.1 Aggregate property + factory
 
+**Revised 2026-06-26**: EF Core rejects nullable-mapping on value-type properties. C# property is `Guid?` during 3a/3b, flipping to `Guid` (non-nullable) coordinated with the DB NOT NULL flip in 3c. Factory still takes `Guid tenantId` (non-nullable param) with empty-guard. NotificationLog + AuditLogEntry stay `Guid?` permanently (no factory empty-guard).
+
 ```csharp
 public sealed class Property : AggregateRoot
 {
-    public Guid TenantId { get; private set; }   // NOT nullable in C# domain
-                                                  // (DB starts nullable in 3a; 3c flips)
-                                                  // exception: NotificationLog, AuditLogEntry per §1.6/§1.7
+    public Guid? TenantId { get; private set; }   // Guid? during 3a/3b
+                                                  // flips to Guid in 3c coordinated commit
+                                                  // exception: NotificationLog, AuditLogEntry per §1.6/§1.7 stay Guid? forever
 
     public static Property Create(
         Guid tenantId,                            // NEW — first parameter
@@ -199,6 +201,7 @@ One integration test per module in `tests/VrBook.Api.IntegrationTests/Multitenan
 
 1. **Migration `<timestamp>_OpsM3a_<Module>_TenantIdColumn.cs`**:
    - `AddColumn<Guid>(name: "tenant_id", nullable: true)` per in-scope table.
+   - **Snapshot pollution warning**: if `dotnet ef migrations add` was aborted mid-run, `<Module>DbContextModelSnapshot.cs` may retain stale state and the next `add` emits `AlterColumn` instead of `AddColumn`. Inspect the generated migration body; hand-rewrite to `AddColumn` + raw-SQL FK + `CreateIndex` if polluted. Verify snapshot diff matches the migration's net effect before committing. (Hit this on Catalog 3a; commit `a60e722` shows the hand-rewrite shape.)
    - Cross-schema FK via raw SQL (Slice 3 pattern):
      ```csharp
      migrationBuilder.Sql("""
@@ -216,7 +219,7 @@ One integration test per module in `tests/VrBook.Api.IntegrationTests/Multitenan
 4. **EF configuration**: `b.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();` (post-3c).
 5. **Command-handler edits**: pass `tenantId` from `currentUser.TenantId.Value` (owner writes) or parent aggregate (derived writes).
 6. **Query-handler edits**: **none in OPS.M.3.** Filter enforcement is M.4's behavior.
-7. **Migration `<timestamp>_OpsM3c_<Module>_TenantIdNotNull.cs`**: `AlterColumn(nullable: false)`.
+7. **3c = coordinated single commit per module**: migration `<timestamp>_OpsM3c_<Module>_TenantIdNotNull.cs` with `AlterColumn(nullable: false)` **plus** C# `Guid?` → `Guid` flip on the aggregate property **plus** removal of all `?? throw` widening sites in parent factories. All in one diff. Splitting risks a build where the migration ran but the property is still nullable (or vice versa).
 8. **Tests**: per-module rollout test (backfill correctness + `Create` throws on empty + end-to-end "tenant-A handler creates row → tenant_id=A").
 
 ---
@@ -308,6 +311,8 @@ Total: ~39 engineer-hours = **~5 single-engineer working days at sustainable pac
 - Acceptance: full Catalog test pack green; staging applies all three migrations sequentially.
 
 ### Step 3 — Wave A: 8 module 3a migrations (M, ~6h)
+
+**Rebase note**: each Wave A commit updates its module's `<Module>DbContextModelSnapshot.cs` independently. Rebase each commit on `main` sequentially; do NOT batch-merge or fast-forward in bulk — merge conflicts on snapshot files are mechanical but easy to miss.
 
 Eight 3a migrations following Catalog 3a template. Copy-paste-rename per module:
 - Booking: `bookings`, `booking_holds`.
