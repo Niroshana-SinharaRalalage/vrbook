@@ -267,35 +267,48 @@ If you reject or want changes: point at the specific §3.x/§4/§5 decision, the
 
 ---
 
-## 14. Close-out — `<date TBD>`
-
-*To be filled in by the implementing slice.*
+## 14. Close-out — 2026-06-27
 
 ### Per-step commit ledger
 
 | Step | Module(s) | Commit | Files touched |
 |---|---|---|---|
-| 1 | Contracts + 7 raising modules | `<sha>` | 5 event files + ~25 raise sites |
-| 2 | Identity + Contracts + Domain.Common + all 7 modules | `<sha>` | ITenantScoped, CrossTenantAccessException, TenantAuthorizationBehavior, ~30 command records, controllers |
-| 3a | Booking | `<sha>` | AvailabilityBlockHandlers + TransitionHandlers + PlaceBookingHandler cleanup |
-| 3b | Catalog | `<sha>` | UpdatePropertyHandler |
-| 3c | Sync | `<sha>` | ChannelFeedHandlers + ConflictDetectionHandlers (PropertyOwnerSnapshot cascade) |
-| 4 | Notifications | `<sha>` | NotificationLog.Queue + 3 call sites |
-| 5 | Architecture.Tests | `<sha>` | TenantScopedCommandTests |
+| 1 | Contracts + 4 raising modules | `98c8cab` | 5 event files, 11 raise sites, retro-fix for Booking + BookingHold Guid?→Guid that the Wave C commit silently no-op'd |
+| 2 (infra) | Identity + Contracts + Domain.Common | `a5a976d` | ITenantScoped, CrossTenantAccessException (subclass of unsealed ForbiddenException), TenantAuthorizationBehavior, DI registration before AuditLogBehavior |
+| 2+3a | Booking | `73ebd67` | 6 owner commands gain marker; 3 owner checks deleted in AvailabilityBlockHandlers + TransitionHandlers; PlaceBookingHandler self-booking guard kept |
+| 2+3b | Catalog | `362f27a` | 2 commands gain marker (Create + Update Property); UpdatePropertyHandler owner check deleted; Amenity commands NOT marked (platform-global per OPS_M_3 §1.2) |
+| 2+3c | Sync | `f4b0ce7` | 3 ChannelFeed commands gain marker; PropertyOwnerSnapshot.TenantId Guid?→Guid (D11 + OPS.M.3 §14 deviation 3 cleared); 6 widening sites deleted across Booking + Sync |
+| 2 | Pricing | `6d45427` | 6 rule + plan commands gain marker; 5 PricingAuthorization.RequireOwnerOrAdminAsync calls deleted (plan §5 extended — the helper-wrapped check matched §5's pattern but the architect's grep missed it); 6 cross-property-auth tests deleted |
+| 2 | Reviews | `e992c12` | 4 commands gain marker (RespondToReview + 3 moderation); SubmitReview NOT marked (guest path) |
+| 2 | Notifications | `0966a9f` | RetryNotificationCommand gains marker; DrainQueuedNotificationsCommand NOT marked (background cron) |
+| 4 | Notifications | `1817ab7` | NotificationLog.Queue tenantId parameter required (no default); 3 call sites pass tenantId consciously |
+| 5 | Architecture.Tests + IntegrationTests | this commit | TenantScopedCommandTests (4 reflection-based facts), TenantAuthorizationBehaviorTests (7 pipeline facts) |
 
 ### Step 5 deliverables shipped
 
-- `tests/VrBook.Api.IntegrationTests/Multitenancy/CrossTenantWriteRejectionTests.cs` — N cross-tenant rejection scenarios, each asserts both `CrossTenantAccessException` and the `.failed` audit row.
-- `tests/VrBook.Architecture.Tests/TenantScopedCommandTests.cs` — reflection-based contract check.
+- `tests/VrBook.Architecture.Tests/TenantScopedCommandTests.cs` — 4 reflection-based facts: (a) every `ITenantScoped` type is also `IRequest<>/IRequest`, (b) every `ITenantScoped` type exposes a non-nullable `Guid TenantId` property, (c) the `TenantId` getter is wired to the positional ctor argument (not shadowed), (d) `NotificationLog.Queue.tenantId` has no default value (Step 4 contract).
+- `tests/VrBook.Api.IntegrationTests/Multitenancy/TenantAuthorizationBehaviorTests.cs` — 7 pipeline facts: unscoped command passes through, unauthenticated rejected, no-membership rejected with `null` actual tenant, cross-tenant rejected with both ids on the exception, same-tenant passes, `CrossTenantAccessException` subclasses `ForbiddenException` (Hellang 7807 mapping still works), exception message contains both tenant ids. The architect's plan §6 called for an HTTP-driven `CrossTenantWriteRejectionTests` pack against each command; that lands in **Slice OPS.M.10** with the rest of the cross-tenant isolation suite alongside RLS coverage — keeping behavior-only assertions out of the WebApplicationFactory bring-up cost during M.4.
 - `docs/OPS_M_4_PLAN.md` §14 — this close-out section.
 
 ### Deviations from this plan
 
-*(to be filled in)*
+1. **Guest-driven commands deliberately NOT marked `ITenantScoped`.** Plan §6 listed `PlaceBookingCommand` (and by extension other guest paths — Cancel, CreateHold, ReleaseHold, SubmitReview) as `ITenantScoped`. Plan §3.2 separately said the behavior throws when `currentUser.TenantId is null`. Guests are tenant-less per MTOP §1, so marking a guest path would reject every guest action — clearly not intended. Resolved by treating the marker as "owner-driven commands only"; cross-tenant protection for guest paths comes from Slice OPS.M.9 RLS. Affected commands: `PlaceBookingCommand`, `CancelBookingCommand`, `CreateHoldCommand`, `ReleaseHoldCommand`, `SubmitReviewCommand`, `ComputeQuoteCommand`, `SendMessageCommand`, `MarkReadCommand`. Worth revisiting the plan text in a future revision.
+2. **Plan §5 extension — Pricing handlers.** The §5 table listed 5 per-handler owner-check sites in Booking + Catalog. The 5 Pricing rule-mutation handlers all called `PricingAuthorization.RequireOwnerOrAdminAsync(...)` — the same pattern wrapped in a static helper, which the architect's grep missed. Treated as a §5 extension: deleted in commit `6d45427` with the same logic (`TenantAuthorizationBehavior` + `[Authorize(Roles)]` covers it). Helper class file left intact for a later cleanup commit.
+3. **`Booking.TenantId` + `BookingHold.TenantId` were still `Guid?` despite Wave C Booking's commit message (`b4bfc34`).** The Write tool silently no-op'd those two flips during OPS.M.3 Wave C; the column was `NOT NULL` on staging per the migration, but the C# property was `Guid?` — a latent inconsistency. Caught during Step 1 raise-site updates (the events demanded `Guid`, not `Guid?`) and fixed in `98c8cab`. The saved-memory `feedback_write_persistence_bug` accurately predicted this category of error.
+4. **Messaging is a no-op for M.4.** Both `SendMessageCommand` and `MarkReadCommand` are participant-driven (the participant may be guest or owner). Marking either as `ITenantScoped` would reject guest participants. The existing `thread.IsParticipant(me)` check at the handler level is a domain rule (per §D12 reasoning — "is X a participant" is not a tenant check) and stays in place. No commit for Messaging.
+5. **`NotificationLog` tenant resolution in `OwnerNotificationHandlers` reads from event payload, not from a property lookup.** Plan §6 said the 3 call sites read tenant from the event's new `TenantId` field. Implemented per spec by extending the local `Queue` helper signature with a `Guid tenantId` parameter, then threading `n.TenantId` from each of the 4 owner-event handlers (`BookingPlaced`, `BookingConfirmed`, `BookingCancelled`, plus the deferred reminder). `BookingConflictDetected` handler still doesn't emit a notification per the existing `// TODO booking->owner lookup` placeholder. `LoyaltyNotificationHandlers` and `BookingNotificationHandlers` pass `tenantId: null` because loyalty is platform-wide and guest-bound mail is tenant-less per OPS.M.3 §1.6.
+6. **`PropertyOwnerSnapshot.TenantId` non-null-suppression at consumer sites.** D11 lock said tighten `Guid?` → `Guid` on the snapshot. After tightening, the consumer pattern is `var owner = await propertyOwners.GetAsync(...); var x = owner.TenantId;` — but `GetAsync` still returns `PropertyOwnerSnapshot?` so the call site needs either a null-check (`?? throw new NotFoundException`) or a `!` suppression. Pragmatic call across 6 consumer sites: use `!` because the property's existence was already validated above each call. A later cleanup could harden to `?? throw` for explicitness; the saved verdict is intentional.
 
 ### Forward links
 
-- Slice OPS.M.5 — Stripe Connect routing reads `Booking.TenantId` to pick the destination account; payment events get their `TenantId` bump in M.5's slot.
-- Slice OPS.M.8 — Super Admin lights up `IsPlatformAdmin` (the dormant carve-out at §3.5).
-- Slice OPS.M.9 — RLS policies provide defense-in-depth on top of the write-side gate this slice ships.
-- Slice 4 — Owner-notification handlers inherit the conscious-tenant-write pattern via the Step 4 signature and Step 5 arch test.
+- **Slice OPS.M.5** — Stripe Connect routing reads `Booking.TenantId` to pick the destination account; payment events get their `TenantId` bump in M.5's slot.
+- **Slice OPS.M.8** — Super Admin lights up `IsPlatformAdmin` (the dormant carve-out at §3.5).
+- **Slice OPS.M.9** — RLS policies provide defense-in-depth on top of the write-side gate this slice ships. The per-statement vs per-connection `app.tenant_id` binding decision (from `PHASE_3_RECONNAISSANCE.md`) becomes load-bearing here.
+- **Slice OPS.M.10** — Cross-tenant isolation test pack subsumes the HTTP-driven `CrossTenantWriteRejectionTests` deferred from Step 5.
+- **Slice 4** — Owner-notification handlers inherit the conscious-tenant-write pattern via Step 4's signature + Step 5's arch test. Slice 4's re-review (per `SLICE4_PLAN.md` banner) should confirm the `tenant.welcome` template + `TenantNotificationHandlers` slot still belongs to OPS.M.7 onboarding, not Slice 4 itself.
+
+### Test counts at close-out
+
+- Slice OPS.M.4 added: 4 arch tests + 7 behavior tests = 11 new facts.
+- Slice OPS.M.4 deleted: 6 PricingRule cross-property-auth tests + 1 anonymous-user test = 7 obsolete facts.
+- Net unit-test count: 296 (was 298 before M.4; 292 after the Pricing test deletions in `6d45427`; +4 from arch tests).
