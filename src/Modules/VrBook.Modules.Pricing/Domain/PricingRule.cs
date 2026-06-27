@@ -11,10 +11,10 @@ namespace VrBook.Modules.Pricing.Domain;
 public sealed class PricingRule : Entity
 {
     /// <summary>
-    /// Denormalised tenant id (inherits from PricingPlan.TenantId). Per
-    /// OPS_M_3_PLAN §1, the denorm lives so RLS doesn't have to join pricing_plans.
+    /// Denormalised tenant id (inherits from PricingPlan.TenantId).
+    /// OPS.M.3c flipped to non-nullable.
     /// </summary>
-    public Guid? TenantId { get; private set; }
+    public Guid TenantId { get; private set; }
 
     public Guid PricingPlanId { get; private set; }
     public PricingRuleKind Kind { get; private set; }

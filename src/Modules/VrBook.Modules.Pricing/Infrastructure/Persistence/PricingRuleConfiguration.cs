@@ -11,8 +11,8 @@ internal sealed class PricingRuleConfiguration : IEntityTypeConfiguration<Pricin
         b.ToTable("pricing_rules", PricingDbContext.SchemaName);
         b.HasKey(r => r.Id);
 
-        // OPS.M.3a — denormalised tenant_id, nullable until 3c.
-        b.Property(r => r.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        // OPS.M.3c — NOT NULL after Wave B backfill.
+        b.Property(r => r.TenantId).HasColumnName("tenant_id").IsRequired();
         b.HasIndex(r => r.TenantId);
 
         b.Property(r => r.PricingPlanId).HasColumnName("pricing_plan_id").IsRequired();
