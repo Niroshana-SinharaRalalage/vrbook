@@ -1,11 +1,23 @@
 # Slice 4 — Notifications That Actually Send (Plan)
 
-**Status**: Proposed — awaiting user review.
+**Status**: Proposed 2026-06-14. **Re-review required before implementation begins** — see banner below.
 **Author**: Plan agent (architect) consult, 2026-06-14.
 **REPLAN section**: `docs/REPLAN.md` §3 Slice 4.
 **Scope**: bring email delivery online so the booking funnel sends real mail via Azure Communication Services. Replaces the A9 v1 stub (`user-{guid:N}@stub.vrbook` recipient, no dispatch).
 
 This plan supersedes informal Slice 4 notes — it is the contract.
+
+> ## ⚠️ Re-review required before Slice 4 starts (banner added 2026-06-27)
+>
+> Slice 4 is now slot 12 (after Slice OPS.M.10) per the architect re-evaluation in `docs/SEQUENCING_RE_EVALUATION_2026_06_27.md`. By the time this slot is reached, the following will have shipped and changed Slice 4's scope:
+>
+> - **Slice OPS.M.4** ships `TenantAuthorizationBehavior` + extends `BookingPlaced/Confirmed/Cancelled/Rejected/ConflictDetected` events to carry `Guid TenantId` + ships a "every write path sets `tenant_id` consciously" Roslyn-style arch test. Slice 4 inherits that pattern; it does NOT author it.
+> - **Slice OPS.M.9** ships `IRlsBypassDbContextFactory<TContext>` + the bypass-RLS connection factory. Slice 4 simply registers the worker's `NotificationsDbContext` via this factory. Slice 4 does NOT author the contract.
+> - **Slice OPS.M.7** ships the tenant onboarding wizard. The `tenant.welcome` template + `TenantNotificationHandlers` consuming `TenantActivated` are M.7's responsibility once the ACS pipeline exists (i.e., once this slice ships). M.7 ships first with operator-manual welcomes; the welcome template lands in M.7 retroactively after Slice 4.
+>
+> Net effect: Slice 4 ships at its **original** 3-day scope (10 templates, not 11; no contract authoring; no event payload bumps; no arch-test authoring). The §2 decisions and §3 commit split below stand. The `notification_log.tenant_id` correctness rule (null for guest-bound, set from event payload for owner-bound) inherits the M.4 pattern.
+>
+> **Action when this slot is reached**: re-consult the architect to confirm none of M.4–M.10's actual shipped shape contradicts §2; refresh any code references that drifted since 2026-06-14.
 
 ---
 
