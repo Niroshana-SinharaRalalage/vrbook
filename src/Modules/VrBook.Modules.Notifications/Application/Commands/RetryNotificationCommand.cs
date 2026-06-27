@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
 using VrBook.Modules.Notifications.Domain;
 using VrBook.Modules.Notifications.Infrastructure.Persistence;
@@ -12,8 +13,14 @@ namespace VrBook.Modules.Notifications.Application.Commands;
 /// <see cref="NotificationStatus.Queued"/> so the next worker tick picks it up.
 /// Throws <see cref="NotFoundException"/> on unknown id and
 /// <see cref="BusinessRuleViolationException"/> if the row is not in a retryable state.
+///
+/// <para>
+/// OPS.M.4 — admin-driven; controller stamps <c>TenantId</c> from
+/// <c>currentUser.TenantId</c>. The behavior gates on the caller's tenant; the
+/// per-row <c>notification_log.tenant_id</c> match is OPS.M.9 RLS concern.
+/// </para>
 /// </summary>
-public sealed record RetryNotificationCommand(Guid Id) : IRequest<Unit>;
+public sealed record RetryNotificationCommand(Guid Id, Guid TenantId) : IRequest<Unit>, ITenantScoped;
 
 internal sealed class RetryNotificationHandler(
     NotificationsDbContext db,

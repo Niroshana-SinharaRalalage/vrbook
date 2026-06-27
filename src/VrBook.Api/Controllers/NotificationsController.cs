@@ -1,6 +1,8 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using VrBook.Contracts.Interfaces;
+using VrBook.Domain.Common;
 using VrBook.Modules.Notifications.Application.Commands;
 using VrBook.Modules.Notifications.Application.Queries;
 using VrBook.Modules.Notifications.Domain;
@@ -15,8 +17,11 @@ namespace VrBook.Api.Controllers;
 [Route("api/v1/admin/notifications")]
 [Tags("Notifications — Admin")]
 [Authorize(Roles = "Admin")]
-public sealed class AdminNotificationsController(IMediator mediator) : ControllerBase
+public sealed class AdminNotificationsController(IMediator mediator, ICurrentUser currentUser) : ControllerBase
 {
+    private Guid CallerTenantId() => currentUser.TenantId
+        ?? throw new ForbiddenException("Admin action requires a tenant membership.");
+
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<NotificationLogDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<NotificationLogDto>>> List(
@@ -31,7 +36,7 @@ public sealed class AdminNotificationsController(IMediator mediator) : Controlle
     [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> Retry(Guid id, CancellationToken cancellationToken)
     {
-        await mediator.Send(new RetryNotificationCommand(id), cancellationToken);
+        await mediator.Send(new RetryNotificationCommand(id, CallerTenantId()), cancellationToken);
         return NoContent();
     }
 }
