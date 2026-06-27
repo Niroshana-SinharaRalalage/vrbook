@@ -1,7 +1,11 @@
 using MediatR;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using VrBook.Contracts.Enums;
+using VrBook.Contracts.Interfaces;
+using VrBook.Domain.Common;
+using VrBook.Modules.Payment.Domain;
 using VrBook.Modules.Payment.Infrastructure.Persistence;
 using VrBook.Modules.Payment.Infrastructure.Stripe;
 
@@ -11,22 +15,31 @@ namespace VrBook.Modules.Payment.Application.Commands;
 /// Issue a refund tied to a booking. Amount=null means "platform-policy refund" -
 /// applies <see cref="RefundOptions.ServiceFeePercent"/> to the captured total.
 /// Caller passing an explicit Amount overrides the policy (admin manual refund).
+///
+/// <para>OPS.M.5 §3.6 (D6) — when the tenant has a Connect account the refund
+/// is routed with proportional application-fee reversal; the negative-balance
+/// guard prevents pushing the connected balance below zero.</para>
 /// </summary>
 public sealed record RefundForBookingCommand(Guid BookingId, decimal? Amount, string Reason) : IRequest<bool>;
 
 internal sealed class RefundForBookingHandler(
     IStripeGateway stripe,
+    ITenantStripeContextLookup tenantStripe,
     IPaymentIntentRepository repo,
-    PaymentDbContext db,
+    IUnitOfWork uow,
     IOptions<RefundOptions> refundOptions,
+    IConfiguration configuration,
     ILogger<RefundForBookingHandler> logger)
     : IRequestHandler<RefundForBookingCommand, bool>
 {
+    private const string AllowPlatformFallbackKey = "Payment:AllowPlatformFallback";
+
     public async Task<bool> Handle(RefundForBookingCommand cmd, CancellationToken cancellationToken)
     {
         if (!stripe.IsConfigured)
         {
-            logger.LogWarning("Stripe not configured; refund is a no-op for booking {BookingId}.", cmd.BookingId);
+            logger.LogWarning(
+                "Stripe not configured; refund is a no-op for booking {BookingId}.", cmd.BookingId);
             return false;
         }
         var pi = await repo.GetByBookingIdAsync(cmd.BookingId, cancellationToken);
@@ -36,14 +49,9 @@ internal sealed class RefundForBookingHandler(
         }
         if (pi.Status != PaymentStatus.Succeeded)
         {
-            // PI is either RequiresPaymentMethod (no card attached -> nothing happened)
-            // or RequiresCapture (auth-hold placed but not captured). Stripe refuses to
-            // "refund" an uncaptured charge - you must cancel the PI so the auth-hold
-            // is released to the cardholder. No service fee retention - we never had
-            // the money in the first place.
             var cancelled = await stripe.CancelPaymentIntentAsync(pi.StripePaymentIntentId, cancellationToken);
             pi.UpdateStatus(cancelled.Status, cancelled.ChargeId);
-            await db.SaveChangesAsync(cancellationToken);
+            await uow.SaveChangesAsync(cancellationToken);
             logger.LogInformation(
                 "Cancelled uncaptured PI {Pi} for booking {BookingId} (was {Was})",
                 pi.StripePaymentIntentId, cmd.BookingId, pi.Status);
@@ -51,17 +59,80 @@ internal sealed class RefundForBookingHandler(
         }
 
         var refundAmount = cmd.Amount ?? ComputeRefundAmount(pi.Amount, refundOptions.Value.ServiceFeePercent);
-        logger.LogInformation(
-            "Refunding {RefundAmount} of {Captured} for booking {BookingId} (fee={FeePct}%, explicit={ExplicitAmount})",
-            refundAmount, pi.Amount, cmd.BookingId, refundOptions.Value.ServiceFeePercent, cmd.Amount);
 
-        var refund = await stripe.RefundAsync(
-            pi.StripePaymentIntentId, refundAmount,
-            idempotencyKey: $"booking:{cmd.BookingId:N}:refund",
-            reason: cmd.Reason,
-            cancellationToken: cancellationToken);
-        pi.AddRefund(refund.Id, refund.Amount, cmd.Reason);
-        await db.SaveChangesAsync(cancellationToken);
+        // OPS.M.5 §3.6 (D6) — over-refund guard. Sum prior refunds and reject if
+        // (this + prior) exceeds the captured total.
+        var sumPriorRefunds = pi.Refunds.Sum(r => r.Amount);
+        if (refundAmount + sumPriorRefunds > pi.Amount)
+        {
+            throw new BusinessRuleViolationException(
+                "payment.over_refund",
+                $"Refund {refundAmount:F2} plus prior {sumPriorRefunds:F2} exceeds captured {pi.Amount:F2}.");
+        }
+
+        // OPS.M.5 §3.4 (D4) — tenant Stripe context for fee math + Connect routing.
+        var ctx = await tenantStripe.GetAsync(pi.TenantId, cancellationToken);
+        var fallbackAllowed = configuration.GetValue<bool>(AllowPlatformFallbackKey, false);
+        var hasConnectAccount = ctx?.StripeAccountId is not null;
+        bool refundApplicationFee = false;
+        long? feeReversalCents = null;
+        if (hasConnectAccount)
+        {
+            // Negative-balance guard per §3.6. Sufficient condition: after this
+            // refund + reversal, remaining connected balance ≥ 0. Algebraically,
+            // (capturedAmount - applicationFeeAmount) - sum(refundedNet) ≥ thisRefundNet.
+            var bps = ctx!.PlatformFeeBps;
+            var applicationFeeAmount = StripeFeeCalculator.ApplicationFeeCents(pi.Amount, bps) / 100m;
+            // Sum prior NET refunds to the tenant = priorRefunds - priorFeeReversals.
+            // We don't persist the prior reversal cents on Refund yet (§3.6 follow-up),
+            // so approximate: assume each prior refund used the proportional reversal.
+            var priorTenantNet = sumPriorRefunds
+                - sumPriorRefunds * bps / 10_000m;
+            var thisRefundNet = refundAmount - refundAmount * bps / 10_000m;
+            var availableConnectedBalance = (pi.Amount - applicationFeeAmount) - priorTenantNet;
+            if (thisRefundNet > availableConnectedBalance)
+            {
+                throw new NegativeBalanceRefundException(
+                    pi.Id, refundAmount, availableConnectedBalance);
+            }
+
+            var isFullRefund = refundAmount + sumPriorRefunds == pi.Amount;
+            refundApplicationFee = true;
+            feeReversalCents = isFullRefund
+                ? null
+                : StripeFeeCalculator.ProportionalFeeReversalCents(refundAmount, pi.Amount, bps);
+        }
+        else if (!fallbackAllowed)
+        {
+            // No Connect account + no staging fallback → legacy refund path is
+            // an audit-trail leak. Reject loudly.
+            throw new BusinessRuleViolationException(
+                "payment.connect_account_missing",
+                $"Tenant {pi.TenantId:D} has no Connect account. Refund cannot route the fee reversal correctly.");
+        }
+
+        logger.LogInformation(
+            "Refunding {RefundAmount} of {Captured} for booking {BookingId} reverse_fee={Reverse} reversal_cents={Cents}",
+            refundAmount, pi.Amount, cmd.BookingId, refundApplicationFee, feeReversalCents);
+
+        // Generate the refund id up-front so we can pass it as the idempotency key
+        // anchor + tag the Refund aggregate row with it.
+        var refundId = Guid.NewGuid();
+        var stripeRefund = hasConnectAccount
+            ? await stripe.RefundAsync(
+                pi.StripePaymentIntentId, refundAmount,
+                idempotencyKey: StripeIdempotency.ForRefund(refundId),
+                reason: cmd.Reason,
+                refundApplicationFee: refundApplicationFee,
+                applicationFeeRefundCents: feeReversalCents,
+                cancellationToken: cancellationToken)
+            : await stripe.RefundAsync(
+                pi.StripePaymentIntentId, refundAmount,
+                idempotencyKey: StripeIdempotency.ForRefund(refundId),
+                reason: cmd.Reason,
+                cancellationToken: cancellationToken);
+        pi.AddRefund(stripeRefund.Id, stripeRefund.Amount, cmd.Reason);
+        await uow.SaveChangesAsync(cancellationToken);
         return true;
     }
 
