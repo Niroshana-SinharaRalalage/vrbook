@@ -24,7 +24,11 @@ public sealed class PaymentModule : IModuleRegistration
 
         services.Configure<StripeOptions>(configuration.GetSection(StripeOptions.SectionName));
         services.Configure<RefundOptions>(configuration.GetSection(RefundOptions.SectionName));
-        services.AddSingleton<IStripeGateway, StripeGateway>();
+        services.AddSingleton<StripeGateway>();
+        services.AddSingleton<IStripeGateway>(sp => sp.GetRequiredService<StripeGateway>());
+        // OPS.M.5 §3.3 (D3) — same singleton serves the Identity-side
+        // onboarding commands via the IStripeConnectGateway interface.
+        services.AddSingleton<IStripeConnectGateway>(sp => sp.GetRequiredService<StripeGateway>());
 
         services.AddScoped<IPaymentIntentRepository, PaymentIntentRepository>();
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<PaymentDbContext>());

@@ -14,5 +14,11 @@ public sealed class StripeOptions
     public string PublishableKey { get; set; } = string.Empty;
     public string WebhookSecret { get; set; } = string.Empty;
 
+    /// <summary>OPS.M.5 §3.12 (D12) — where Stripe redirects after onboarding completes.</summary>
+    public string OnboardingReturnUrl { get; set; } = string.Empty;
+
+    /// <summary>OPS.M.5 §3.12 (D12) — where Stripe redirects when an AccountLink expires (re-generate path).</summary>
+    public string OnboardingRefreshUrl { get; set; } = string.Empty;
+
     public bool IsConfigured => !string.IsNullOrWhiteSpace(SecretKey);
 }

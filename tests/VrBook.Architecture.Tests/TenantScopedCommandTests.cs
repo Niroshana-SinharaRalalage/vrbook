@@ -40,6 +40,8 @@ public sealed class TenantScopedCommandTests
         typeof(VrBook.Modules.Pricing.Application.Plans.Commands.UpdatePricingPlanCommand).Assembly,
         typeof(VrBook.Modules.Reviews.Application.Commands.SubmitReviewCommand).Assembly,
         typeof(VrBook.Modules.Notifications.Application.Commands.RetryNotificationCommand).Assembly,
+        // OPS.M.5 Step 5 — onboarding commands live in the Identity module.
+        typeof(VrBook.Modules.Identity.Application.Tenants.Commands.OnboardTenantStripeCommand).Assembly,
     };
 
     private static IEnumerable<Type> TenantScopedCommands() =>

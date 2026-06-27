@@ -6,7 +6,7 @@ using VrBook.Domain.Common;
 
 namespace VrBook.Modules.Payment.Infrastructure.Stripe;
 
-internal sealed class StripeGateway : IStripeGateway
+internal sealed class StripeGateway : IStripeGateway, VrBook.Contracts.Interfaces.IStripeConnectGateway
 {
     private readonly StripeOptions options;
     private readonly ILogger<StripeGateway> logger;
@@ -118,6 +118,73 @@ internal sealed class StripeGateway : IStripeGateway
             return false;
         }
     }
+
+    // ---- OPS.M.5 IStripeConnectGateway ----
+
+    public async Task<string> CreateConnectAccountAsync(
+        Guid tenantId, string email, string country, CancellationToken ct = default)
+    {
+        RequireConfigured();
+        var service = new AccountService();
+        var opts = new AccountCreateOptions
+        {
+            Type = "express",
+            Country = country,
+            Email = email,
+            Capabilities = new AccountCapabilitiesOptions
+            {
+                CardPayments = new() { Requested = true },
+                Transfers = new() { Requested = true },
+            },
+        };
+        var requestOpts = new RequestOptions
+        {
+            IdempotencyKey = StripeIdempotency.ForOnboarding(tenantId),
+        };
+        var account = await StripeRetryPipeline.Build().ExecuteAsync(
+            async token => await service.CreateAsync(opts, requestOpts, token),
+            ct);
+        logger.LogInformation(
+            "Stripe Connect account created tenant={TenantId} stripe_account_id={AccountId} idempotency_key={Key}",
+            tenantId, account.Id, requestOpts.IdempotencyKey);
+        return account.Id;
+    }
+
+    public async Task<VrBook.Contracts.Interfaces.StripeAccountLink> CreateAccountLinkAsync(
+        string stripeAccountId, CancellationToken ct = default)
+    {
+        RequireConfigured();
+        var service = new AccountLinkService();
+        var opts = new AccountLinkCreateOptions
+        {
+            Account = stripeAccountId,
+            Type = "account_onboarding",
+            ReturnUrl = options.OnboardingReturnUrl,
+            RefreshUrl = options.OnboardingRefreshUrl,
+        };
+        var link = await StripeRetryPipeline.Build().ExecuteAsync(
+            async token => await service.CreateAsync(opts, cancellationToken: token),
+            ct);
+        var expiresAt = new DateTimeOffset(link.ExpiresAt, TimeSpan.Zero);
+        logger.LogInformation(
+            "Stripe Connect account link issued stripe_account_id={AccountId} expires_at={ExpiresAt}",
+            stripeAccountId, expiresAt);
+        return new VrBook.Contracts.Interfaces.StripeAccountLink(link.Url, expiresAt);
+    }
+
+    public async Task<string> CreateLoginLinkAsync(string stripeAccountId, CancellationToken ct = default)
+    {
+        RequireConfigured();
+        var service = new AccountLoginLinkService();
+        var link = await StripeRetryPipeline.Build().ExecuteAsync(
+            async token => await service.CreateAsync(stripeAccountId, cancellationToken: token),
+            ct);
+        logger.LogInformation(
+            "Stripe Connect login link issued stripe_account_id={AccountId}", stripeAccountId);
+        return link.Url;
+    }
+
+    // ---- Utilities ----
 
     private static long ToCents(decimal amount) =>
         (long)decimal.Round(amount * 100m, 0, MidpointRounding.AwayFromZero);
