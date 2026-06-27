@@ -5,6 +5,8 @@ using Swashbuckle.AspNetCore.Annotations;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Enums;
+using VrBook.Contracts.Interfaces;
+using VrBook.Domain.Common;
 using VrBook.Modules.Reviews.Application.Moderation.Commands;
 using VrBook.Modules.Reviews.Application.Moderation.Queries;
 using VrBook.Modules.Reviews.Application.Queries;
@@ -15,8 +17,11 @@ namespace VrBook.Api.Controllers;
 [Route("api/v1/reviews")]
 [Tags("Reviews")]
 [Authorize]
-public sealed class ReviewsController(IMediator mediator) : ControllerBase
+public sealed class ReviewsController(IMediator mediator, ICurrentUser currentUser) : ControllerBase
 {
+    private Guid CallerTenantId() => currentUser.TenantId
+        ?? throw new ForbiddenException("Owner action requires a tenant membership.");
+
     [HttpPost("{id:guid}/response")]
     [Authorize(Roles = "Owner,Admin")]
     [SwaggerOperation(Summary = "Owner replies to a review (1:1).")]
@@ -26,7 +31,7 @@ public sealed class ReviewsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> Respond(
         Guid id, [FromBody] SubmitReviewResponseRequest request, CancellationToken cancellationToken)
     {
-        await mediator.Send(new RespondToReviewCommand(id, request.Body), cancellationToken);
+        await mediator.Send(new RespondToReviewCommand(id, request.Body, CallerTenantId()), cancellationToken);
         return NoContent();
     }
 }
@@ -56,8 +61,11 @@ public sealed class PropertyReviewsController(IMediator mediator) : ControllerBa
 [Route("api/v1/admin/reviews")]
 [Tags("Reviews — Admin")]
 [Authorize(Roles = "Admin")]
-public sealed class ReviewsAdminController(IMediator mediator) : ControllerBase
+public sealed class ReviewsAdminController(IMediator mediator, ICurrentUser currentUser) : ControllerBase
 {
+    private Guid CallerTenantId() => currentUser.TenantId
+        ?? throw new ForbiddenException("Admin action requires a tenant membership.");
+
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ReviewDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ReviewDto>>> List(
@@ -69,7 +77,7 @@ public sealed class ReviewsAdminController(IMediator mediator) : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Hide(Guid id, CancellationToken cancellationToken)
     {
-        await mediator.Send(new HideReviewCommand(id), cancellationToken);
+        await mediator.Send(new HideReviewCommand(id, CallerTenantId()), cancellationToken);
         return NoContent();
     }
 
@@ -78,7 +86,7 @@ public sealed class ReviewsAdminController(IMediator mediator) : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Restore(Guid id, CancellationToken cancellationToken)
     {
-        await mediator.Send(new RestoreReviewCommand(id), cancellationToken);
+        await mediator.Send(new RestoreReviewCommand(id, CallerTenantId()), cancellationToken);
         return NoContent();
     }
 
@@ -87,7 +95,7 @@ public sealed class ReviewsAdminController(IMediator mediator) : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Reject(Guid id, CancellationToken cancellationToken)
     {
-        await mediator.Send(new RejectReviewCommand(id), cancellationToken);
+        await mediator.Send(new RejectReviewCommand(id, CallerTenantId()), cancellationToken);
         return NoContent();
     }
 }
