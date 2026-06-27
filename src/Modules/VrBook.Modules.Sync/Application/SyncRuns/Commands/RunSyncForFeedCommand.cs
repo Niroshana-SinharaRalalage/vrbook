@@ -42,11 +42,9 @@ internal sealed class RunSyncForFeedHandler(
                 "sync.channel.unsupported",
                 $"No IExternalChannel registered for {feed.Channel}.");
 
-        // OPS.M.3 — run + reservations inherit tenant from the feed (which was
-        // set when the owner created the feed). Fall back to default tenant for
-        // pre-backfill rows.
-        var feedTenantId = feed.TenantId ?? new Guid("00000000-0000-0000-0000-000000000001");
-        var run = SyncRun.Start(feedTenantId, feed.Id, feed.PropertyId, feed.Channel);
+        // OPS.M.3c — run + reservations inherit tenant from the feed. Wave B
+        // backfilled every pre-existing row, so no fallback is needed.
+        var run = SyncRun.Start(feed.TenantId, feed.Id, feed.PropertyId, feed.Channel);
         feed.RecordAttemptStarted(DateTimeOffset.UtcNow);
         db.SyncRuns.Add(run);
 
@@ -116,7 +114,7 @@ internal sealed class RunSyncForFeedHandler(
             else
             {
                 var er = ExternalReservation.Import(
-                    feed.TenantId ?? new Guid("00000000-0000-0000-0000-000000000001"),
+                    feed.TenantId,
                     feed.Id, feed.PropertyId, feed.Channel,
                     dto.ICalUid, dto.Checkin, dto.Checkout, dto.Summary, dto.RawPayload);
                 db.ExternalReservations.Add(er);

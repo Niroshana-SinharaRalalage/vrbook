@@ -13,7 +13,7 @@ namespace VrBook.Modules.Sync.Domain;
 public sealed class ExternalReservation : AggregateRoot
 {
     /// <summary>Denorm from feed → property → tenant. Per OPS_M_3_PLAN §1.</summary>
-    public Guid? TenantId { get; private set; }
+    public Guid TenantId { get; private set; }
 
     public Guid ChannelFeedId { get; private set; }
     public Guid PropertyId { get; private set; }

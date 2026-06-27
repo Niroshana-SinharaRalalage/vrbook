@@ -12,7 +12,7 @@ internal sealed class ExternalReservationConfiguration : IEntityTypeConfiguratio
         builder.HasKey(x => x.Id);
 
         // OPS.M.3a — denorm tenant_id, nullable until 3c.
-        builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.HasIndex(x => x.TenantId);
 
         builder.Property(x => x.ChannelFeedId).HasColumnName("channel_feed_id").IsRequired();

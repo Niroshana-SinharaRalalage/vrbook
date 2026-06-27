@@ -15,7 +15,7 @@ public sealed class ChannelFeed : AggregateRoot
     /// Tenant the feed belongs to (inherits from the property's tenant).
     /// Per OPS_M_3_PLAN §3.1 — `Guid?` during 3a/3b; flips to `Guid` in 3c.
     /// </summary>
-    public Guid? TenantId { get; private set; }
+    public Guid TenantId { get; private set; }
 
     public Guid PropertyId { get; private set; }
     public ChannelKind Channel { get; private set; }

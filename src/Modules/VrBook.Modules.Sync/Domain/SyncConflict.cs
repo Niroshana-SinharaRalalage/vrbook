@@ -18,7 +18,7 @@ namespace VrBook.Modules.Sync.Domain;
 public sealed class SyncConflict : AggregateRoot
 {
     /// <summary>Tenant id inherited from the conflicting property. Per OPS_M_3_PLAN §3.1.</summary>
-    public Guid? TenantId { get; private set; }
+    public Guid TenantId { get; private set; }
 
     public Guid PropertyId { get; private set; }
     public Guid BookingId { get; private set; }

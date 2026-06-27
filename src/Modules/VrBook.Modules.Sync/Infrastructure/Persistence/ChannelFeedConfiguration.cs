@@ -12,7 +12,7 @@ internal sealed class ChannelFeedConfiguration : IEntityTypeConfiguration<Channe
         builder.HasKey(x => x.Id);
 
         // OPS.M.3a — tenant_id, nullable until 3c; cross-schema FK in migration.
-        builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.HasIndex(x => x.TenantId);
 
         builder.Property(x => x.PropertyId).HasColumnName("property_id").IsRequired();
