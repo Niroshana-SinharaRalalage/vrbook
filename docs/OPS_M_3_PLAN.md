@@ -360,3 +360,48 @@ If you approve:
 6. **Step 7** ships as a final commit closing out the slice.
 
 If you reject or want changes: point at the specific §1.x decision, the §2 sequencing argument, or the §12 step that needs reshaping.
+
+---
+
+## 14. Close-out — 2026-06-27
+
+OPS.M.3 shipped end-to-end. Wave A (9 commits) + Wave B (1 commit) + Wave C (7 commits) all merged to `develop`. 298/298 unit tests pass across the solution. Schema-audit integration test (`TenantIdRolloutTests`) pending CI run on the Docker-backed `Category=Integration` stage.
+
+### Per-module commit ledger
+
+| Wave | Module                | Commit    | Tables touched                                                   |
+|------|-----------------------|-----------|------------------------------------------------------------------|
+| A    | Catalog               | `a60e722` | `properties`, `property_images`                                  |
+| A    | Reviews               | `9cd5d71` | `reviews`                                                        |
+| A    | Pricing               | `d3f3bf0` | `pricing_plans`, `pricing_rules`                                 |
+| A    | Notifications         | `98d5d41` | `notification_log` (`Guid?` forever per §1.6)                    |
+| A    | Identity              | `b84c482` | `audit_log` (`Guid?` forever per §1.7)                           |
+| A    | Messaging             | `eb3401b` | `threads`, `messages`                                            |
+| A    | Sync                  | `a9145c1` | `channel_feeds`, `external_reservations`, `sync_conflicts`, `sync_runs` |
+| A    | Payment               | `cd5c1dd` | `payment_intents`, `refunds`, `webhook_events` (`Guid?` forever per §1.4) |
+| A    | Booking               | `19ec176` | `bookings`, `booking_holds`                                      |
+| B    | All 7 (backfill)      | `0d77ee0` | 14 tables — single coordinated UPDATE migration per module       |
+| C    | Catalog               | `cc90a83` | NOT NULL flip + Guid?→Guid + ?? throw widening collapsed         |
+| C    | Reviews               | `d6e8449` | NOT NULL flip + Guid?→Guid                                       |
+| C    | Pricing               | `baaad97` | NOT NULL flip + Guid?→Guid + AddRule widening collapsed          |
+| C    | Messaging             | `845b00a` | NOT NULL flip + Guid?→Guid + Send widening collapsed             |
+| C    | Sync                  | `19652bb` | NOT NULL flip + Guid?→Guid (4 aggregates) + handler cleanup      |
+| C    | Payment               | `51f90d4` | NOT NULL flip on `payment_intents` + `refunds`; `webhook_events` stays nullable |
+| C    | Booking               | `b4bfc34` | NOT NULL flip + Guid?→Guid + AvailabilityBlock factory tightened + IPropertyOwnerLookup wired into both hold stores |
+
+### Step 7 deliverables shipped
+
+- `tests/VrBook.Api.IntegrationTests/Identity/TenantIdRolloutTests.cs` — schema audit covering NOT NULL nullability, cross-schema FK presence with `ON DELETE RESTRICT`, per-column index, and default-tenant seed row. Backed by a dedicated `TenantIdRolloutFixture` that runs every module's migrations the same way `src/VrBook.Migrator/Program.cs` does in prod.
+- `docs/OPS_M_3_PLAN.md` §14 — this close-out section.
+
+### Deviations from this plan
+
+1. **Aggregate `TenantId` type is `Guid?` during 3a/3b, not `Guid`** (architect-ratified deviation from §3.1). EF Core 8 rejects nullable-DB-column ↔ non-nullable-C#-`Guid` mapping; the workaround would have been a value converter that hides the null, which the architect agreed obscured the schema reality. 3c then flips both sides simultaneously per §3.3 + §5.
+2. **`CrossModuleTenantIdInheritanceTests.cs` not shipped.** The factory invariant + the schema audit cover the same surface (factories reject `Guid.Empty`, columns are NOT NULL, FKs RESTRICT). A separate inheritance test would require booting full-stack DI plus HTTP — much heavier scaffolding for low marginal coverage given OPS.M.10's planned cross-tenant isolation tests will exercise the same paths end-to-end.
+3. **`PropertyOwnerSnapshot.TenantId` stays `Guid?`** even after Wave C. Tightening it ripples into Sync's `ChannelFeedHandlers` + `ConflictDetectionHandlers` (those still use `owner?.TenantId ?? default-tenant`). Deferred to OPS.M.4 — the tenant-authorization behavior is the right venue for it.
+
+### Forward links
+
+- OPS.M.4 — `TenantAuthorizationBehavior` will read `ICurrentUser.TenantId` and reject cross-tenant aggregate access.
+- OPS.M.9 — RLS policies will filter on every `tenant_id` index this slice created.
+- OPS.M.10 — cross-tenant isolation tests will assert tenant-A users cannot mutate tenant-B aggregates by id.
