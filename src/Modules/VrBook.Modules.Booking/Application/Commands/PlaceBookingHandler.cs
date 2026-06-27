@@ -23,6 +23,7 @@ internal sealed class PlaceBookingHandler(
     IMediator mediator,
     IBookingRepository bookings,
     IHoldStore holds,
+    IPropertyOwnerLookup propertyOwners,
     BookingDbContext db) : IRequestHandler<PlaceBookingCommand, BookingDto>
 {
     public async Task<BookingDto> Handle(PlaceBookingCommand request, CancellationToken cancellationToken)
@@ -74,7 +75,13 @@ internal sealed class PlaceBookingHandler(
             lineItems.Add((f.Kind.ToString(), f.Label, 1, f.Amount.Amount, f.Amount.Amount));
         }
 
+        // OPS.M.3 — booking inherits tenancy from the property (guests are
+        // tenant-less per MTOP §1). PropertyDto doesn't carry TenantId; look
+        // up via the cross-module IPropertyOwnerLookup contract.
+        var ownerSnapshot = await propertyOwners.GetAsync(property.Id, cancellationToken);
+        var bookingTenantId = ownerSnapshot?.TenantId ?? new Guid("00000000-0000-0000-0000-000000000001");
         var booking = DomainBooking.Place(
+            tenantId: bookingTenantId,
             propertyId: property.Id,
             propertyTitle: property.Title,
             guestUserId: currentUser.UserId.Value,

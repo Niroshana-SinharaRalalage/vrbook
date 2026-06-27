@@ -13,6 +13,9 @@ namespace VrBook.Modules.Booking.Domain;
 /// </summary>
 public sealed class BookingHold : AggregateRoot
 {
+    /// <summary>Tenant from the property. Guid? until 3c per OPS_M_3_PLAN §3.1.</summary>
+    public Guid? TenantId { get; private set; }
+
     public Guid PropertyId { get; private set; }
     public DateOnly Checkin { get; private set; }
     public DateOnly Checkout { get; private set; }
@@ -26,6 +29,7 @@ public sealed class BookingHold : AggregateRoot
     private BookingHold() { } // EF
 
     public static BookingHold Create(
+        Guid tenantId,
         Guid id,
         Guid propertyId,
         DateOnly checkin,
@@ -34,6 +38,10 @@ public sealed class BookingHold : AggregateRoot
         Guid? sessionId,
         DateTimeOffset expiresAt)
     {
+        if (tenantId == Guid.Empty)
+        {
+            throw new ArgumentException("TenantId required.", nameof(tenantId));
+        }
         if (checkout <= checkin)
         {
             throw new BusinessRuleViolationException(
@@ -43,6 +51,7 @@ public sealed class BookingHold : AggregateRoot
         return new BookingHold
         {
             Id = id,
+            TenantId = tenantId,
             PropertyId = propertyId,
             Checkin = checkin,
             Checkout = checkout,

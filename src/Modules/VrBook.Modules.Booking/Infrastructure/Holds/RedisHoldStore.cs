@@ -63,7 +63,10 @@ internal sealed class RedisHoldStore(
         await redisDb.StringSetAsync(IdKey(holdId), key, ttl);
 
         // Mirror to Postgres for audit + restart reconciliation.
-        var hold = BookingHold.Create(holdId, propertyId, checkin, checkout, guests, sessionId, expiresAt);
+        // OPS.M.3 — TenantId default-tenant fallback for 3a; proper lookup in 3c.
+        var hold = BookingHold.Create(
+            new Guid("00000000-0000-0000-0000-000000000001"),
+            holdId, propertyId, checkin, checkout, guests, sessionId, expiresAt);
         db.Set<BookingHold>().Add(hold);
         try
         {

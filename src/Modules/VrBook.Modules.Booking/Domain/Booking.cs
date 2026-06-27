@@ -11,6 +11,13 @@ namespace VrBook.Modules.Booking.Domain;
 /// </summary>
 public sealed class Booking : AggregateRoot
 {
+    /// <summary>
+    /// Tenant the booking belongs to (inherits from the property's tenant -
+    /// guests are tenant-less per MTOP §1). Per OPS_M_3_PLAN §3.1 — `Guid?`
+    /// during 3a/3b; flips to `Guid` in 3c.
+    /// </summary>
+    public Guid? TenantId { get; private set; }
+
     public string Reference { get; private set; } = default!;
     public Guid PropertyId { get; private set; }
     public string PropertyTitle { get; private set; } = default!;
@@ -49,6 +56,7 @@ public sealed class Booking : AggregateRoot
     private Booking() { } // EF
 
     public static Booking Place(
+        Guid tenantId,
         Guid propertyId,
         string propertyTitle,
         Guid guestUserId,
@@ -64,6 +72,10 @@ public sealed class Booking : AggregateRoot
         IEnumerable<(string fullName, bool isPrimary)> guests,
         string? specialRequests)
     {
+        if (tenantId == Guid.Empty)
+        {
+            throw new ArgumentException("TenantId required.", nameof(tenantId));
+        }
         ArgumentException.ThrowIfNullOrWhiteSpace(propertyTitle);
         ArgumentException.ThrowIfNullOrWhiteSpace(guestDisplayName);
         ArgumentOutOfRangeException.ThrowIfLessThan(guestCount, 1);
@@ -71,6 +83,7 @@ public sealed class Booking : AggregateRoot
         var b = new Booking
         {
             Id = Guid.NewGuid(),
+            TenantId = tenantId,
             Reference = BookingReference.Generate(),
             PropertyId = propertyId,
             PropertyTitle = propertyTitle,

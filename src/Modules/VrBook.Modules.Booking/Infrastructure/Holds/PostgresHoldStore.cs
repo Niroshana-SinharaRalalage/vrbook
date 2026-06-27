@@ -94,7 +94,11 @@ internal sealed class PostgresHoldStore(
                     "Please retry in a few minutes.");
             }
 
-            var hold = BookingHold.Create(holdId, propertyId, checkin, checkout, guests, sessionId, expiresAt);
+            // OPS.M.3 — TenantId for the hold mirror; default-tenant fallback
+            // for 3a. Proper lookup wires in 3c via IPropertyOwnerLookup.
+            var hold = BookingHold.Create(
+                new Guid("00000000-0000-0000-0000-000000000001"),
+                holdId, propertyId, checkin, checkout, guests, sessionId, expiresAt);
             db.Set<BookingHold>().Add(hold);
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);

@@ -21,7 +21,7 @@ public sealed class BookingAggregateTests
         new DateOnly(2026, 8, 4));
 
     private static DomainBooking PlaceTentative() =>
-        DomainBooking.Place(
+        DomainBooking.Place(new Guid("00000000-0000-0000-0000-000000000001"),
             propertyId: Guid.NewGuid(),
             propertyTitle: "Mountain Cabin",
             guestUserId: Guid.NewGuid(),
@@ -76,7 +76,7 @@ public sealed class BookingAggregateTests
     [Fact]
     public void Place_lowercases_currency_to_canonical_upper()
     {
-        var booking = DomainBooking.Place(
+        var booking = DomainBooking.Place(new Guid("00000000-0000-0000-0000-000000000001"),
             propertyId: Guid.NewGuid(), propertyTitle: "X", guestUserId: Guid.NewGuid(),
             guestDisplayName: "G", stay: AnyStay(), guestCount: 1, currency: "usd",
             subtotal: 0, fees: 0, taxes: 0, total: 0, lineItems: [], guests: [], specialRequests: null);
@@ -87,7 +87,7 @@ public sealed class BookingAggregateTests
     [Fact]
     public void Place_with_empty_property_title_throws()
     {
-        var act = () => DomainBooking.Place(
+        var act = () => DomainBooking.Place(new Guid("00000000-0000-0000-0000-000000000001"),
             propertyId: Guid.NewGuid(), propertyTitle: "", guestUserId: Guid.NewGuid(),
             guestDisplayName: "G", stay: AnyStay(), guestCount: 1, currency: "USD",
             subtotal: 0, fees: 0, taxes: 0, total: 0, lineItems: [], guests: [], specialRequests: null);
@@ -98,7 +98,7 @@ public sealed class BookingAggregateTests
     [Fact]
     public void Place_with_zero_guests_throws()
     {
-        var act = () => DomainBooking.Place(
+        var act = () => DomainBooking.Place(new Guid("00000000-0000-0000-0000-000000000001"),
             propertyId: Guid.NewGuid(), propertyTitle: "X", guestUserId: Guid.NewGuid(),
             guestDisplayName: "G", stay: AnyStay(), guestCount: 0, currency: "USD",
             subtotal: 0, fees: 0, taxes: 0, total: 0, lineItems: [], guests: [], specialRequests: null);
@@ -109,7 +109,7 @@ public sealed class BookingAggregateTests
     [Fact]
     public void Place_skips_guests_with_empty_names()
     {
-        var booking = DomainBooking.Place(
+        var booking = DomainBooking.Place(new Guid("00000000-0000-0000-0000-000000000001"),
             propertyId: Guid.NewGuid(), propertyTitle: "X", guestUserId: Guid.NewGuid(),
             guestDisplayName: "G", stay: AnyStay(), guestCount: 2, currency: "USD",
             subtotal: 0, fees: 0, taxes: 0, total: 0, lineItems: [],
