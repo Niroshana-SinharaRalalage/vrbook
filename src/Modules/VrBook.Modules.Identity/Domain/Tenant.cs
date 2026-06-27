@@ -155,6 +155,25 @@ public sealed class Tenant : AggregateRoot
         StripeAccountStatus = status.Trim();
     }
 
+    /// <summary>
+    /// OPS.M.5 §3.8 (D8) — sync Stripe's account.capabilities flags into the
+    /// aggregate. Auto-transitions: PendingOnboarding → Active when both flags
+    /// flip to true; Active → Suspended on capability loss (raises
+    /// <see cref="TenantStripeSuspended"/> with reason
+    /// <c>stripe_capability_lost</c>). Suspended cannot auto-re-Activate from
+    /// flags alone — an operator must explicitly transition out of Suspended.
+    ///
+    /// <para>Step 2 RED: this body writes the setters only so the assertion
+    /// tests in TenantStripeReadinessTests fail at the transition checks.
+    /// Step 2 GREEN replaces the body with the full state-machine.</para>
+    /// </summary>
+    public void UpdateStripeAccountReadiness(bool chargesEnabled, bool payoutsEnabled)
+    {
+        ChargesEnabled = chargesEnabled;
+        PayoutsEnabled = payoutsEnabled;
+        // Status transitions + event raises arrive in Step 2 GREEN.
+    }
+
     public void SetPlatformFeeBps(int bps)
     {
         if (bps is < 0 or > 10_000)
