@@ -19,6 +19,8 @@ public sealed class OnBookingPlacedHandlerTests
     private static readonly Guid OwnerId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid PropertyId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 
+    private static readonly Guid DefaultTenantId = new("00000000-0000-0000-0000-000000000001");
+
     private static BookingPlaced NewEvent() => new(
         BookingId: Guid.NewGuid(),
         Reference: "VRB-TEST01",
@@ -26,7 +28,8 @@ public sealed class OnBookingPlacedHandlerTests
         GuestUserId: Guid.NewGuid(),
         Checkin: new DateOnly(2026, 8, 10),
         Checkout: new DateOnly(2026, 8, 12),
-        TentativeUntil: DateTimeOffset.UtcNow.AddHours(6));
+        TentativeUntil: DateTimeOffset.UtcNow.AddHours(6),
+        TenantId: DefaultTenantId);
 
     [Fact]
     public async Task Handle_returns_immediately_even_when_push_is_slow()

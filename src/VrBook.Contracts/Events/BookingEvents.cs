@@ -2,13 +2,20 @@ using VrBook.Contracts.Enums;
 
 namespace VrBook.Contracts.Events;
 
+// OPS.M.4 Step 1 — every booking event that has a downstream cross-module consumer
+// (Notifications, Messaging, Sync, future Reports) gains Guid TenantId so the
+// consumer doesn't have to round-trip through a cross-schema property lookup.
+// BookingCheckedIn / BookingCheckedOut / BookingDisputed are NOT bumped per
+// OPS_M_4_PLAN §4 — no demonstrated cross-module consumer needs the field yet.
+
 public sealed record BookingDraftCreated(
     Guid BookingId,
     string Reference,
     Guid PropertyId,
     Guid GuestUserId,
     DateOnly Checkin,
-    DateOnly Checkout) : DomainEvent;
+    DateOnly Checkout,
+    Guid TenantId) : DomainEvent;
 
 public sealed record BookingPlaced(
     Guid BookingId,
@@ -17,7 +24,8 @@ public sealed record BookingPlaced(
     Guid GuestUserId,
     DateOnly Checkin,
     DateOnly Checkout,
-    DateTimeOffset TentativeUntil) : DomainEvent;
+    DateTimeOffset TentativeUntil,
+    Guid TenantId) : DomainEvent;
 
 public sealed record BookingConfirmed(
     Guid BookingId,
@@ -26,14 +34,16 @@ public sealed record BookingConfirmed(
     Guid GuestUserId,
     DateOnly Checkin,
     DateOnly Checkout,
-    string Trigger) : DomainEvent; // "owner" | "sla"
+    string Trigger,
+    Guid TenantId) : DomainEvent; // Trigger: "owner" | "sla"
 
 public sealed record BookingRejected(
     Guid BookingId,
     string Reference,
     Guid PropertyId,
     Guid GuestUserId,
-    string Reason) : DomainEvent;
+    string Reason,
+    Guid TenantId) : DomainEvent;
 
 public sealed record BookingCancelled(
     Guid BookingId,
@@ -42,7 +52,8 @@ public sealed record BookingCancelled(
     Guid GuestUserId,
     string CancelledBy,        // "guest" | "owner" | "system"
     decimal RefundAmount,
-    string Currency) : DomainEvent;
+    string Currency,
+    Guid TenantId) : DomainEvent;
 
 public sealed record BookingCheckedIn(Guid BookingId, string Reference) : DomainEvent;
 
@@ -51,7 +62,8 @@ public sealed record BookingCheckedOut(Guid BookingId, string Reference) : Domai
 public sealed record BookingCompleted(
     Guid BookingId,
     string Reference,
-    Guid GuestUserId) : DomainEvent;
+    Guid GuestUserId,
+    Guid TenantId) : DomainEvent;
 
 public sealed record BookingDisputed(
     Guid BookingId,
@@ -61,4 +73,5 @@ public sealed record BookingDisputed(
 public sealed record BookingConflictDetected(
     Guid BookingId,
     Guid ExternalReservationId,
-    ChannelKind Channel) : DomainEvent;
+    ChannelKind Channel,
+    Guid TenantId) : DomainEvent;

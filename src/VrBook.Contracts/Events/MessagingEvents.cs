@@ -1,11 +1,15 @@
 namespace VrBook.Contracts.Events;
 
+// OPS.M.4 Step 1 — only MessageSent has a cross-module consumer (Notifications);
+// MessageRead + MessageDeliveryDeferred stay same-module.
+
 public sealed record MessageSent(
     Guid MessageId,
     Guid ThreadId,
     Guid SenderUserId,
     Guid RecipientUserId,
-    string BodyPreview) : DomainEvent;
+    string BodyPreview,
+    Guid TenantId) : DomainEvent;
 
 public sealed record MessageRead(
     Guid ThreadId,

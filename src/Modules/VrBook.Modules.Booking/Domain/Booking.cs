@@ -16,7 +16,7 @@ public sealed class Booking : AggregateRoot
     /// guests are tenant-less per MTOP §1). Per OPS_M_3_PLAN §3.1 — `Guid?`
     /// during 3a/3b; flips to `Guid` in 3c.
     /// </summary>
-    public Guid? TenantId { get; private set; }
+    public Guid TenantId { get; private set; }
 
     public string Reference { get; private set; } = default!;
     public Guid PropertyId { get; private set; }
@@ -115,7 +115,7 @@ public sealed class Booking : AggregateRoot
             b._guests.Add(new BookingGuestEntry(b.Id, name, isPrimary));
         }
         b.Raise(new BookingPlaced(b.Id, b.Reference, propertyId, guestUserId,
-            stay.CheckinDate, stay.CheckoutDate, b.TentativeUntil!.Value));
+            stay.CheckinDate, stay.CheckoutDate, b.TentativeUntil!.Value, b.TenantId));
         return b;
     }
 
@@ -127,7 +127,7 @@ public sealed class Booking : AggregateRoot
         ConfirmedAt = DateTimeOffset.UtcNow;
         TentativeUntil = null;
         Raise(new BookingConfirmed(Id, Reference, PropertyId, GuestUserId,
-            Stay.CheckinDate, Stay.CheckoutDate, "owner"));
+            Stay.CheckinDate, Stay.CheckoutDate, "owner", TenantId));
     }
 
     /// <summary>Slice 0.4: SLA worker auto-confirms when the tentative window
@@ -140,7 +140,7 @@ public sealed class Booking : AggregateRoot
         ConfirmedAt = DateTimeOffset.UtcNow;
         TentativeUntil = null;
         Raise(new BookingConfirmed(Id, Reference, PropertyId, GuestUserId,
-            Stay.CheckinDate, Stay.CheckoutDate, "sla"));
+            Stay.CheckinDate, Stay.CheckoutDate, "sla", TenantId));
     }
 
     /// <summary>Slice 0.4: SLA worker auto-cancels when the tentative window
@@ -152,7 +152,7 @@ public sealed class Booking : AggregateRoot
         Status = BookingStatus.Cancelled;
         CancelledAt = DateTimeOffset.UtcNow;
         CancellationReason = string.IsNullOrWhiteSpace(reason) ? "Tentative window expired without owner action" : reason.Trim();
-        Raise(new BookingCancelled(Id, Reference, PropertyId, GuestUserId, "sla", 0m, Currency));
+        Raise(new BookingCancelled(Id, Reference, PropertyId, GuestUserId, "sla", 0m, Currency, TenantId));
     }
 
     public void Reject(string reason)
@@ -161,7 +161,7 @@ public sealed class Booking : AggregateRoot
         Status = BookingStatus.Rejected;
         CancelledAt = DateTimeOffset.UtcNow;
         CancellationReason = string.IsNullOrWhiteSpace(reason) ? "Rejected by host" : reason.Trim();
-        Raise(new BookingRejected(Id, Reference, PropertyId, GuestUserId, CancellationReason));
+        Raise(new BookingRejected(Id, Reference, PropertyId, GuestUserId, CancellationReason, TenantId));
     }
 
     public void CancelByGuest(string reason)
@@ -174,7 +174,7 @@ public sealed class Booking : AggregateRoot
         CancelledAt = DateTimeOffset.UtcNow;
         CancellationReason = string.IsNullOrWhiteSpace(reason) ? "Cancelled by guest" : reason.Trim();
         // A4 v1: refund computation lives in A5 (Payment). Publish 0 for now.
-        Raise(new BookingCancelled(Id, Reference, PropertyId, GuestUserId, "guest", 0m, Currency));
+        Raise(new BookingCancelled(Id, Reference, PropertyId, GuestUserId, "guest", 0m, Currency, TenantId));
     }
 
     public void CheckIn()
@@ -206,7 +206,7 @@ public sealed class Booking : AggregateRoot
     {
         Require(BookingStatus.CheckedOut);
         Status = BookingStatus.Completed;
-        Raise(new BookingCompleted(Id, Reference, GuestUserId));
+        Raise(new BookingCompleted(Id, Reference, GuestUserId, TenantId));
     }
 
     private void Require(BookingStatus expected)

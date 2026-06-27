@@ -2,6 +2,10 @@ using VrBook.Contracts.Enums;
 
 namespace VrBook.Contracts.Events;
 
+// OPS.M.4 Step 1 — SyncConflictDetected feeds Booking transition logic + future
+// Notifications; ExternalReservationImported/Cancelled + SyncRunFailed are
+// same-module today (tenant derivable from FK).
+
 public sealed record ExternalReservationImported(
     Guid ExternalReservationId,
     Guid PropertyId,
@@ -21,7 +25,8 @@ public sealed record SyncConflictDetected(
     Guid PropertyId,
     Guid BookingId,
     Guid ExternalReservationId,
-    ChannelKind Channel) : DomainEvent;
+    ChannelKind Channel,
+    Guid TenantId) : DomainEvent;
 
 public sealed record SyncRunFailed(
     Guid ChannelFeedId,

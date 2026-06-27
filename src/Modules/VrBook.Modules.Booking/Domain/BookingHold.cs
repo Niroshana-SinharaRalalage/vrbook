@@ -13,8 +13,10 @@ namespace VrBook.Modules.Booking.Domain;
 /// </summary>
 public sealed class BookingHold : AggregateRoot
 {
-    /// <summary>Tenant from the property. Guid? until 3c per OPS_M_3_PLAN §3.1.</summary>
-    public Guid? TenantId { get; private set; }
+    /// <summary>Tenant from the property. OPS.M.3c flipped to non-nullable (originally
+    /// the Wave C Booking commit b4bfc34 claimed this flip but the Write tool silently
+    /// no-op'd — caught and fixed retroactively in Slice OPS.M.4 Step 1).</summary>
+    public Guid TenantId { get; private set; }
 
     public Guid PropertyId { get; private set; }
     public DateOnly Checkin { get; private set; }

@@ -55,7 +55,7 @@ public sealed class SyncConflict : AggregateRoot
             Resolution = SyncConflictResolution.Pending,
             DetectedAt = DateTimeOffset.UtcNow,
         };
-        c.Raise(new SyncConflictDetected(c.Id, propertyId, bookingId, externalReservationId, channel));
+        c.Raise(new SyncConflictDetected(c.Id, propertyId, bookingId, externalReservationId, channel, c.TenantId));
         return c;
     }
 

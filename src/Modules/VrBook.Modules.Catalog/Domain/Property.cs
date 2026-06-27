@@ -113,7 +113,7 @@ public sealed class Property : AggregateRoot
             p._amenityIds.Add(aid);
         }
 
-        p.Raise(new PropertyCreated(p.Id, ownerUserId, slug, p.Title));
+        p.Raise(new PropertyCreated(p.Id, ownerUserId, slug, p.Title, p.TenantId));
         return p;
     }
 
@@ -177,7 +177,7 @@ public sealed class Property : AggregateRoot
         var isFirst = _images.Count == 0;
         var img = new PropertyImage(TenantId, Id, blobPath, caption, nextSort, isFirst);
         _images.Add(img);
-        Raise(new PropertyImageAdded(Id, img.Id, blobPath));
+        Raise(new PropertyImageAdded(Id, img.Id, blobPath, TenantId));
         return img;
     }
 }

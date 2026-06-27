@@ -72,7 +72,7 @@ public sealed class Message : AggregateRoot
         };
 
         var preview = trimmed.Length > 80 ? string.Concat(trimmed.AsSpan(0, 77), "…") : trimmed;
-        message.Raise(new MessageSent(message.Id, thread.Id, senderUserId, recipient, preview));
+        message.Raise(new MessageSent(message.Id, thread.Id, senderUserId, recipient, preview, message.TenantId));
         return message;
     }
 
