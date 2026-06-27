@@ -22,6 +22,7 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Mapster" />
     <PackageReference Include="Stripe.net" />
+    <PackageReference Include="Polly" />
   </ItemGroup>
 
 </Project>
