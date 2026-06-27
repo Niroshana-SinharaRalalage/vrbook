@@ -5,7 +5,7 @@
 
 This document is the single index. It points at the detailed plans for each phase; do not duplicate content here — update the linked plans and bump the date at the top of this file.
 
-> **One TODO, one tag scheme** (per `docs/EXECUTION_PLAN.md` §1). Slice 0–7 are the Phase-1 demo path; OPS.M.1–10 is the Phase-1.5 multi-tenancy gate; OPS.1–8 is launch hardening; Phase 3 covers hotel-style rooms + multi-unit cart; Phase 4 covers OTA package bundling. No parallel naming.
+> **One TODO, one tag scheme — every work item is a `Slice`.** Original product slices keep their integers (`Slice 0` … `Slice 7`). Multi-tenancy items become `Slice OPS.M.0` … `Slice OPS.M.10`. Launch hardening becomes `Slice OPS.1` … `Slice OPS.8`. Phase 3 hotel-rooms + multi-unit cart continue the integer sequence as `Slice 8` (P3.1) + `Slice 9` (P3.2). Phase 4 OTA bundling is `Slice 10` (P4.1). The `P3.x` / `P4.x` codes stay parenthetically so cross-references in `PHASE_3_RECONNAISSANCE.md` still resolve. **Detail-plan filenames (`OPS_M_3_PLAN.md` etc.) and existing commit messages are immutable history — they are not retroactively renamed.**
 
 ---
 
@@ -19,24 +19,24 @@ This document is the single index. It points at the detailed plans for each phas
 | | Slice 2 polish — DevAuth persona switcher works cross-origin | ✅ | `ca8ffd6` | staging |
 | | Slice 3 — Calendar + iCal + owner blocks (with §10.1 forward-compat `tenant_id NULL` on every new table) | ✅ | `f8ffd04` → `c8f8b8b` | staging |
 | | **Slice 4 — Notifications that actually send** | ⏭ next (per Option C) | plan: `d9fa889` ([docs/SLICE4_PLAN.md](SLICE4_PLAN.md)) — see [SEQUENCING doc](SEQUENCING_OPS_M_VS_SLICES.md) for why Slice 4 is interleaved here | |
-| | Slice 5 — Stay completes → review + loyalty | ⏭ after OPS.M.10 | — | Ship `Review` with composite `(BookingId, PropertyId)` key per architect Phase-3 reconnaissance note. |
+| | Slice 5 — Stay completes → review + loyalty | ⏭ after Slice OPS.M.10 | — | Ship `Review` with composite `(BookingId, PropertyId)` key per architect Phase-3 reconnaissance note. |
 | | Slice 6 — Host↔Guest chat + pricing power-user | ⏭ after Slice 5 | — | |
 | | Slice 7 — Reports + realtime polish | ⏭ after Slice 6 | — | |
-| **Phase 1.5** | OPS.M.0 — Microsoft Entra External ID cutover | ✅ | `c2bc4cd` → `989104d` | staging |
-| | OPS.M.1 — Tenant aggregate + memberships | ✅ | `b7ae589` → `3ce5f96` | staging |
-| | OPS.M.2 — `TenantId` claim wiring + `ICurrentUser` shape (DB-wins precedence per ADR-0014) | ✅ | `84d6c05` → `9d13cb3` | staging |
-| | OPS.M.3 — `tenant_id` column rollout (Wave A/B/C + Step 7) | ✅ | `a60e722` → `2a3d2b2` | staging |
-| | OPS.M.4 — `TenantAuthorizationBehavior` + drop per-handler owner checks | ⏭ after Slice 4 | plan: `df5580b` ([docs/MULTI_TENANCY_OPS_PLAN.md](MULTI_TENANCY_OPS_PLAN.md)) | |
-| | OPS.M.5 — Stripe Connect Express | ⏭ | same plan | |
-| | OPS.M.6 — iCal poller tenant-scoping + outbound rate limit | ⏭ | same plan | |
-| | OPS.M.7 — Tenant Admin onboarding wizard | ⏭ | same plan | |
-| | OPS.M.8 — Super Admin console | ⏭ | same plan | |
-| | OPS.M.9 — RLS policies + bypass connection factory | ⏭ | same plan — **Phase-3 note**: decide per-statement vs per-connection `app.tenant_id` binding granularity in this slot, per [PHASE_3_RECONNAISSANCE](PHASE_3_RECONNAISSANCE.md) | |
-| | OPS.M.10 — Cross-tenant isolation test pack | ⏭ | same plan | |
-| **Phase 1.5 ops** | OPS.1–8 — Launch hardening (Pact, k6, ZAP, Trivy, key rotation, Entra, DKIM) | ⏭ | [`docs/EXECUTION_PLAN.md`](EXECUTION_PLAN.md) §8 | |
-| **Phase 3** | P3.1 — Hotel-style rooms within a Property/Facility (purely additive: `rooms` child of `properties`, `BookingLineItem.ReservableKind=Room`) | ⏭ after Phase 1.5 + Slice 5–7 | plan: TBD — see [PHASE_3_RECONNAISSANCE](PHASE_3_RECONNAISSANCE.md) for the architect's verdict | |
-| | P3.2 — Multi-unit cart (one guest books N properties/rooms in one atomic checkout; Stripe `transfer_data[]` multi-destination) | ⏭ after P3.1 | plan: TBD | |
-| **Phase 4** | P4.1 — OTA package bundling (Itinerary with Flights + Cars + Activities + Stays; supplier-tenant polymorphism; cross-tenant RLS + FX) | ⏭ after Phase 3 | plan: TBD — promoted from Phase 3 to Phase 4 per architect (different shape entirely) | |
+| **Phase 1.5** | Slice OPS.M.0 — Microsoft Entra External ID cutover | ✅ | `c2bc4cd` → `989104d` | staging |
+| | Slice OPS.M.1 — Tenant aggregate + memberships | ✅ | `b7ae589` → `3ce5f96` | staging |
+| | Slice OPS.M.2 — `TenantId` claim wiring + `ICurrentUser` shape (DB-wins precedence per ADR-0014) | ✅ | `84d6c05` → `9d13cb3` | staging |
+| | Slice OPS.M.3 — `tenant_id` column rollout (Wave A/B/C + Step 7) | ✅ | `a60e722` → `2a3d2b2` | staging |
+| | Slice OPS.M.4 — `TenantAuthorizationBehavior` + drop per-handler owner checks | ⏭ after Slice 4 | plan: `df5580b` ([docs/MULTI_TENANCY_OPS_PLAN.md](MULTI_TENANCY_OPS_PLAN.md)) | |
+| | Slice OPS.M.5 — Stripe Connect Express | ⏭ | same plan | |
+| | Slice OPS.M.6 — iCal poller tenant-scoping + outbound rate limit | ⏭ | same plan | |
+| | Slice OPS.M.7 — Tenant Admin onboarding wizard | ⏭ | same plan | |
+| | Slice OPS.M.8 — Super Admin console | ⏭ | same plan | |
+| | Slice OPS.M.9 — RLS policies + bypass connection factory | ⏭ | same plan — **Phase-3 note**: decide per-statement vs per-connection `app.tenant_id` binding granularity in this slot, per [PHASE_3_RECONNAISSANCE](PHASE_3_RECONNAISSANCE.md) | |
+| | Slice OPS.M.10 — Cross-tenant isolation test pack | ⏭ | same plan | |
+| **Phase 1.5 ops** | Slice OPS.1 – Slice OPS.8 — Launch hardening (Pact, k6, ZAP, Trivy, key rotation, Entra, DKIM) | ⏭ | [`docs/EXECUTION_PLAN.md`](EXECUTION_PLAN.md) §8 | |
+| **Phase 3** | Slice 8 (P3.1) — Hotel-style rooms within a Property/Facility (purely additive: `rooms` child of `properties`, `BookingLineItem.ReservableKind=Room`) | ⏭ after Slice OPS.1–8 | plan: TBD — see [PHASE_3_RECONNAISSANCE](PHASE_3_RECONNAISSANCE.md) for the architect's verdict | |
+| | Slice 9 (P3.2) — Multi-unit cart (one guest books N properties/rooms in one atomic checkout; Stripe `transfer_data[]` multi-destination) | ⏭ after Slice 8 | plan: TBD | |
+| **Phase 4** | Slice 10 (P4.1) — OTA package bundling (Itinerary with Flights + Cars + Activities + Stays; supplier-tenant polymorphism; cross-tenant RLS + FX) | ⏭ after Slice 9 | plan: TBD — promoted from Phase 3 to Phase 4 per architect (different shape entirely) | |
 
 ---
 
@@ -46,40 +46,40 @@ This document is the single index. It points at the detailed plans for each phas
 
 | Order | Item | Est. days | Cumulative | Why this slot |
 |---|---|---|---|---|
-| 1 | OPS.M.0 ≡ OPS.7 — Entra External ID cutover | 2 | 2 | ✅ **Shipped 2026-06-25** (c2bc4cd … 989104d). Hard prerequisite for OPS.M.2. |
-| 2 | OPS.M.1 — Tenant aggregate + memberships | 2 | 4 | ✅ **Shipped 2026-06-26** (b7ae589, 74aaf64, 3ce5f96). See `docs/OPS_M_1_PLAN.md`. |
-| 3 | OPS.M.2 — `TenantId` claim wiring + `ICurrentUser` shape | 1.5 | 5.5 | ✅ **Shipped 2026-06-26** (84d6c05, afbfb61, 9d13cb3). DB-wins precedence per ADR-0014. |
-| 4 | OPS.M.3 — `tenant_id` column rollout (Wave A/B/C + Step 7) | 4 | 9.5 | ✅ **Shipped 2026-06-27** (`a60e722` → `2a3d2b2`). 9 modules; ~20 NOT NULL columns; cross-schema FKs to `identity.tenants`. |
-| **5** | **Slice 4 — Notifications that actually send** | **3** | **12.5** | ⏭ **next**. Interleaved here per architect Option C — Slice 4 doubles as cross-cutting infrastructure (ACS pipeline + `NotBeforeUtc` worker + 10 templates) that OPS.M.7 onboarding and Slices 5–7 all consume. Author it RLS-aware (worker uses bypass connection factory) so it doesn't need rewriting after M.9. |
-| 6 | OPS.M.4 — `TenantAuthorizationBehavior` + drop per-handler owner checks | 1.5 | 14 | Net code reduction. **Phase-3 note**: do NOT pre-shape for cross-tenant scope; rewrite when Phase 4 OTA actually needs it (architect verdict). |
-| 7 | OPS.M.5 — Stripe Connect Express | 4 | 18 | Parallel with M.7. **Phase-3 note**: do NOT add `connect_account_kind` enum; Phase 4 multi-supplier tenants need a relationship (new table), not a kind. |
-| 8 | OPS.M.6 — iCal poller tenant-scoping + outbound rate limit | 1 | 19 | Parallel against M.5. |
-| 9 | OPS.M.7 — Tenant Admin onboarding wizard UI + first-property → Stripe link | 3 | 22 | Depends on M.5. |
-| 10 | OPS.M.8 — Super Admin console | 4 | 26 | Parallel against M.7. |
-| 11 | OPS.M.9 — RLS policies + bypass connection factory | 1.5 | 27.5 | Depends on M.3c. **Phase-3 binding-granularity decision**: choose per-statement `SET LOCAL app.tenant_id` over per-connection so the same factory can serve Phase 4 OTA cross-tenant itinerary reads (architect verdict). |
-| 12 | OPS.M.10 — Cross-tenant isolation test pack | 2 | 29.5 | Parallel against M.5/M.7. |
+| 1 | Slice OPS.M.0 ≡ Slice OPS.7 — Entra External ID cutover | 2 | 2 | ✅ **Shipped 2026-06-25** (c2bc4cd … 989104d). Hard prerequisite for Slice OPS.M.2. |
+| 2 | Slice OPS.M.1 — Tenant aggregate + memberships | 2 | 4 | ✅ **Shipped 2026-06-26** (b7ae589, 74aaf64, 3ce5f96). See `docs/OPS_M_1_PLAN.md`. |
+| 3 | Slice OPS.M.2 — `TenantId` claim wiring + `ICurrentUser` shape | 1.5 | 5.5 | ✅ **Shipped 2026-06-26** (84d6c05, afbfb61, 9d13cb3). DB-wins precedence per ADR-0014. |
+| 4 | Slice OPS.M.3 — `tenant_id` column rollout (Wave A/B/C + Step 7) | 4 | 9.5 | ✅ **Shipped 2026-06-27** (`a60e722` → `2a3d2b2`). 9 modules; ~20 NOT NULL columns; cross-schema FKs to `identity.tenants`. |
+| **5** | **Slice 4 — Notifications that actually send** | **3** | **12.5** | ⏭ **next**. Interleaved here per architect Option C — Slice 4 doubles as cross-cutting infrastructure (ACS pipeline + `NotBeforeUtc` worker + 10 templates) that Slice OPS.M.7 onboarding and Slice 5–7 all consume. Author it RLS-aware (worker uses bypass connection factory) so it doesn't need rewriting after Slice OPS.M.9. |
+| 6 | Slice OPS.M.4 — `TenantAuthorizationBehavior` + drop per-handler owner checks | 1.5 | 14 | Net code reduction. **Phase-3 note**: do NOT pre-shape for cross-tenant scope; rewrite when Phase 4 OTA actually needs it (architect verdict). |
+| 7 | Slice OPS.M.5 — Stripe Connect Express | 4 | 18 | Parallel with Slice OPS.M.7. **Phase-3 note**: do NOT add `connect_account_kind` enum; Phase 4 multi-supplier tenants need a relationship (new table), not a kind. |
+| 8 | Slice OPS.M.6 — iCal poller tenant-scoping + outbound rate limit | 1 | 19 | Parallel against Slice OPS.M.5. |
+| 9 | Slice OPS.M.7 — Tenant Admin onboarding wizard UI + first-property → Stripe link | 3 | 22 | Depends on Slice OPS.M.5. |
+| 10 | Slice OPS.M.8 — Super Admin console | 4 | 26 | Parallel against Slice OPS.M.7. |
+| 11 | Slice OPS.M.9 — RLS policies + bypass connection factory | 1.5 | 27.5 | Depends on Slice OPS.M.3c. **Phase-3 binding-granularity decision**: choose per-statement `SET LOCAL app.tenant_id` over per-connection so the same factory can serve Phase 4 OTA cross-tenant itinerary reads (architect verdict). |
+| 12 | Slice OPS.M.10 — Cross-tenant isolation test pack | 2 | 29.5 | Parallel against Slice OPS.M.5/M.7. |
 | **= Phase 1.5 demo-able** | | **~16 critical-path days** + parallelism | **realistic 4–5 calendar weeks 1 engineer; 2.5–3 weeks two engineers** | Multi-tenant SaaS bring-up complete. |
-| 13 | Slice 5 — Review + loyalty | 2 | 31.5 | Resume Phase-1 slices. Ship `Review` with composite `(BookingId, PropertyId)` key — saves a future migration when Phase 3 multi-unit cart lands (architect verdict). |
+| 13 | Slice 5 — Review + loyalty | 2 | 31.5 | Resume Phase-1 slices. Ship `Review` with composite `(BookingId, PropertyId)` key — saves a future migration when Slice 9 (P3.2) multi-unit cart lands (architect verdict). |
 | 14 | Slice 6 — Chat + pricing rules | 3 | 34.5 | Daily-driver fit-and-finish. |
 | 15 | Slice 7 — Reports + realtime | 2 | 36.5 | Operator polish; SignalR Serverless provisioning. |
 | **= Phase 1 demo-able** | | **36.5** | | All seven slices' acceptance criteria met, on top of multi-tenancy. |
-| 16 | OPS.1 — Pact contract tests | — | | Launch hardening starts. |
-| 17 | OPS.2 — Playwright E2E suite (F1.1) | — | | |
-| 18 | OPS.3 — k6 load test (50 RPS, 5 min, P95 < 1s) | — | | |
-| 19 | OPS.4 — OWASP ZAP baseline in CI | — | | |
-| 20 | OPS.5 — Trivy + SBOM signing | — | | |
-| 21 | OPS.6 — Stripe key rotation | — | | |
-| 22 | OPS.8 — Custom domain DKIM/SPF for ACS email (per-tenant subdomains deferred to Phase 2/3) | — | | Per MULTI_TENANCY_OPS_PLAN §8 / EXECUTION_PLAN §8.A note. |
+| 16 | Slice OPS.1 — Pact contract tests | — | | Launch hardening starts. |
+| 17 | Slice OPS.2 — Playwright E2E suite (F1.1) | — | | |
+| 18 | Slice OPS.3 — k6 load test (50 RPS, 5 min, P95 < 1s) | — | | |
+| 19 | Slice OPS.4 — OWASP ZAP baseline in CI | — | | |
+| 20 | Slice OPS.5 — Trivy + SBOM signing | — | | |
+| 21 | Slice OPS.6 — Stripe key rotation | — | | |
+| 22 | Slice OPS.8 — Custom domain DKIM/SPF for ACS email (per-tenant subdomains deferred to Phase 2/3) | — | | Per MULTI_TENANCY_OPS_PLAN §8 / EXECUTION_PLAN §8.A note. |
 | **= Phase 1 launch ready** | | | | |
-| 23 | P3.1 — Hotel-style rooms | TBD | | Architect-recommended Phase 3 start. Purely additive (`rooms` child of `properties`, `BookingLineItem.ReservableKind=Room`). Validates the line-item refactor on one module. |
-| 24 | P3.2 — Multi-unit cart | TBD | | Same-tenant, multi-property/room. Uses Stripe `transfer_data[]` native multi-destination. |
+| 23 | Slice 8 (P3.1) — Hotel-style rooms | TBD | | Architect-recommended Phase 3 start. Purely additive (`rooms` child of `properties`, `BookingLineItem.ReservableKind=Room`). Validates the line-item refactor on one module. |
+| 24 | Slice 9 (P3.2) — Multi-unit cart | TBD | | Same-tenant, multi-property/room. Uses Stripe `transfer_data[]` native multi-destination. |
 | **= Phase 3 demo-able** | | | | Booking.com-style multi-unit + per-room inventory. |
-| 25 | P4.1 — OTA package bundling | TBD | | Supplier-tenant polymorphism, cross-tenant RLS (the per-statement binding granularity from M.9 pays off here), FX, new domains (Flight/Car/Activity), Itinerary aggregate. Sits entirely on top of Phase 3's line-item refactor. |
+| 25 | Slice 10 (P4.1) — OTA package bundling | TBD | | Supplier-tenant polymorphism, cross-tenant RLS (the per-statement binding granularity from Slice OPS.M.9 pays off here), FX, new domains (Flight/Car/Activity), Itinerary aggregate. Sits entirely on top of Phase 3's line-item refactor. |
 | **= Phase 4 demo-able** | | | | Expedia/tour-operator style cross-supplier itineraries. |
 
-`OPS.7` does NOT appear in the OPS launch row because it lands inside the OPS.M.0 slot as a hard prerequisite for OPS.M.2.
+`Slice OPS.7` does NOT appear in the OPS launch row because it lands inside the Slice OPS.M.0 slot as a hard prerequisite for Slice OPS.M.2.
 
-**Order rationale (2026-06-27).** Multi-tenancy lands first because the launch hardening's blast radius (Pact contracts, k6 load shape, ZAP attack surface, key rotation policy) all change once tenants exist. Slice 4 interleaves because it's the only Slice 4–7 item that's *infrastructure* (ACS + worker + templates) consumed by every later slice and by OPS.M.7's onboarding demo. Slice 5–7 wait until after M.10 so their handlers ship without per-handler tenancy boilerplate that M.4 would delete and without report queries that M.9 would force a rewrite of. Phase 3 + Phase 4 sit after launch hardening so they don't disturb a launched product.
+**Order rationale (2026-06-27).** Multi-tenancy lands first because the launch hardening's blast radius (Pact contracts, k6 load shape, ZAP attack surface, key rotation policy) all change once tenants exist. Slice 4 interleaves because it's the only Slice 4–7 item that's *infrastructure* (ACS + worker + templates) consumed by every later slice and by Slice OPS.M.7's onboarding demo. Slice 5–7 wait until after Slice OPS.M.10 so their handlers ship without per-handler tenancy boilerplate that Slice OPS.M.4 would delete and without report queries that Slice OPS.M.9 would force a rewrite of. Slice 8 + 9 (Phase 3) + Slice 10 (Phase 4) sit after launch hardening so they don't disturb a launched product.
 
 ---
 
@@ -96,19 +96,19 @@ A single seeded Owner with DevAuth can:
 - Hold a live messaging thread with the guest; rule-based pricing alters quotes correctly.
 - Pull occupancy/revenue/ADR reports as CSV; dashboard pill updates in real time.
 
-### Phase 1.5 done (OPS.M.1–10)
+### Phase 1.5 done (Slice OPS.M.0 – Slice OPS.M.10)
 
-Two distinct tenants exist. Tenant A and Tenant B each have their own properties, bookings, Stripe Connect account, iCal feeds, and audit log. Cross-tenant isolation is enforced at app + RLS layers and proven by the OPS.M.10 isolation test pack. Super Admin console can list/suspend/impersonate any tenant. Entra External ID has replaced DevAuth in production.
+Two distinct tenants exist. Tenant A and Tenant B each have their own properties, bookings, Stripe Connect account, iCal feeds, and audit log. Cross-tenant isolation is enforced at app + RLS layers and proven by the Slice OPS.M.10 isolation test pack. Super Admin console can list/suspend/impersonate any tenant. Entra External ID has replaced DevAuth in production.
 
-### Phase 1 launch ready (OPS.1–8 less OPS.7)
+### Phase 1 launch ready (Slice OPS.1–8 less Slice OPS.7)
 
 CI gates: Pact, Playwright, k6, ZAP, Trivy, SBOM. Stripe keys rotated. ACS DKIM verified for the platform sender. No remaining `TODO: production`. Runbooks current.
 
-### Phase 3 done (P3.1 + P3.2)
+### Phase 3 done (Slice 8 + Slice 9)
 
 A facility (formerly Property) can hold N bookable rooms or units. One guest can book multiple rooms or properties in a single atomic checkout with a single Stripe PaymentIntent that splits across the right Connect accounts. Reviews work at room granularity. iCal export works per-room. Pricing rules can target the room or the facility. Existing single-property listings continue to work unchanged via "facility with one room".
 
-### Phase 4 done (P4.1)
+### Phase 4 done (Slice 10)
 
 A travel-agency tenant can compose an Itinerary spanning Stay + Flight + Rental Car + Activity legs across multiple supplier tenants and countries, sold as a single product to a guest with multi-currency settlement and per-leg cancellation. Existing accommodation-only tenants are unaffected.
 
@@ -125,7 +125,7 @@ These are locked-in policies; do not deviate without amending this section.
 5. **10 notification templates** in Slice 4 (REPLAN §9 lockdown #4). Remaining 8 from §13 land in Slice 5 backfill or Phase 2.
 6. **Single platform email domain** in Phase 1.5; per-tenant subdomains/DKIM in Phase 2 (MULTI_TENANCY_OPS_PLAN §8).
 7. **In-process MediatR + outbox** is the Phase-1 event bus. Outbox → Service Bus relay deferred to A11/Phase 2 (REPLAN §5).
-8. **DevAuth covers Phase 1 demo and pilot.** Real Entra cutover lands inside OPS.M (OPS.M.0 / OPS.7).
+8. **DevAuth covers Phase 1 demo and pilot.** Real Entra cutover lands inside Phase 1.5 (Slice OPS.M.0 ≡ Slice OPS.7).
 9. **Architect consult required** for any multi-module or sequencing decision. Commit the result as a doc under `docs/` before writing code.
 
 ---
@@ -172,4 +172,5 @@ These will be picked up at the slot indicated; revisit only if the slot is reach
 ## 8. Revision log
 
 - 2026-06-14 — Initial assembly. Slices 0–3 marked ✅; Slice 4 next (plan `d9fa889`); OPS.M sequenced after Slice 7; OPS.7 Entra moved into the OPS.M critical path; §10.1 forward-compat policy carried forward.
-- 2026-06-27 — **Sequence reorder + Phase 3 + Phase 4 added**. (1) Mark OPS.M.0–3 ✅ shipped 2026-06-25 → 2026-06-27. (2) Lock Option C order per architect: Slice 4 → OPS.M.4–10 → Slice 5–7 → Phase 3 → Phase 4 → OPS.1–8. (3) Define Phase 3 (P3.1 hotel-style rooms + P3.2 multi-unit cart) and Phase 4 (P4.1 OTA package bundling). (4) Carry forward two narrow door-opening notes from `PHASE_3_RECONNAISSANCE.md`: per-statement `app.tenant_id` binding in OPS.M.9, and composite `(BookingId, PropertyId)` Review key in Slice 5. Three explicit "do NOT pre-shape" instructions: M.4 signature flex, M.5 `connect_account_kind` enum, and OPS.M.3 retrofit for rooms (rooms denormalize tenant_id from parent property — no retrofit needed). All other Phase 3 design deferred until after market validation.
+- 2026-06-27 — **Sequence reorder + Phase 3 + Phase 4 added**. (1) Mark Slice OPS.M.0–3 ✅ shipped 2026-06-25 → 2026-06-27. (2) Lock Option C order per architect: Slice 4 → Slice OPS.M.4–10 → Slice 5–7 → Phase 3 → Phase 4 → Slice OPS.1–8. (3) Define Phase 3 (Slice 8 hotel-style rooms + Slice 9 multi-unit cart) and Phase 4 (Slice 10 OTA package bundling). (4) Carry forward two narrow door-opening notes from `PHASE_3_RECONNAISSANCE.md`: per-statement `app.tenant_id` binding in Slice OPS.M.9, and composite `(BookingId, PropertyId)` Review key in Slice 5. Three explicit "do NOT pre-shape" instructions: Slice OPS.M.4 signature flex, Slice OPS.M.5 `connect_account_kind` enum, and Slice OPS.M.3 retrofit for rooms (rooms denormalize tenant_id from parent property — no retrofit needed). All other Phase 3 design deferred until after market validation.
+- 2026-06-27 — **Unified naming consolidation**. Single `Slice` prefix locked across §1 + §2 + §3 + §4: original product slices keep their integers (Slice 0 … Slice 7); multi-tenancy items become Slice OPS.M.0 … Slice OPS.M.10; launch hardening becomes Slice OPS.1 … Slice OPS.8; Phase 3 items continue the integer sequence as Slice 8 (P3.1) + Slice 9 (P3.2); Phase 4 is Slice 10 (P4.1). Detail-plan filenames (`OPS_M_3_PLAN.md` etc.) and existing commit messages are immutable history and are NOT retroactively renamed.
