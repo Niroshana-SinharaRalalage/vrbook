@@ -11,8 +11,8 @@ internal sealed class BookingHoldConfiguration : IEntityTypeConfiguration<Bookin
         builder.ToTable("booking_holds", BookingDbContext.SchemaName);
         builder.HasKey(x => x.Id);
 
-        // OPS.M.3a — tenant_id, nullable until 3c.
-        builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        // OPS.M.3c — NOT NULL after Wave B backfill.
+        builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.HasIndex(x => x.TenantId);
 
         builder.Property(x => x.PropertyId).HasColumnName("property_id").IsRequired();

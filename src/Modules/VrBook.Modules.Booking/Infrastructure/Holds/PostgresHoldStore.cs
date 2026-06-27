@@ -34,6 +34,7 @@ namespace VrBook.Modules.Booking.Infrastructure.Holds;
 /// </summary>
 internal sealed class PostgresHoldStore(
     BookingDbContext db,
+    IPropertyOwnerLookup propertyOwners,
     ILogger<PostgresHoldStore> logger) : IHoldStore
 {
     public async Task<HoldDto> CreateAsync(
@@ -94,10 +95,12 @@ internal sealed class PostgresHoldStore(
                     "Please retry in a few minutes.");
             }
 
-            // OPS.M.3 — TenantId for the hold mirror; default-tenant fallback
-            // for 3a. Proper lookup wires in 3c via IPropertyOwnerLookup.
+            // OPS.M.3c — TenantId from the property; default-tenant fallback
+            // for orphan property rows (should be zero post-Wave-B).
+            var owner = await propertyOwners.GetAsync(propertyId, ct);
+            var holdTenantId = owner?.TenantId ?? new Guid("00000000-0000-0000-0000-000000000001");
             var hold = BookingHold.Create(
-                new Guid("00000000-0000-0000-0000-000000000001"),
+                holdTenantId,
                 holdId, propertyId, checkin, checkout, guests, sessionId, expiresAt);
             db.Set<BookingHold>().Add(hold);
             await db.SaveChangesAsync(ct);

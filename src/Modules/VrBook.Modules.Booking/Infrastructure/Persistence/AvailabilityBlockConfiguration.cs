@@ -14,9 +14,10 @@ internal sealed class AvailabilityBlockConfiguration : IEntityTypeConfiguration<
         b.Property(x => x.PropertyId).HasColumnName("property_id").IsRequired();
         b.HasIndex(x => x.PropertyId);
 
-        // Forward-compat per REPLAN.md §10.1. FK to identity.tenants(id) is declared
-        // at the SQL level in the migration (cross-schema, no EF nav property).
-        b.Property(x => x.TenantId).HasColumnName("tenant_id");
+        // OPS.M.3c — NOT NULL after Wave B backfill. Cross-schema FK to
+        // identity.tenants("Id") declared at SQL level in earlier migration.
+        b.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
+        b.HasIndex(x => x.TenantId);
 
         b.Property(x => x.StartDate).HasColumnName("start_date").HasColumnType("date").IsRequired();
         b.Property(x => x.EndDate).HasColumnName("end_date").HasColumnType("date").IsRequired();

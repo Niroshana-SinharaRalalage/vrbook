@@ -26,6 +26,7 @@ namespace VrBook.Modules.Booking.Infrastructure.Holds;
 internal sealed class RedisHoldStore(
     IConnectionMultiplexer redis,
     BookingDbContext db,
+    IPropertyOwnerLookup propertyOwners,
     ILogger<RedisHoldStore> logger) : IHoldStore
 {
     public async Task<HoldDto> CreateAsync(
@@ -63,9 +64,12 @@ internal sealed class RedisHoldStore(
         await redisDb.StringSetAsync(IdKey(holdId), key, ttl);
 
         // Mirror to Postgres for audit + restart reconciliation.
-        // OPS.M.3 — TenantId default-tenant fallback for 3a; proper lookup in 3c.
+        // OPS.M.3c — TenantId from the property; default-tenant fallback only
+        // for orphan rows (post-Wave-B there should be none).
+        var owner = await propertyOwners.GetAsync(propertyId, ct);
+        var holdTenantId = owner?.TenantId ?? new Guid("00000000-0000-0000-0000-000000000001");
         var hold = BookingHold.Create(
-            new Guid("00000000-0000-0000-0000-000000000001"),
+            holdTenantId,
             holdId, propertyId, checkin, checkout, guests, sessionId, expiresAt);
         db.Set<BookingHold>().Add(hold);
         try

@@ -11,8 +11,8 @@ internal sealed class BookingConfiguration : IEntityTypeConfiguration<DomainBook
         b.ToTable("bookings", BookingDbContext.SchemaName);
         b.HasKey(x => x.Id);
 
-        // OPS.M.3a — tenant_id, nullable until 3c; cross-schema FK in migration.
-        b.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        // OPS.M.3c — NOT NULL after Wave B backfill.
+        b.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         b.HasIndex(x => x.TenantId);
 
         b.Property(x => x.Reference).HasColumnName("reference").HasMaxLength(20).IsRequired();

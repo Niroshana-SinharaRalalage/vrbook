@@ -13,6 +13,7 @@ namespace VrBook.Modules.Booking.Application.Commands;
 internal sealed class CreateAvailabilityBlockHandler(
     ICurrentUser currentUser,
     IMediator mediator,
+    IPropertyOwnerLookup propertyOwners,
     BookingDbContext db) : IRequestHandler<CreateAvailabilityBlockCommand, AvailabilityBlockDto>
 {
     public async Task<AvailabilityBlockDto> Handle(CreateAvailabilityBlockCommand request, CancellationToken cancellationToken)
@@ -55,7 +56,13 @@ internal sealed class CreateAvailabilityBlockHandler(
                 $"These dates overlap an existing booking ({overlappingBooking}). Cancel or move the booking first.");
         }
 
+        // OPS.M.3c — derive tenant from the property's owner snapshot. Wave B
+        // backfilled all rows, so the cross-schema lookup will always find one.
+        var ownerSnapshot = await propertyOwners.GetAsync(request.PropertyId, cancellationToken);
+        var blockTenantId = ownerSnapshot?.TenantId ?? new Guid("00000000-0000-0000-0000-000000000001");
+
         var block = AvailabilityBlock.Create(
+            tenantId: blockTenantId,
             propertyId: request.PropertyId,
             startDate: r.StartDate,
             endDate: r.EndDate,

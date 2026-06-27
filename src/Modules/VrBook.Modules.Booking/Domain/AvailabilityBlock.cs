@@ -20,8 +20,8 @@ public sealed class AvailabilityBlock : AggregateRoot
 {
     public Guid PropertyId { get; private set; }
 
-    /// <summary>Forward-compat placeholder per REPLAN.md §10.1. Set in OPS.M.3b.</summary>
-    public Guid? TenantId { get; private set; }
+    /// <summary>Tenant inherited from the property. OPS.M.3c flipped to non-nullable.</summary>
+    public Guid TenantId { get; private set; }
 
     public DateOnly StartDate { get; private set; }
     public DateOnly EndDate { get; private set; }
@@ -30,12 +30,16 @@ public sealed class AvailabilityBlock : AggregateRoot
     private AvailabilityBlock() { }   // EF Core
 
     public static AvailabilityBlock Create(
+        Guid tenantId,
         Guid propertyId,
         DateOnly startDate,
         DateOnly endDate,
-        string? reason,
-        Guid? tenantId = null)
+        string? reason)
     {
+        if (tenantId == Guid.Empty)
+        {
+            throw new ArgumentException("TenantId required.", nameof(tenantId));
+        }
         if (propertyId == Guid.Empty)
         {
             throw new ArgumentException("PropertyId required.", nameof(propertyId));
