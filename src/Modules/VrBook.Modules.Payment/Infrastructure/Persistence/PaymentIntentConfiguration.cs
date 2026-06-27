@@ -10,8 +10,8 @@ internal sealed class PaymentIntentConfiguration : IEntityTypeConfiguration<Paym
     {
         b.ToTable("payment_intents", PaymentDbContext.SchemaName);
         b.HasKey(x => x.Id);
-        // OPS.M.3a — tenant_id, nullable until 3c.
-        b.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        // OPS.M.3c — NOT NULL after Wave B backfill.
+        b.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         b.HasIndex(x => x.TenantId);
 
         b.Property(x => x.BookingId).HasColumnName("booking_id").IsRequired();
@@ -46,8 +46,8 @@ internal sealed class RefundConfiguration : IEntityTypeConfiguration<Refund>
     {
         b.ToTable("refunds", PaymentDbContext.SchemaName);
         b.HasKey(x => x.Id);
-        // OPS.M.3a — denorm tenant_id, nullable until 3c.
-        b.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        // OPS.M.3c — denorm tenant_id NOT NULL after Wave B backfill.
+        b.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         b.HasIndex(x => x.TenantId);
 
         b.Property(x => x.PaymentIntentId).HasColumnName("payment_intent_id").IsRequired();

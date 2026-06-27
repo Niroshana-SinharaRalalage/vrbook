@@ -5,8 +5,8 @@ namespace VrBook.Modules.Payment.Domain;
 
 public sealed class Refund : Entity
 {
-    /// <summary>Denorm from PaymentIntent. Guid? until 3c per OPS_M_3_PLAN §1.</summary>
-    public Guid? TenantId { get; private set; }
+    /// <summary>Denorm from PaymentIntent. OPS.M.3c flipped to non-nullable.</summary>
+    public Guid TenantId { get; private set; }
 
     public Guid PaymentIntentId { get; private set; }
     public string StripeRefundId { get; private set; } = default!;
