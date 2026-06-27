@@ -4,9 +4,6 @@ namespace VrBook.Modules.Payment.Infrastructure.Stripe;
 /// OPS.M.5 §3.6 + §10 best-practice #4 — application-fee math. Pure functions
 /// so the formula is unit-testable without Stripe HTTP. <c>decimal</c> with
 /// banker's rounding (<see cref="MidpointRounding.ToEven"/>) per §10.
-///
-/// <para>Step 3 RED: methods throw so <c>StripeFeeCalculatorTests</c> fails
-/// at assertion. GREEN replaces with the formulas from §3.6.</para>
 /// </summary>
 public static class StripeFeeCalculator
 {
@@ -14,8 +11,11 @@ public static class StripeFeeCalculator
     /// <c>applicationFeeAmount = round(capturedAmount × PlatformFeeBps / 10_000, 2)</c>
     /// converted to cents at the Stripe boundary.
     /// </summary>
-    public static long ApplicationFeeCents(decimal capturedAmount, int platformFeeBps) =>
-        throw new NotImplementedException("Wired by OPS.M.5 §3.6 Step 3 GREEN.");
+    public static long ApplicationFeeCents(decimal capturedAmount, int platformFeeBps)
+    {
+        var fee = decimal.Round(capturedAmount * platformFeeBps / 10_000m, 2, MidpointRounding.ToEven);
+        return ToCents(fee);
+    }
 
     /// <summary>
     /// <c>feeReversal = round(refundAmount × PlatformFeeBps / 10_000, 2)</c> for
@@ -23,6 +23,16 @@ public static class StripeFeeCalculator
     /// caller passes <c>refund_application_fee=true</c> alone instead).
     /// </summary>
     public static long? ProportionalFeeReversalCents(
-        decimal refundAmount, decimal capturedAmount, int platformFeeBps) =>
-        throw new NotImplementedException("Wired by OPS.M.5 §3.6 Step 3 GREEN.");
+        decimal refundAmount, decimal capturedAmount, int platformFeeBps)
+    {
+        if (refundAmount >= capturedAmount)
+        {
+            return null;
+        }
+        var reversal = decimal.Round(refundAmount * platformFeeBps / 10_000m, 2, MidpointRounding.ToEven);
+        return ToCents(reversal);
+    }
+
+    private static long ToCents(decimal amount) =>
+        (long)decimal.Round(amount * 100m, 0, MidpointRounding.ToEven);
 }

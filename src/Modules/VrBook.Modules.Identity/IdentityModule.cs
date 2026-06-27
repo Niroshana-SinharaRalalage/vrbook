@@ -8,6 +8,7 @@ using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
 using VrBook.Infrastructure.Outbox;
 using VrBook.Modules.Identity.Application.Behaviors;
+using VrBook.Modules.Identity.Infrastructure;
 using VrBook.Modules.Identity.Infrastructure.Auth;
 using VrBook.Modules.Identity.Infrastructure.Persistence;
 
@@ -28,6 +29,8 @@ public sealed class IdentityModule : IModuleRegistration
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IUserEmailLookup, UserEmailLookup>();
+        // OPS.M.5 §3.4 (D4) — cross-module lookup for Stripe Connect routing.
+        services.AddScoped<ITenantStripeContextLookup, TenantStripeContextLookup>();
 
         // The DbContext doubles as the module's IUnitOfWork.
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<IdentityDbContext>());
