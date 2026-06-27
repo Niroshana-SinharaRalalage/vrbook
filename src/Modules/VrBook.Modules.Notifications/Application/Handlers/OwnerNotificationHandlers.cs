@@ -48,7 +48,7 @@ internal sealed class OwnerNotificationHandlers(
             return;
         }
 
-        await Queue(NotificationKind.OwnerTentativeReceived, n.BookingId, ownerEmail,
+        await Queue(NotificationKind.OwnerTentativeReceived, n.BookingId, n.TenantId, ownerEmail,
             $"Reservation request — {n.Reference}",
             extras: new() { ["TentativeUntil"] = n.TentativeUntil.ToString("o") },
             cancellationToken: cancellationToken);
@@ -61,7 +61,7 @@ internal sealed class OwnerNotificationHandlers(
                 n.Reference, reminderAt);
             return;
         }
-        await Queue(NotificationKind.OwnerActionRequiredReminder, n.BookingId, ownerEmail,
+        await Queue(NotificationKind.OwnerActionRequiredReminder, n.BookingId, n.TenantId, ownerEmail,
             $"Decision needed soon — {n.Reference}",
             extras: new() { ["TentativeUntil"] = n.TentativeUntil.ToString("o") },
             cancellationToken: cancellationToken,
@@ -79,7 +79,7 @@ internal sealed class OwnerNotificationHandlers(
         {
             return;
         }
-        await Queue(NotificationKind.OwnerAutoConfirmed, n.BookingId, ownerEmail,
+        await Queue(NotificationKind.OwnerAutoConfirmed, n.BookingId, n.TenantId, ownerEmail,
             $"Auto-confirmed — {n.Reference}",
             extras: new() { ["Trigger"] = n.Trigger },
             cancellationToken: cancellationToken);
@@ -92,7 +92,7 @@ internal sealed class OwnerNotificationHandlers(
         {
             return;
         }
-        await Queue(NotificationKind.OwnerCancellationAlert, n.BookingId, ownerEmail,
+        await Queue(NotificationKind.OwnerCancellationAlert, n.BookingId, n.TenantId, ownerEmail,
             $"Cancelled — {n.Reference}",
             extras: new()
             {
@@ -130,9 +130,12 @@ internal sealed class OwnerNotificationHandlers(
         return user.Email;
     }
 
+    // OPS.M.4 Step 4 — owner-bound rows carry the originating event's TenantId
+    // so notification_log.tenant_id is correct for post-Slice OPS.M.9 RLS reads.
     private async Task Queue(
         NotificationKind kind,
         Guid bookingId,
+        Guid tenantId,
         string ownerEmail,
         string subject,
         Dictionary<string, object>? extras,
@@ -156,6 +159,7 @@ internal sealed class OwnerNotificationHandlers(
             recipientEmail: ownerEmail,
             subject: subject,
             payloadJson: json,
+            tenantId: tenantId,
             notBeforeUtc: notBeforeUtc);
         db.Logs.Add(log);
         await db.SaveChangesAsync(cancellationToken);

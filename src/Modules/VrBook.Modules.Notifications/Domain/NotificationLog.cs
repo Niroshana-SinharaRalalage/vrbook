@@ -94,14 +94,20 @@ public sealed class NotificationLog : AggregateRoot
 
     private NotificationLog() { } // EF
 
+    /// <summary>
+    /// OPS.M.4 Step 4 — <c>tenantId</c> is intentionally REQUIRED (no default).
+    /// Every call site must pass it consciously: <c>null</c> for guest-bound mail
+    /// and loyalty notifications, the originating event's <c>TenantId</c> for
+    /// owner-bound mail. The arch test in Step 5 will lock the contract.
+    /// </summary>
     public static NotificationLog Queue(
         NotificationKind kind,
         Guid recipientUserId,
         string recipientEmail,
         string subject,
         string payloadJson,
-        DateTimeOffset? notBeforeUtc = null,
-        Guid? tenantId = null)
+        Guid? tenantId,
+        DateTimeOffset? notBeforeUtc = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(recipientEmail);
         ArgumentException.ThrowIfNullOrWhiteSpace(subject);

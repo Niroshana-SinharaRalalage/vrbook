@@ -42,12 +42,15 @@ internal sealed class LoyaltyNotificationHandlers(
             ["NewDiscountPct"] = newDiscountPct.ToString("0.##"),
         };
 
+        // OPS.M.4 Step 4 — loyalty is global per OPS_M_1 §2; the program is
+        // platform-wide so loyalty notifications are tenant-less.
         var log = NotificationLog.Queue(
             kind: NotificationKind.LoyaltyTierPromotion,
             recipientUserId: n.UserId,
             recipientEmail: user.Email,
             subject: $"Welcome to {n.ToTier}",
-            payloadJson: JsonSerializer.Serialize(payload));
+            payloadJson: JsonSerializer.Serialize(payload),
+            tenantId: null);
         db.Logs.Add(log);
         await db.SaveChangesAsync(cancellationToken);
 

@@ -120,12 +120,15 @@ internal sealed class BookingNotificationHandlers(
         var payload = NotificationPayload.Build(booking, extras);
         var json = JsonSerializer.Serialize(payload);
 
+        // OPS.M.4 Step 4 — guest-bound mail: tenantId is null. Guests are
+        // tenant-less per MTOP §1; the column stays Guid? forever per OPS.M.3 §1.6.
         var log = NotificationLog.Queue(
             kind,
             recipientUserId: recipient,
             recipientEmail: user.Email,
             subject: subject,
             payloadJson: json,
+            tenantId: null,
             notBeforeUtc: notBeforeUtc);
         db.Logs.Add(log);
         await db.SaveChangesAsync(cancellationToken);
