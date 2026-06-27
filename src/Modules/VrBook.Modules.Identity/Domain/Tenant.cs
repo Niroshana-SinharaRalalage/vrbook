@@ -37,17 +37,11 @@ public sealed class Tenant : AggregateRoot
     public string? SuspendedReason { get; private set; }
 
     // OPS.M.5 §3.8 (D8) — Stripe surfaces these two booleans on the connected
-    // account. Tenant.UpdateStripeAccountReadiness (Step 2) auto-transitions
-    // PendingOnboarding → Active when both are true, Active → Suspended on
-    // capability loss. Default false: new tenants haven't onboarded Stripe yet.
-    //
-    // Setters wired by Step 2's UpdateStripeAccountReadiness method; S1144 is
-    // suppressed here because Step 1 ships the column/property pair alone per
-    // OPS_M_5_PLAN §9 TDD cadence (schema first, behavior next).
-#pragma warning disable S1144 // S1144: Remove unused setters — wired by Step 2.
+    // account. UpdateStripeAccountReadiness auto-transitions PendingOnboarding
+    // → Active when both flags flip to true; Active → Suspended on capability
+    // loss. Default false: new tenants haven't onboarded Stripe yet.
     public bool ChargesEnabled { get; private set; }
     public bool PayoutsEnabled { get; private set; }
-#pragma warning restore S1144
 
     private Tenant() { }   // EF Core
 
@@ -161,17 +155,27 @@ public sealed class Tenant : AggregateRoot
     /// flip to true; Active → Suspended on capability loss (raises
     /// <see cref="TenantStripeSuspended"/> with reason
     /// <c>stripe_capability_lost</c>). Suspended cannot auto-re-Activate from
-    /// flags alone — an operator must explicitly transition out of Suspended.
-    ///
-    /// <para>Step 2 RED: this body writes the setters only so the assertion
-    /// tests in TenantStripeReadinessTests fail at the transition checks.
-    /// Step 2 GREEN replaces the body with the full state-machine.</para>
+    /// flags alone — an operator must explicitly transition out of Suspended
+    /// via <see cref="Activate"/> after re-running the readiness check.
     /// </summary>
     public void UpdateStripeAccountReadiness(bool chargesEnabled, bool payoutsEnabled)
     {
         ChargesEnabled = chargesEnabled;
         PayoutsEnabled = payoutsEnabled;
-        // Status transitions + event raises arrive in Step 2 GREEN.
+
+        if (chargesEnabled && payoutsEnabled && Status == StatusPendingOnboarding)
+        {
+            Status = StatusActive;
+            StripeAccountStatus = "Active";
+            Raise(new TenantStripeOnboarded(Id, StripeAccountId!));
+            Raise(new TenantActivated(Id));
+        }
+        else if ((!chargesEnabled || !payoutsEnabled) && Status == StatusActive)
+        {
+            Status = StatusSuspended;
+            SuspendedReason = "stripe_capability_lost";
+            Raise(new TenantStripeSuspended(Id, StripeAccountId!, "stripe_capability_lost"));
+        }
     }
 
     public void SetPlatformFeeBps(int bps)

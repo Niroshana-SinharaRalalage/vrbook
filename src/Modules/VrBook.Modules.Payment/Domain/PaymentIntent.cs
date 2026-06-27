@@ -61,7 +61,7 @@ public sealed class PaymentIntent : AggregateRoot
             Status = initialStatus,
             CaptureMethod = captureMethod,
         };
-        pi.Raise(new PaymentAuthorized(pi.Id, bookingId, stripePaymentIntentId, amount, pi.Currency));
+        pi.Raise(new PaymentAuthorized(pi.TenantId, pi.Id, bookingId, stripePaymentIntentId, amount, pi.Currency));
         return pi;
     }
 
@@ -79,7 +79,7 @@ public sealed class PaymentIntent : AggregateRoot
         if (status == PaymentStatus.Succeeded)
         {
             CapturedAt ??= DateTimeOffset.UtcNow;
-            Raise(new PaymentCaptured(Id, BookingId, StripePaymentIntentId, Amount, Currency));
+            Raise(new PaymentCaptured(TenantId, Id, BookingId, StripePaymentIntentId, Amount, Currency));
         }
     }
 
@@ -87,14 +87,14 @@ public sealed class PaymentIntent : AggregateRoot
     {
         Status = PaymentStatus.Failed;
         LastError = reason;
-        Raise(new PaymentFailed(Id, BookingId, reason));
+        Raise(new PaymentFailed(TenantId, Id, BookingId, reason));
     }
 
     public Refund AddRefund(string stripeRefundId, decimal amount, string? reason)
     {
         var refund = new Refund(TenantId, Id, stripeRefundId, amount, Currency, reason);
         _refunds.Add(refund);
-        Raise(new RefundIssued(refund.Id, Id, BookingId, amount, Currency, reason ?? string.Empty));
+        Raise(new RefundIssued(TenantId, refund.Id, Id, BookingId, amount, Currency, reason ?? string.Empty));
         return refund;
     }
 }
