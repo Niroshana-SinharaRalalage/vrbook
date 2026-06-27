@@ -10,6 +10,10 @@ internal sealed class PaymentIntentConfiguration : IEntityTypeConfiguration<Paym
     {
         b.ToTable("payment_intents", PaymentDbContext.SchemaName);
         b.HasKey(x => x.Id);
+        // OPS.M.3a — tenant_id, nullable until 3c.
+        b.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        b.HasIndex(x => x.TenantId);
+
         b.Property(x => x.BookingId).HasColumnName("booking_id").IsRequired();
         b.HasIndex(x => x.BookingId).IsUnique();
         b.Property(x => x.StripePaymentIntentId).HasColumnName("stripe_payment_intent_id").HasMaxLength(120).IsRequired();
@@ -42,6 +46,10 @@ internal sealed class RefundConfiguration : IEntityTypeConfiguration<Refund>
     {
         b.ToTable("refunds", PaymentDbContext.SchemaName);
         b.HasKey(x => x.Id);
+        // OPS.M.3a — denorm tenant_id, nullable until 3c.
+        b.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        b.HasIndex(x => x.TenantId);
+
         b.Property(x => x.PaymentIntentId).HasColumnName("payment_intent_id").IsRequired();
         b.Property(x => x.StripeRefundId).HasColumnName("stripe_refund_id").HasMaxLength(120).IsRequired();
         b.HasIndex(x => x.StripeRefundId).IsUnique();
@@ -59,6 +67,12 @@ internal sealed class WebhookEventConfiguration : IEntityTypeConfiguration<Webho
     {
         b.ToTable("webhook_events", PaymentDbContext.SchemaName);
         b.HasKey(x => x.Id);
+
+        // OPS.M.3a — tenant_id, nullable per §1.4 (populated by OPS.M.5's
+        // webhook-routing path; platform-level events may stay null forever).
+        b.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        b.HasIndex(x => x.TenantId);
+
         b.Property(x => x.StripeEventId).HasColumnName("stripe_event_id").HasMaxLength(120).IsRequired();
         b.HasIndex(x => x.StripeEventId).IsUnique();
         b.Property(x => x.EventType).HasColumnName("event_type").HasMaxLength(100).IsRequired();

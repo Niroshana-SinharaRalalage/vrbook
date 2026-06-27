@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
@@ -36,7 +37,12 @@ internal sealed class CreatePaymentIntentForBookingHandler(
             metadata: new Dictionary<string, string> { ["booking_id"] = cmd.BookingId.ToString("D") },
             cancellationToken: cancellationToken);
 
+        // OPS.M.3 — derive tenant via cross-schema lookup; default-tenant fallback
+        // until Catalog/Booking 3b backfills.
+        var tenantId = await ResolveTenantIdAsync(db, cmd.BookingId, cancellationToken);
+
         var pi = PaymentIntent.Create(
+            tenantId,
             cmd.BookingId,
             created.Id,
             created.ClientSecret,
@@ -49,6 +55,20 @@ internal sealed class CreatePaymentIntentForBookingHandler(
         await db.SaveChangesAsync(cancellationToken);
         return Map(pi);
     }
+
+#pragma warning disable EF1002
+    private static async Task<Guid> ResolveTenantIdAsync(PaymentDbContext db, Guid bookingId, CancellationToken ct)
+    {
+        // Cross-schema lookup booking → property → tenant. Raw SQL with controlled
+        // GUID is safe; suppression matches the TenantClaimWiringTests test-seed
+        // pattern. After Booking 3c lands the lookup will be a normal load.
+        var raw = await db.Database
+            .SqlQueryRaw<Guid?>(
+                $"SELECT p.tenant_id AS \"Value\" FROM booking.bookings b JOIN catalog.properties p ON b.property_id = p.\"Id\" WHERE b.\"Id\" = '{bookingId}'")
+            .FirstOrDefaultAsync(ct);
+        return raw ?? new Guid("00000000-0000-0000-0000-000000000001");
+    }
+#pragma warning restore EF1002
 
     private static PaymentIntentDto Map(PaymentIntent pi) => new(
         Id: pi.Id,

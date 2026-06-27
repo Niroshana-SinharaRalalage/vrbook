@@ -14,7 +14,7 @@ namespace VrBook.Api.IntegrationTests.Domain;
 public sealed class PaymentIntentAggregateTests
 {
     private static PaymentIntent NewPi(decimal amount = 100m, PaymentStatus initialStatus = PaymentStatus.RequiresPaymentMethod) =>
-        PaymentIntent.Create(
+        PaymentIntent.Create(new Guid("00000000-0000-0000-0000-000000000001"),
             bookingId: Guid.NewGuid(),
             stripePaymentIntentId: $"pi_test_{Guid.NewGuid():N}"[..20],
             clientSecret: "pi_test_secret_xyz",
@@ -40,21 +40,21 @@ public sealed class PaymentIntentAggregateTests
     [Fact]
     public void Create_uppercases_currency()
     {
-        var pi = PaymentIntent.Create(Guid.NewGuid(), "pi_x", "sec", 100m, "usd", "manual", PaymentStatus.RequiresPaymentMethod);
+        var pi = PaymentIntent.Create(new Guid("00000000-0000-0000-0000-000000000001"), Guid.NewGuid(), "pi_x", "sec", 100m, "usd", "manual", PaymentStatus.RequiresPaymentMethod);
         pi.Currency.Should().Be("USD");
     }
 
     [Fact]
     public void Create_throws_on_zero_amount()
     {
-        Action act = () => PaymentIntent.Create(Guid.NewGuid(), "pi_x", "sec", 0m, "USD", "manual", PaymentStatus.RequiresPaymentMethod);
+        Action act = () => PaymentIntent.Create(new Guid("00000000-0000-0000-0000-000000000001"), Guid.NewGuid(), "pi_x", "sec", 0m, "USD", "manual", PaymentStatus.RequiresPaymentMethod);
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     [Fact]
     public void Create_throws_on_blank_stripe_id()
     {
-        Action act = () => PaymentIntent.Create(Guid.NewGuid(), "", "sec", 100m, "USD", "manual", PaymentStatus.RequiresPaymentMethod);
+        Action act = () => PaymentIntent.Create(new Guid("00000000-0000-0000-0000-000000000001"), Guid.NewGuid(), "", "sec", 100m, "USD", "manual", PaymentStatus.RequiresPaymentMethod);
         act.Should().Throw<ArgumentException>();
     }
 

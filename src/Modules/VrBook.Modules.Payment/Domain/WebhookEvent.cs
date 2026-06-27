@@ -8,6 +8,14 @@ namespace VrBook.Modules.Payment.Domain;
 /// </summary>
 public sealed class WebhookEvent : Entity
 {
+    /// <summary>
+    /// Tenant the webhook event maps to (routed via tenants.stripe_account_id
+    /// in OPS.M.5). Per OPS_M_3_PLAN §1.4 — nullable. May stay null permanently
+    /// for platform-level events (e.g. account.updated for fresh Connect
+    /// onboarding) that don't yet have a tenant context.
+    /// </summary>
+    public Guid? TenantId { get; private set; }
+
     public string StripeEventId { get; private set; } = default!;
     public string EventType { get; private set; } = default!;
     public string PayloadJson { get; private set; } = default!;
@@ -26,4 +34,18 @@ public sealed class WebhookEvent : Entity
     }
 
     public void MarkProcessed() => ProcessedAt = DateTimeOffset.UtcNow;
+
+    /// <summary>
+    /// OPS.M.5 will call this from the Stripe webhook handler once
+    /// <c>account → tenant</c> resolution lands. Until then the column stays
+    /// null and the column exists only for forward-compat per OPS_M_3_PLAN §1.4.
+    /// </summary>
+    public void SetTenantId(Guid tenantId)
+    {
+        if (tenantId == Guid.Empty)
+        {
+            throw new ArgumentException("TenantId required.", nameof(tenantId));
+        }
+        TenantId = tenantId;
+    }
 }

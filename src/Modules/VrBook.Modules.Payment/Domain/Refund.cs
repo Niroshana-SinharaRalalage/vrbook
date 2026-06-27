@@ -5,6 +5,9 @@ namespace VrBook.Modules.Payment.Domain;
 
 public sealed class Refund : Entity
 {
+    /// <summary>Denorm from PaymentIntent. Guid? until 3c per OPS_M_3_PLAN §1.</summary>
+    public Guid? TenantId { get; private set; }
+
     public Guid PaymentIntentId { get; private set; }
     public string StripeRefundId { get; private set; } = default!;
     public decimal Amount { get; private set; }
@@ -14,10 +17,15 @@ public sealed class Refund : Entity
 
     private Refund() { } // EF
 
-    internal Refund(Guid paymentIntentId, string stripeRefundId, decimal amount, string currency, string? reason)
+    internal Refund(Guid tenantId, Guid paymentIntentId, string stripeRefundId, decimal amount, string currency, string? reason)
     {
+        if (tenantId == Guid.Empty)
+        {
+            throw new ArgumentException("TenantId required.", nameof(tenantId));
+        }
         ArgumentException.ThrowIfNullOrWhiteSpace(stripeRefundId);
         Id = Guid.NewGuid();
+        TenantId = tenantId;
         PaymentIntentId = paymentIntentId;
         StripeRefundId = stripeRefundId;
         Amount = amount;

@@ -11,6 +11,9 @@ namespace VrBook.Modules.Payment.Domain;
 /// </summary>
 public sealed class PaymentIntent : AggregateRoot
 {
+    /// <summary>Tenant from the booking's property. Guid? until 3c per OPS_M_3_PLAN §3.1.</summary>
+    public Guid? TenantId { get; private set; }
+
     public Guid BookingId { get; private set; }
     public string StripePaymentIntentId { get; private set; } = default!;
     public string? StripeChargeId { get; private set; }
@@ -29,6 +32,7 @@ public sealed class PaymentIntent : AggregateRoot
     private PaymentIntent() { } // EF
 
     public static PaymentIntent Create(
+        Guid tenantId,
         Guid bookingId,
         string stripePaymentIntentId,
         string clientSecret,
@@ -37,6 +41,10 @@ public sealed class PaymentIntent : AggregateRoot
         string captureMethod,
         PaymentStatus initialStatus)
     {
+        if (tenantId == Guid.Empty)
+        {
+            throw new ArgumentException("TenantId required.", nameof(tenantId));
+        }
         ArgumentException.ThrowIfNullOrWhiteSpace(stripePaymentIntentId);
         ArgumentException.ThrowIfNullOrWhiteSpace(clientSecret);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(amount);
@@ -44,6 +52,7 @@ public sealed class PaymentIntent : AggregateRoot
         var pi = new PaymentIntent
         {
             Id = Guid.NewGuid(),
+            TenantId = tenantId,
             BookingId = bookingId,
             StripePaymentIntentId = stripePaymentIntentId,
             ClientSecret = clientSecret,
@@ -83,7 +92,9 @@ public sealed class PaymentIntent : AggregateRoot
 
     public Refund AddRefund(string stripeRefundId, decimal amount, string? reason)
     {
-        var refund = new Refund(Id, stripeRefundId, amount, Currency, reason);
+        var refundTenantId = TenantId ?? throw new InvalidOperationException(
+            "PaymentIntent has no TenantId; cannot add refund. Aggregate invariant violated.");
+        var refund = new Refund(refundTenantId, Id, stripeRefundId, amount, Currency, reason);
         _refunds.Add(refund);
         Raise(new RefundIssued(refund.Id, Id, BookingId, amount, Currency, reason ?? string.Empty));
         return refund;
