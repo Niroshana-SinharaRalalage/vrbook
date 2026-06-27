@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
+using VrBook.Contracts.Interfaces;
+using VrBook.Domain.Common;
 using VrBook.Modules.Booking.Application.Commands;
 using VrBook.Modules.Booking.Application.Holds.Commands;
 using VrBook.Modules.Booking.Application.Queries;
@@ -14,8 +16,11 @@ namespace VrBook.Api.Controllers;
 [Route("api/v1/bookings")]
 [Tags("Booking")]
 [Authorize]
-public sealed class BookingsController(IMediator mediator) : ControllerBase
+public sealed class BookingsController(IMediator mediator, ICurrentUser currentUser) : ControllerBase
 {
+    private Guid CallerTenantId() => currentUser.TenantId
+        ?? throw new ForbiddenException("Owner action requires a tenant membership.");
+
     // ---- Slice 0.1: 15-minute checkout hold (§9.3) ----
     [HttpPost("holds")]
     [SwaggerOperation(Summary = "Create a 15-minute hold on dates during checkout.")]
@@ -75,23 +80,23 @@ public sealed class BookingsController(IMediator mediator) : ControllerBase
     [Authorize(Roles = "Owner,Admin")]
     [SwaggerOperation(Summary = "Owner manual confirmation. Tentative -> Confirmed.")]
     public async Task<ActionResult<BookingDto>> Confirm(Guid id, CancellationToken cancellationToken) =>
-        Ok(await mediator.Send(new ConfirmBookingCommand(id), cancellationToken));
+        Ok(await mediator.Send(new ConfirmBookingCommand(id, CallerTenantId()), cancellationToken));
 
     [HttpPost("{id:guid}/reject")]
     [Authorize(Roles = "Owner,Admin")]
     [SwaggerOperation(Summary = "Owner rejection of a Tentative booking.")]
     public async Task<ActionResult<BookingDto>> Reject(Guid id, [FromBody] RejectBookingRequest request, CancellationToken cancellationToken) =>
-        Ok(await mediator.Send(new RejectBookingCommand(id, request.Reason ?? string.Empty), cancellationToken));
+        Ok(await mediator.Send(new RejectBookingCommand(id, request.Reason ?? string.Empty, CallerTenantId()), cancellationToken));
 
     [HttpPost("{id:guid}/check-in")]
     [Authorize(Roles = "Owner,Admin")]
     public async Task<ActionResult<BookingDto>> CheckIn(Guid id, CancellationToken cancellationToken) =>
-        Ok(await mediator.Send(new CheckInBookingCommand(id), cancellationToken));
+        Ok(await mediator.Send(new CheckInBookingCommand(id, CallerTenantId()), cancellationToken));
 
     [HttpPost("{id:guid}/check-out")]
     [Authorize(Roles = "Owner,Admin")]
     public async Task<ActionResult<BookingDto>> CheckOut(Guid id, CancellationToken cancellationToken) =>
-        Ok(await mediator.Send(new CheckOutBookingCommand(id), cancellationToken));
+        Ok(await mediator.Send(new CheckOutBookingCommand(id, CallerTenantId()), cancellationToken));
 
     [HttpPost("{id:guid}/review")]
     [SwaggerOperation(Summary = "Submit a post-stay review. Only after CheckedOut.")]

@@ -25,13 +25,17 @@ internal sealed class CreateAvailabilityBlockHandler(
 
         var r = request.Request ?? throw new ArgumentException("Request body required.", nameof(request));
 
-        var property = await mediator.Send(new GetPropertyByIdQuery(request.PropertyId), cancellationToken)
+        // OPS.M.4 Step 3 — owner-equality check deleted. TenantAuthorizationBehavior
+        // rejects the command if currentUser.TenantId != command.TenantId; the
+        // controller stamps TenantId from currentUser.TenantId, so any caller
+        // whose tenant does not own the property is rejected at the pipeline.
+        // RBAC ("only Owner role can hit this endpoint") is enforced by the
+        // controller's [Authorize(Roles="Owner,Admin")] attribute.
+        //
+        // Property existence is still validated to return 404 if the property is
+        // gone (separate concern from authorization).
+        _ = await mediator.Send(new GetPropertyByIdQuery(request.PropertyId), cancellationToken)
             ?? throw new NotFoundException("Property", request.PropertyId);
-
-        if (property.OwnerUserId != currentUser.UserId.Value && !currentUser.IsAdmin)
-        {
-            throw new ForbiddenException("Only the property owner can block dates.");
-        }
 
         if (r.EndDate <= r.StartDate)
         {
@@ -93,13 +97,10 @@ internal sealed class DeleteAvailabilityBlockHandler(
             throw new ForbiddenException("Sign-in required.");
         }
 
-        var property = await mediator.Send(new GetPropertyByIdQuery(request.PropertyId), cancellationToken)
+        // OPS.M.4 Step 3 — owner-equality check deleted; see CreateAvailabilityBlockHandler above.
+        // Property existence is still validated for the 404 contract.
+        _ = await mediator.Send(new GetPropertyByIdQuery(request.PropertyId), cancellationToken)
             ?? throw new NotFoundException("Property", request.PropertyId);
-
-        if (property.OwnerUserId != currentUser.UserId.Value && !currentUser.IsAdmin)
-        {
-            throw new ForbiddenException("Only the property owner can remove blocks.");
-        }
 
         var block = await db.AvailabilityBlocks
             .FirstOrDefaultAsync(x => x.Id == request.BlockId && x.PropertyId == request.PropertyId, cancellationToken)

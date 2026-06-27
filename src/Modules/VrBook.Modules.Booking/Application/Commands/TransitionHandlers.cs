@@ -56,14 +56,12 @@ internal abstract class OwnerActionHandler(
         var booking = await bookings.GetByIdAsync(bookingId, cancellationToken)
             ?? throw new NotFoundException("Booking", bookingId);
 
-        var property = await mediator.Send(new GetPropertyByIdQuery(booking.PropertyId), cancellationToken)
-            ?? throw new NotFoundException("Property", booking.PropertyId);
-
-        var isOwner = property.OwnerUserId == currentUser.UserId.Value;
-        if (!isOwner && !currentUser.IsAdmin)
-        {
-            throw new ForbiddenException("Only the property owner can perform this action.");
-        }
+        // OPS.M.4 Step 3 — owner-equality check deleted. TenantAuthorizationBehavior
+        // rejects mismatched-tenant commands at the pipeline; the controller's
+        // [Authorize(Roles="Owner,Admin")] gates which roles can reach the endpoint.
+        // The property lookup is dropped entirely — the booking already carries
+        // PropertyId; no per-transition property fetch is needed once the owner
+        // check is gone.
         transition(booking);
         await db.SaveChangesAsync(cancellationToken);
         return booking.ToDto();

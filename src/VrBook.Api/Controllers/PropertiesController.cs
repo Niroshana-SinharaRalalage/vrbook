@@ -5,6 +5,8 @@ using Swashbuckle.AspNetCore.Annotations;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Enums;
+using VrBook.Contracts.Interfaces;
+using VrBook.Domain.Common;
 using VrBook.Modules.Booking.Application.Queries;
 using VrBook.Modules.Catalog.Application.Properties.Commands;
 using VrBook.Modules.Catalog.Application.Properties.Queries;
@@ -176,8 +178,11 @@ public sealed class PropertyCalendarController(IMediator mediator) : ControllerB
 [Route("api/v1/properties/{propertyId:guid}/blocks")]
 [Tags("Booking")]
 [Authorize]
-public sealed class PropertyBlocksController(IMediator mediator) : ControllerBase
+public sealed class PropertyBlocksController(IMediator mediator, ICurrentUser currentUser) : ControllerBase
 {
+    private Guid CallerTenantId() => currentUser.TenantId
+        ?? throw new ForbiddenException("Owner action requires a tenant membership.");
+
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<AvailabilityBlockDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<AvailabilityBlockDto>>> List(
@@ -199,7 +204,7 @@ public sealed class PropertyBlocksController(IMediator mediator) : ControllerBas
         CancellationToken cancellationToken)
     {
         var dto = await mediator.Send(
-            new VrBook.Modules.Booking.Application.Commands.CreateAvailabilityBlockCommand(propertyId, request),
+            new VrBook.Modules.Booking.Application.Commands.CreateAvailabilityBlockCommand(propertyId, request, CallerTenantId()),
             cancellationToken);
         return CreatedAtAction(nameof(List), new { propertyId }, dto);
     }
@@ -213,7 +218,7 @@ public sealed class PropertyBlocksController(IMediator mediator) : ControllerBas
         CancellationToken cancellationToken)
     {
         await mediator.Send(
-            new VrBook.Modules.Booking.Application.Commands.DeleteAvailabilityBlockCommand(propertyId, blockId),
+            new VrBook.Modules.Booking.Application.Commands.DeleteAvailabilityBlockCommand(propertyId, blockId, CallerTenantId()),
             cancellationToken);
         return NoContent();
     }
