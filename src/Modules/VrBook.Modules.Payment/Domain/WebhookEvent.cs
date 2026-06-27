@@ -17,6 +17,15 @@ public sealed class WebhookEvent : Entity
     public Guid? TenantId { get; private set; }
 
     public string StripeEventId { get; private set; } = default!;
+
+    /// <summary>
+    /// Stripe Connect routing key (per OPS_M_5_PLAN §3.7). Nullable so platform-scope
+    /// events (delivered with <c>account=null</c>) coexist with connected-scope
+    /// duplicates of the same <c>StripeEventId</c>. The unique constraint at the DB
+    /// layer is composite on <c>(stripe_event_id, stripe_account_id)</c>.
+    /// </summary>
+    public string? StripeAccountId { get; private set; }
+
     public string EventType { get; private set; } = default!;
     public string PayloadJson { get; private set; } = default!;
     public DateTimeOffset ReceivedAt { get; private set; } = DateTimeOffset.UtcNow;
@@ -24,11 +33,12 @@ public sealed class WebhookEvent : Entity
 
     private WebhookEvent() { } // EF
 
-    public WebhookEvent(string stripeEventId, string eventType, string payloadJson)
+    public WebhookEvent(string stripeEventId, string eventType, string payloadJson, string? stripeAccountId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stripeEventId);
         Id = Guid.NewGuid();
         StripeEventId = stripeEventId;
+        StripeAccountId = stripeAccountId;
         EventType = eventType;
         PayloadJson = payloadJson;
     }

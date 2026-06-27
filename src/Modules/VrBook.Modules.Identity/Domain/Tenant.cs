@@ -36,6 +36,19 @@ public sealed class Tenant : AggregateRoot
     public string? StripeAccountStatus { get; private set; }
     public string? SuspendedReason { get; private set; }
 
+    // OPS.M.5 §3.8 (D8) — Stripe surfaces these two booleans on the connected
+    // account. Tenant.UpdateStripeAccountReadiness (Step 2) auto-transitions
+    // PendingOnboarding → Active when both are true, Active → Suspended on
+    // capability loss. Default false: new tenants haven't onboarded Stripe yet.
+    //
+    // Setters wired by Step 2's UpdateStripeAccountReadiness method; S1144 is
+    // suppressed here because Step 1 ships the column/property pair alone per
+    // OPS_M_5_PLAN §9 TDD cadence (schema first, behavior next).
+#pragma warning disable S1144 // S1144: Remove unused setters — wired by Step 2.
+    public bool ChargesEnabled { get; private set; }
+    public bool PayoutsEnabled { get; private set; }
+#pragma warning restore S1144
+
     private Tenant() { }   // EF Core
 
     public static Tenant Create(

@@ -63,6 +63,16 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
             .HasColumnName("stripe_account_status")
             .HasMaxLength(64);
 
+        // OPS.M.5 §3.8 (D8) — readiness flags driven by Stripe's account.updated webhook.
+        b.Property(t => t.ChargesEnabled)
+            .HasColumnName("charges_enabled")
+            .HasDefaultValue(false)
+            .IsRequired();
+        b.Property(t => t.PayoutsEnabled)
+            .HasColumnName("payouts_enabled")
+            .HasDefaultValue(false)
+            .IsRequired();
+
         b.Property(t => t.SuspendedReason)
             .HasColumnName("suspended_reason")
             .HasMaxLength(500);

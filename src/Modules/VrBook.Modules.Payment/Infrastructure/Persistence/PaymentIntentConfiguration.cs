@@ -74,7 +74,16 @@ internal sealed class WebhookEventConfiguration : IEntityTypeConfiguration<Webho
         b.HasIndex(x => x.TenantId);
 
         b.Property(x => x.StripeEventId).HasColumnName("stripe_event_id").HasMaxLength(120).IsRequired();
-        b.HasIndex(x => x.StripeEventId).IsUnique();
+
+        // OPS.M.5 §3.7 (D7) — composite uniqueness so platform-scope (account=null)
+        // + connected-scope (account=acct_…) duplicates of the same evt_… persist
+        // as distinct rows. Old single-column unique IX_webhook_events_stripe_event_id
+        // is dropped by OpsM5a_Payment_WebhookEvents_StripeAccountId.
+        b.Property(x => x.StripeAccountId).HasColumnName("stripe_account_id").HasMaxLength(120);
+        b.HasIndex(x => new { x.StripeEventId, x.StripeAccountId })
+            .HasDatabaseName("IX_webhook_events_account_event")
+            .IsUnique();
+
         b.Property(x => x.EventType).HasColumnName("event_type").HasMaxLength(100).IsRequired();
         b.Property(x => x.PayloadJson).HasColumnName("payload_json").HasColumnType("text").IsRequired();
         b.Property(x => x.ReceivedAt).HasColumnName("received_at");
