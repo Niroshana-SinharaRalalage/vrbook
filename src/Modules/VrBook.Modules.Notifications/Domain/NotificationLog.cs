@@ -59,6 +59,13 @@ public enum NotificationStatus
 /// </summary>
 public sealed class NotificationLog : AggregateRoot
 {
+    /// <summary>
+    /// Tenant the notification is *about* (e.g. tenant_admin alerts). Per
+    /// OPS_M_3_PLAN §1.6 — nullable forever (no 3c flip). Many notifications
+    /// go to guests (BookingConfirmed to a guest email) and have no tenant.
+    /// </summary>
+    public Guid? TenantId { get; private set; }
+
     public NotificationKind Kind { get; private set; }
     public NotificationStatus Status { get; private set; }
     public Guid RecipientUserId { get; private set; }
@@ -93,7 +100,8 @@ public sealed class NotificationLog : AggregateRoot
         string recipientEmail,
         string subject,
         string payloadJson,
-        DateTimeOffset? notBeforeUtc = null)
+        DateTimeOffset? notBeforeUtc = null,
+        Guid? tenantId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(recipientEmail);
         ArgumentException.ThrowIfNullOrWhiteSpace(subject);
@@ -101,6 +109,7 @@ public sealed class NotificationLog : AggregateRoot
         return new NotificationLog
         {
             Id = Guid.NewGuid(),
+            TenantId = tenantId,
             Kind = kind,
             Status = NotificationStatus.Queued,
             RecipientUserId = recipientUserId,

@@ -29,6 +29,12 @@ internal sealed class NotificationLogConfiguration : IEntityTypeConfiguration<No
     {
         builder.ToTable("notification_log", NotificationsDbContext.SchemaName);
         builder.HasKey(x => x.Id);
+
+        // OPS.M.3a — tenant_id; nullable forever per OPS_M_3_PLAN §1.6 (guest-
+        // facing notifications have no tenant). No 3c flip; no factory empty-guard.
+        builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        builder.HasIndex(x => x.TenantId);
+
         builder.Property(x => x.Kind).HasColumnName("kind").HasConversion<int>().IsRequired();
         builder.Property(x => x.Status).HasColumnName("status").HasConversion<int>().IsRequired();
         builder.Property(x => x.RecipientUserId).HasColumnName("recipient_user_id").IsRequired();
