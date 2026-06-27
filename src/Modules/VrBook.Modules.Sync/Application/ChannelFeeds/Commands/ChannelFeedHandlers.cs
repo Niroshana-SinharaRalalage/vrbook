@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using VrBook.Contracts.Dtos;
+using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
 using VrBook.Modules.Sync.Application.Common;
 using VrBook.Modules.Sync.Domain;
@@ -8,7 +9,7 @@ using VrBook.Modules.Sync.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Sync.Application.ChannelFeeds.Commands;
 
-internal sealed class CreateChannelFeedHandler(SyncDbContext db, IFeedUrlBuilder urls)
+internal sealed class CreateChannelFeedHandler(SyncDbContext db, IFeedUrlBuilder urls, IPropertyOwnerLookup properties)
     : IRequestHandler<CreateChannelFeedCommand, ChannelFeedDto>
 {
     public async Task<ChannelFeedDto> Handle(CreateChannelFeedCommand cmd, CancellationToken cancellationToken)
@@ -23,7 +24,12 @@ internal sealed class CreateChannelFeedHandler(SyncDbContext db, IFeedUrlBuilder
                 $"A {cmd.Channel} feed already exists for property {cmd.PropertyId}. Update the existing feed instead.");
         }
 
-        var feed = ChannelFeed.Create(cmd.PropertyId, cmd.Channel, cmd.InboundUrl, cmd.PollIntervalMinutes);
+        // OPS.M.3 — inherit tenant from the property; fall back to default tenant
+        // for pre-backfill Catalog rows.
+        var owner = await properties.GetAsync(cmd.PropertyId, cancellationToken);
+        var tenantId = owner?.TenantId ?? new Guid("00000000-0000-0000-0000-000000000001");
+
+        var feed = ChannelFeed.Create(tenantId, cmd.PropertyId, cmd.Channel, cmd.InboundUrl, cmd.PollIntervalMinutes);
         db.ChannelFeeds.Add(feed);
         await db.SaveChangesAsync(cancellationToken);
         return feed.ToDto(urls.OutboundFeedUrl(feed.OutboundToken), propertyTitle: string.Empty);

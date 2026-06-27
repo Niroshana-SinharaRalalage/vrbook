@@ -25,6 +25,7 @@ internal sealed class OnExternalReservationImported(
     SyncDbContext db,
     ISyncConflictRepository conflicts,
     IConfirmedBookingLookup bookings,
+    IPropertyOwnerLookup properties,
     ILogger<OnExternalReservationImported> logger)
     : INotificationHandler<ExternalReservationImported>
 {
@@ -32,6 +33,9 @@ internal sealed class OnExternalReservationImported(
     {
         var bookingOverlaps = await bookings.FindOverlappingAsync(
             notification.PropertyId, notification.Checkin, notification.Checkout, cancellationToken);
+
+        var owner = await properties.GetAsync(notification.PropertyId, cancellationToken);
+        var tenantId = owner?.TenantId ?? new Guid("00000000-0000-0000-0000-000000000001");
 
         if (bookingOverlaps.Count == 0)
         {
@@ -42,7 +46,7 @@ internal sealed class OnExternalReservationImported(
         foreach (var b in bookingOverlaps)
         {
             if (await ConflictDetectionHelpers.RecordIfMissingAsync(
-                db, conflicts, notification.PropertyId, b.BookingId,
+                db, conflicts, tenantId, notification.PropertyId, b.BookingId,
                 notification.ExternalReservationId, notification.Channel, cancellationToken))
             {
                 created++;
@@ -62,6 +66,7 @@ internal sealed class OnBookingConfirmed(
     SyncDbContext db,
     ISyncConflictRepository conflicts,
     IExternalChannelConflictChecker externalChannel,
+    IPropertyOwnerLookup properties,
     ILogger<OnBookingConfirmed> logger)
     : INotificationHandler<BookingConfirmed>
 {
@@ -69,6 +74,9 @@ internal sealed class OnBookingConfirmed(
     {
         var externalOverlaps = await externalChannel.FindOverlappingAsync(
             notification.PropertyId, notification.Checkin, notification.Checkout, cancellationToken);
+
+        var owner = await properties.GetAsync(notification.PropertyId, cancellationToken);
+        var tenantId = owner?.TenantId ?? new Guid("00000000-0000-0000-0000-000000000001");
 
         if (externalOverlaps.Count == 0)
         {
@@ -79,7 +87,7 @@ internal sealed class OnBookingConfirmed(
         foreach (var er in externalOverlaps)
         {
             if (await ConflictDetectionHelpers.RecordIfMissingAsync(
-                db, conflicts, notification.PropertyId, notification.BookingId,
+                db, conflicts, tenantId, notification.PropertyId, notification.BookingId,
                 er.ExternalReservationId, er.Channel, cancellationToken))
             {
                 created++;
@@ -106,6 +114,7 @@ internal static class ConflictDetectionHelpers
     public static async Task<bool> RecordIfMissingAsync(
         SyncDbContext db,
         ISyncConflictRepository conflicts,
+        Guid tenantId,
         Guid propertyId,
         Guid bookingId,
         Guid externalReservationId,
@@ -117,7 +126,7 @@ internal static class ConflictDetectionHelpers
         {
             return false; // already recorded and still pending
         }
-        var conflict = SyncConflict.Detect(propertyId, bookingId, externalReservationId, channel);
+        var conflict = SyncConflict.Detect(tenantId, propertyId, bookingId, externalReservationId, channel);
         db.SyncConflicts.Add(conflict);
         return true;
     }

@@ -11,6 +11,10 @@ internal sealed class SyncConflictConfiguration : IEntityTypeConfiguration<SyncC
         builder.ToTable("sync_conflicts", SyncDbContext.SchemaName);
         builder.HasKey(x => x.Id);
 
+        // OPS.M.3a — denorm tenant_id, nullable until 3c.
+        builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        builder.HasIndex(x => x.TenantId);
+
         builder.Property(x => x.PropertyId).HasColumnName("property_id").IsRequired();
         builder.Property(x => x.BookingId).HasColumnName("booking_id").IsRequired();
         builder.Property(x => x.ExternalReservationId).HasColumnName("external_reservation_id").IsRequired();

@@ -12,6 +12,9 @@ namespace VrBook.Modules.Sync.Domain;
 /// </summary>
 public sealed class ExternalReservation : AggregateRoot
 {
+    /// <summary>Denorm from feed → property → tenant. Per OPS_M_3_PLAN §1.</summary>
+    public Guid? TenantId { get; private set; }
+
     public Guid ChannelFeedId { get; private set; }
     public Guid PropertyId { get; private set; }
     public ChannelKind Channel { get; private set; }
@@ -29,6 +32,7 @@ public sealed class ExternalReservation : AggregateRoot
     private ExternalReservation() { } // EF
 
     public static ExternalReservation Import(
+        Guid tenantId,
         Guid channelFeedId,
         Guid propertyId,
         ChannelKind channel,
@@ -38,6 +42,10 @@ public sealed class ExternalReservation : AggregateRoot
         string? summary,
         string rawPayload)
     {
+        if (tenantId == Guid.Empty)
+        {
+            throw new ArgumentException("TenantId required.", nameof(tenantId));
+        }
         ArgumentException.ThrowIfNullOrWhiteSpace(iCalUid);
         ArgumentException.ThrowIfNullOrWhiteSpace(rawPayload);
         if (checkout <= checkin)
@@ -50,6 +58,7 @@ public sealed class ExternalReservation : AggregateRoot
         var er = new ExternalReservation
         {
             Id = Guid.NewGuid(),
+            TenantId = tenantId,
             ChannelFeedId = channelFeedId,
             PropertyId = propertyId,
             Channel = channel,

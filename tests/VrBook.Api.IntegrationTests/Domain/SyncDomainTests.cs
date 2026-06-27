@@ -17,7 +17,7 @@ namespace VrBook.Api.IntegrationTests.Domain;
 public sealed class ChannelFeedAggregateTests
 {
     private static ChannelFeed New(string url = "https://www.airbnb.com/calendar/ical/12345.ics?s=abc") =>
-        ChannelFeed.Create(Guid.NewGuid(), ChannelKind.AirBnb, url, pollIntervalMinutes: 30);
+        ChannelFeed.Create(new Guid("00000000-0000-0000-0000-000000000001"), Guid.NewGuid(), ChannelKind.AirBnb, url, pollIntervalMinutes: 30);
 
     [Fact]
     public void Create_initializes_with_enabled_state_and_random_outbound_token()
@@ -37,7 +37,7 @@ public sealed class ChannelFeedAggregateTests
     [Fact]
     public void Create_trims_inbound_url()
     {
-        var feed = ChannelFeed.Create(Guid.NewGuid(), ChannelKind.AirBnb,
+        var feed = ChannelFeed.Create(new Guid("00000000-0000-0000-0000-000000000001"), Guid.NewGuid(), ChannelKind.AirBnb,
             "   https://www.airbnb.com/calendar/ical/x.ics   ");
         feed.InboundUrl.Should().Be("https://www.airbnb.com/calendar/ical/x.ics");
     }
@@ -49,7 +49,7 @@ public sealed class ChannelFeedAggregateTests
     [InlineData("javascript:alert(1)")]
     public void Create_rejects_non_http_url(string badUrl)
     {
-        var act = () => ChannelFeed.Create(Guid.NewGuid(), ChannelKind.AirBnb, badUrl);
+        var act = () => ChannelFeed.Create(new Guid("00000000-0000-0000-0000-000000000001"), Guid.NewGuid(), ChannelKind.AirBnb, badUrl);
         act.Should().Throw<BusinessRuleViolationException>()
             .Where(e => e.Rule == "sync.feed.url");
     }
@@ -60,7 +60,7 @@ public sealed class ChannelFeedAggregateTests
     [InlineData(4)]
     public void Create_rejects_poll_interval_below_5_minutes(int interval)
     {
-        var act = () => ChannelFeed.Create(Guid.NewGuid(), ChannelKind.AirBnb,
+        var act = () => ChannelFeed.Create(new Guid("00000000-0000-0000-0000-000000000001"), Guid.NewGuid(), ChannelKind.AirBnb,
             "https://e.com/c.ics", pollIntervalMinutes: interval);
         act.Should().Throw<BusinessRuleViolationException>()
             .Where(e => e.Rule == "sync.feed.poll_interval");
@@ -158,7 +158,7 @@ public sealed class ExternalReservationAggregateTests
         DateOnly? checkout = null,
         string ical = "evt-1@airbnb.com",
         string? summary = "Reserved (Not available)") =>
-        ExternalReservation.Import(
+        ExternalReservation.Import(new Guid("00000000-0000-0000-0000-000000000001"),
             channelFeedId: Guid.NewGuid(),
             propertyId: Guid.NewGuid(),
             channel: ChannelKind.AirBnb,
@@ -271,7 +271,7 @@ public sealed class ExternalReservationAggregateTests
 [Trait("Category", "Unit")]
 public sealed class SyncConflictAggregateTests
 {
-    private static SyncConflict Detect() => SyncConflict.Detect(
+    private static SyncConflict Detect() => SyncConflict.Detect(new Guid("00000000-0000-0000-0000-000000000001"),
         propertyId: Guid.NewGuid(),
         bookingId: Guid.NewGuid(),
         externalReservationId: Guid.NewGuid(),
@@ -342,7 +342,7 @@ public sealed class SyncConflictAggregateTests
 public sealed class SyncRunAggregateTests
 {
     private static SyncRun Start() =>
-        SyncRun.Start(Guid.NewGuid(), Guid.NewGuid(), ChannelKind.AirBnb);
+        SyncRun.Start(new Guid("00000000-0000-0000-0000-000000000001"), Guid.NewGuid(), Guid.NewGuid(), ChannelKind.AirBnb);
 
     [Fact]
     public void Start_creates_non_terminal_run_with_zero_counts()

@@ -25,7 +25,7 @@ public sealed class ConflictDetectionHelperTests
     {
         var (propertyId, bookingId, externalId) = NewIds();
         // Build a non-resolved SyncConflict via Domain.Detect (only constructor path).
-        var existing = SyncConflict.Detect(propertyId, bookingId, externalId, ChannelKind.AirBnb);
+        var existing = SyncConflict.Detect(new Guid("00000000-0000-0000-0000-000000000001"), propertyId, bookingId, externalId, ChannelKind.AirBnb);
         existing.IsResolved.Should().BeFalse();
 
         var conflicts = Substitute.For<ISyncConflictRepository>();
@@ -35,6 +35,7 @@ public sealed class ConflictDetectionHelperTests
         var result = await ConflictDetectionHelpers.RecordIfMissingAsync(
             db: null!, // not touched when existing pending is found - helper short-circuits
             conflicts: conflicts,
+            tenantId: new Guid("00000000-0000-0000-0000-000000000001"),
             propertyId, bookingId, externalId, ChannelKind.AirBnb,
             ct: CancellationToken.None);
 
@@ -46,7 +47,7 @@ public sealed class ConflictDetectionHelperTests
     public async Task RecordIfMissingAsync_creates_new_when_existing_is_resolved()
     {
         var (propertyId, bookingId, externalId) = NewIds();
-        var resolved = SyncConflict.Detect(propertyId, bookingId, externalId, ChannelKind.AirBnb);
+        var resolved = SyncConflict.Detect(new Guid("00000000-0000-0000-0000-000000000001"), propertyId, bookingId, externalId, ChannelKind.AirBnb);
         resolved.Resolve(SyncConflictResolution.OwnerKeptDirect, "test");
         resolved.IsResolved.Should().BeTrue();
 
@@ -60,6 +61,7 @@ public sealed class ConflictDetectionHelperTests
         Func<Task> act = () => ConflictDetectionHelpers.RecordIfMissingAsync(
             db: null!,
             conflicts: conflicts,
+            tenantId: new Guid("00000000-0000-0000-0000-000000000001"),
             propertyId, bookingId, externalId, ChannelKind.AirBnb,
             ct: CancellationToken.None);
 

@@ -12,6 +12,9 @@ namespace VrBook.Modules.Sync.Domain;
 /// </summary>
 public sealed class SyncRun : AggregateRoot
 {
+    /// <summary>Denorm from feed → property → tenant. Per OPS_M_3_PLAN §1.</summary>
+    public Guid? TenantId { get; private set; }
+
     public Guid ChannelFeedId { get; private set; }
     public Guid PropertyId { get; private set; }
     public ChannelKind Channel { get; private set; }
@@ -29,15 +32,23 @@ public sealed class SyncRun : AggregateRoot
 
     private SyncRun() { } // EF
 
-    public static SyncRun Start(Guid channelFeedId, Guid propertyId, ChannelKind channel) => new()
+    public static SyncRun Start(Guid tenantId, Guid channelFeedId, Guid propertyId, ChannelKind channel)
     {
-        Id = Guid.NewGuid(),
-        ChannelFeedId = channelFeedId,
-        PropertyId = propertyId,
-        Channel = channel,
-        StartedAt = DateTimeOffset.UtcNow,
-        Status = SyncRunStatus.Partial, // updated to Success / Failed on completion
-    };
+        if (tenantId == Guid.Empty)
+        {
+            throw new ArgumentException("TenantId required.", nameof(tenantId));
+        }
+        return new()
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ChannelFeedId = channelFeedId,
+            PropertyId = propertyId,
+            Channel = channel,
+            StartedAt = DateTimeOffset.UtcNow,
+            Status = SyncRunStatus.Partial, // updated to Success / Failed on completion
+        };
+    }
 
     public void Complete(int seen, int @new, int updated, int cancelled)
     {

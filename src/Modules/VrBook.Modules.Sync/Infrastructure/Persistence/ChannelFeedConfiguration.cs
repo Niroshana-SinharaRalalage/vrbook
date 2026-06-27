@@ -11,6 +11,10 @@ internal sealed class ChannelFeedConfiguration : IEntityTypeConfiguration<Channe
         builder.ToTable("channel_feeds", SyncDbContext.SchemaName);
         builder.HasKey(x => x.Id);
 
+        // OPS.M.3a — tenant_id, nullable until 3c; cross-schema FK in migration.
+        builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        builder.HasIndex(x => x.TenantId);
+
         builder.Property(x => x.PropertyId).HasColumnName("property_id").IsRequired();
         builder.Property(x => x.Channel).HasColumnName("channel").HasConversion<int>().IsRequired();
         builder.Property(x => x.InboundUrl).HasColumnName("inbound_url").HasMaxLength(1024).IsRequired();

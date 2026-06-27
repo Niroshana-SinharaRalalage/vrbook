@@ -17,6 +17,9 @@ namespace VrBook.Modules.Sync.Domain;
 /// </summary>
 public sealed class SyncConflict : AggregateRoot
 {
+    /// <summary>Tenant id inherited from the conflicting property. Per OPS_M_3_PLAN §3.1.</summary>
+    public Guid? TenantId { get; private set; }
+
     public Guid PropertyId { get; private set; }
     public Guid BookingId { get; private set; }
     public Guid ExternalReservationId { get; private set; }
@@ -31,13 +34,19 @@ public sealed class SyncConflict : AggregateRoot
     private SyncConflict() { } // EF
 
     public static SyncConflict Detect(
+        Guid tenantId,
         Guid propertyId,
         Guid bookingId,
         Guid externalReservationId,
         ChannelKind channel)
     {
+        if (tenantId == Guid.Empty)
+        {
+            throw new ArgumentException("TenantId required.", nameof(tenantId));
+        }
         var c = new SyncConflict
         {
+            TenantId = tenantId,
             Id = Guid.NewGuid(),
             PropertyId = propertyId,
             BookingId = bookingId,

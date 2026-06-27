@@ -11,6 +11,12 @@ namespace VrBook.Modules.Sync.Domain;
 /// </summary>
 public sealed class ChannelFeed : AggregateRoot
 {
+    /// <summary>
+    /// Tenant the feed belongs to (inherits from the property's tenant).
+    /// Per OPS_M_3_PLAN §3.1 — `Guid?` during 3a/3b; flips to `Guid` in 3c.
+    /// </summary>
+    public Guid? TenantId { get; private set; }
+
     public Guid PropertyId { get; private set; }
     public ChannelKind Channel { get; private set; }
     public string InboundUrl { get; private set; } = default!;
@@ -33,11 +39,16 @@ public sealed class ChannelFeed : AggregateRoot
     private ChannelFeed() { } // EF
 
     public static ChannelFeed Create(
+        Guid tenantId,
         Guid propertyId,
         ChannelKind channel,
         string inboundUrl,
         int pollIntervalMinutes = 30)
     {
+        if (tenantId == Guid.Empty)
+        {
+            throw new ArgumentException("TenantId required.", nameof(tenantId));
+        }
         ArgumentException.ThrowIfNullOrWhiteSpace(inboundUrl);
         if (pollIntervalMinutes < 5)
         {
@@ -56,6 +67,7 @@ public sealed class ChannelFeed : AggregateRoot
         return new ChannelFeed
         {
             Id = Guid.NewGuid(),
+            TenantId = tenantId,
             PropertyId = propertyId,
             Channel = channel,
             InboundUrl = inboundUrl.Trim(),

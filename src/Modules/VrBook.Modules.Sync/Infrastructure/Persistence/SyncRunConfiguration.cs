@@ -11,6 +11,10 @@ internal sealed class SyncRunConfiguration : IEntityTypeConfiguration<SyncRun>
         builder.ToTable("sync_runs", SyncDbContext.SchemaName);
         builder.HasKey(x => x.Id);
 
+        // OPS.M.3a — denorm tenant_id, nullable until 3c.
+        builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        builder.HasIndex(x => x.TenantId);
+
         builder.Property(x => x.ChannelFeedId).HasColumnName("channel_feed_id").IsRequired();
         builder.Property(x => x.PropertyId).HasColumnName("property_id").IsRequired();
         builder.Property(x => x.Channel).HasColumnName("channel").HasConversion<int>().IsRequired();
