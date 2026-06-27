@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using VrBook.Modules.Reviews.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using VrBook.Modules.Reviews.Infrastructure.Persistence;
 namespace VrBook.Modules.Reviews.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ReviewsDbContext))]
-    partial class ReviewsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260627031327_OpsM3c_Reviews_TenantIdNotNull")]
+    partial class OpsM3c_Reviews_TenantIdNotNull
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -11,9 +11,8 @@ internal sealed class ReviewConfiguration : IEntityTypeConfiguration<Review>
         b.ToTable("reviews", ReviewsDbContext.SchemaName);
         b.HasKey(x => x.Id);
 
-        // OPS.M.3a — tenant_id column; nullable until 3c. Cross-schema FK to
-        // identity.tenants("Id") declared via raw SQL in the migration body.
-        b.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        // OPS.M.3c — NOT NULL after Wave B backfill.
+        b.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         b.HasIndex(x => x.TenantId);
 
         b.Property(x => x.BookingId).HasColumnName("booking_id").IsRequired();

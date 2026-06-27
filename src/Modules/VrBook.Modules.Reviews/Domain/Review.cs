@@ -12,9 +12,9 @@ public sealed class Review : AggregateRoot
 {
     /// <summary>
     /// Tenant the review belongs to (inherits from the booking's property).
-    /// Per OPS_M_3_PLAN §3.1 — `Guid?` during 3a/3b; flips to `Guid` in 3c.
+    /// OPS.M.3c flipped to non-nullable after the Wave B backfill.
     /// </summary>
-    public Guid? TenantId { get; private set; }
+    public Guid TenantId { get; private set; }
 
     public Guid BookingId { get; private set; }
     public Guid PropertyId { get; private set; }
