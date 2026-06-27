@@ -14,10 +14,9 @@ public sealed class PropertyImage : Entity
     /// <summary>
     /// Denormalised tenant id (inherits from <c>Property.TenantId</c>). Per
     /// `docs/OPS_M_3_PLAN.md` §1 — denorm lives so OPS.M.9 RLS doesn't have
-    /// to join Catalog at every read. Nullable during 3a/3b per the EF
-    /// constraint flagged in `Property.TenantId`'s doc.
+    /// to join Catalog at every read. OPS.M.3c flipped to non-nullable.
     /// </summary>
-    public Guid? TenantId { get; private set; }
+    public Guid TenantId { get; private set; }
 
     public string BlobPath { get; private set; } = default!;
     public string? Caption { get; private set; }

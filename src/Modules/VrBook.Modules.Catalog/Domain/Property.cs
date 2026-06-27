@@ -24,13 +24,11 @@ public sealed class Property : AggregateRoot
     /// <summary>
     /// Tenant the property belongs to. Per `docs/OPS_M_3_PLAN.md` §3 — populated
     /// from <c>ICurrentUser.TenantId</c> when the owner creates the property.
-    /// Typed nullable to mirror the DB column shape during OPS.M.3a/3b (the
-    /// architect plan §3.1's "stay Guid non-nullable" intent isn't compatible
-    /// with EF Core's value-type mapping rules — nullable C# is required for
-    /// nullable DB column). The factory enforces non-empty so new rows always
-    /// carry a real tenant; existing rows get backfilled in 3b.
+    /// OPS.M.3c flipped from <c>Guid?</c> to <c>Guid</c> after the backfill
+    /// migration left zero null rows; the EF config now declares the column
+    /// NOT NULL.
     /// </summary>
-    public Guid? TenantId { get; private set; }
+    public Guid TenantId { get; private set; }
 
     public bool IsActive { get; private set; }
     public bool ReviewsEnabled { get; private set; }
@@ -177,11 +175,7 @@ public sealed class Property : AggregateRoot
     {
         var nextSort = _images.Count == 0 ? 0 : _images.Max(i => i.SortOrder) + 1;
         var isFirst = _images.Count == 0;
-        // TenantId is set by Property.Create and never reset — the null check
-        // here exists only to satisfy the compiler's nullable analysis.
-        var imageTenantId = TenantId ?? throw new InvalidOperationException(
-            "Property has no TenantId; cannot add image. Aggregate invariant violated.");
-        var img = new PropertyImage(imageTenantId, Id, blobPath, caption, nextSort, isFirst);
+        var img = new PropertyImage(TenantId, Id, blobPath, caption, nextSort, isFirst);
         _images.Add(img);
         Raise(new PropertyImageAdded(Id, img.Id, blobPath));
         return img;

@@ -48,13 +48,10 @@ internal sealed class PropertyConfiguration : IEntityTypeConfiguration<Property>
         b.Property(p => p.OwnerUserId).HasColumnName("owner_user_id").IsRequired();
         b.HasIndex(p => p.OwnerUserId);
 
-        // OPS.M.3a — tenant_id column. Nullable in this phase to absorb existing
-        // rows; backfilled in 3b; flipped to NOT NULL in 3c (EF config will gain
-        // .IsRequired() there). C# property stays non-nullable Guid - the
-        // aggregate factory enforces non-empty per OPS_M_3_PLAN §3.3.
-        // Cross-schema FK to identity.tenants("Id") is declared via raw SQL in
-        // the migration (EF doesn't model cross-DbContext FKs).
-        b.Property(p => p.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        // OPS.M.3c — NOT NULL after Wave B backfill. Cross-schema FK to
+        // identity.tenants("Id") is declared via raw SQL in the 3a migration
+        // (EF doesn't model cross-DbContext FKs).
+        b.Property(p => p.TenantId).HasColumnName("tenant_id").IsRequired();
         b.HasIndex(p => p.TenantId);
 
         b.Property(p => p.IsActive).HasColumnName("is_active").HasDefaultValue(false);
