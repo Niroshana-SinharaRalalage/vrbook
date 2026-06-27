@@ -26,8 +26,8 @@ This document is the single index. It points at the detailed plans for each phas
 | | Slice OPS.M.1 — Tenant aggregate + memberships | ✅ | `b7ae589` → `3ce5f96` | staging |
 | | Slice OPS.M.2 — `TenantId` claim wiring + `ICurrentUser` shape (DB-wins precedence per ADR-0014) | ✅ | `84d6c05` → `9d13cb3` | staging |
 | | Slice OPS.M.3 — `tenant_id` column rollout (Wave A/B/C + Step 7) | ✅ | `a60e722` → `2a3d2b2` | staging |
-| | **Slice OPS.M.4 — `TenantAuthorizationBehavior` + event payload extensions + drop per-handler owner checks** | ⏭ **next** | plan: `df5580b` ([docs/MULTI_TENANCY_OPS_PLAN.md](MULTI_TENANCY_OPS_PLAN.md)) | Per architect 2026-06-27 re-evaluation: also owns extending `BookingPlaced/Confirmed/Cancelled/Rejected/ConflictDetected` events to carry `Guid TenantId`, and authoring the "every write path sets `tenant_id` consciously" pattern that Slice 4 will inherit. |
-| | Slice OPS.M.5 — Stripe Connect Express | ⏭ | same plan | |
+| | Slice OPS.M.4 — `TenantAuthorizationBehavior` + event payload extensions + drop per-handler owner checks | ✅ | `98c8cab` → `a0f58f8` | staging |
+| | **Slice OPS.M.5 — Stripe Connect Express** | ⏭ **next** | same plan | |
 | | Slice OPS.M.6 — iCal poller tenant-scoping + outbound rate limit | ⏭ | same plan | |
 | | Slice OPS.M.7 — Tenant Admin onboarding wizard | ⏭ | same plan — welcome email is operator-manual placeholder until Slice 4 ships; the `tenant.welcome` template + `TenantNotificationHandlers` land in Slice OPS.M.7's scope once the ACS pipeline exists (Slice 4) | |
 | | Slice OPS.M.8 — Super Admin console | ⏭ | same plan | |
