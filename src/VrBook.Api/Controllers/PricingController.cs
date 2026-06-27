@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using VrBook.Contracts.Dtos;
+using VrBook.Contracts.Interfaces;
+using VrBook.Domain.Common;
 using VrBook.Modules.Pricing.Application.Plans.Commands;
 using VrBook.Modules.Pricing.Application.Plans.Queries;
 using VrBook.Modules.Pricing.Application.Quotes.Commands;
@@ -12,8 +14,11 @@ namespace VrBook.Api.Controllers;
 /// <summary>Pricing — proposal §6.2 + §11.2.</summary>
 [Route("api/v1/properties/{propertyId:guid}/pricing")]
 [Tags("Pricing")]
-public sealed class PricingController(IMediator mediator) : ControllerBase
+public sealed class PricingController(IMediator mediator, ICurrentUser currentUser) : ControllerBase
 {
+    private Guid CallerTenantId() => currentUser.TenantId
+        ?? throw new ForbiddenException("Owner action requires a tenant membership.");
+
     [HttpGet]
     [Authorize(Roles = "Owner,Admin")]
     [SwaggerOperation(Summary = "Read pricing plan for a property.")]
@@ -31,7 +36,7 @@ public sealed class PricingController(IMediator mediator) : ControllerBase
     [ProducesResponseType(typeof(PricingPlanDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<PricingPlanDto>> Update(Guid propertyId, [FromBody] UpdatePricingPlanRequest request, CancellationToken cancellationToken)
     {
-        var dto = await mediator.Send(new UpdatePricingPlanCommand(propertyId, request), cancellationToken);
+        var dto = await mediator.Send(new UpdatePricingPlanCommand(propertyId, request, CallerTenantId()), cancellationToken);
         return Ok(dto);
     }
 
@@ -46,7 +51,7 @@ public sealed class PricingController(IMediator mediator) : ControllerBase
         [FromBody] CreatePricingRuleRequest request,
         CancellationToken cancellationToken)
     {
-        var dto = await mediator.Send(new AddPricingRuleCommand(propertyId, request), cancellationToken);
+        var dto = await mediator.Send(new AddPricingRuleCommand(propertyId, request, CallerTenantId()), cancellationToken);
         return Created($"/api/v1/properties/{propertyId}/pricing/rules/{dto.Id}", dto);
     }
 
@@ -61,7 +66,7 @@ public sealed class PricingController(IMediator mediator) : ControllerBase
         Guid ruleId,
         [FromBody] CreatePricingRuleRequest request,
         CancellationToken cancellationToken) =>
-        Ok(await mediator.Send(new UpdatePricingRuleCommand(propertyId, ruleId, request), cancellationToken));
+        Ok(await mediator.Send(new UpdatePricingRuleCommand(propertyId, ruleId, request, CallerTenantId()), cancellationToken));
 
     [HttpDelete("rules/{ruleId:guid}")]
     [Authorize(Roles = "Owner,Admin")]
@@ -70,7 +75,7 @@ public sealed class PricingController(IMediator mediator) : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> DeleteRule(Guid propertyId, Guid ruleId, CancellationToken cancellationToken)
     {
-        await mediator.Send(new RemovePricingRuleCommand(propertyId, ruleId), cancellationToken);
+        await mediator.Send(new RemovePricingRuleCommand(propertyId, ruleId, CallerTenantId()), cancellationToken);
         return NoContent();
     }
 
@@ -85,7 +90,7 @@ public sealed class PricingController(IMediator mediator) : ControllerBase
         Guid ruleId,
         [FromBody] SetRuleEnabledRequest request,
         CancellationToken cancellationToken) =>
-        Ok(await mediator.Send(new SetPricingRuleEnabledCommand(propertyId, ruleId, request.IsEnabled), cancellationToken));
+        Ok(await mediator.Send(new SetPricingRuleEnabledCommand(propertyId, ruleId, request.IsEnabled, CallerTenantId()), cancellationToken));
 
     [HttpPost("rules/reorder")]
     [Authorize(Roles = "Owner,Admin")]
@@ -97,7 +102,7 @@ public sealed class PricingController(IMediator mediator) : ControllerBase
         Guid propertyId,
         [FromBody] ReorderRulesRequest request,
         CancellationToken cancellationToken) =>
-        Ok(await mediator.Send(new ReorderPricingRulesCommand(propertyId, request.RuleIds), cancellationToken));
+        Ok(await mediator.Send(new ReorderPricingRulesCommand(propertyId, request.RuleIds, CallerTenantId()), cancellationToken));
 }
 
 public sealed record SetRuleEnabledRequest([property: System.Text.Json.Serialization.JsonRequired] bool IsEnabled);

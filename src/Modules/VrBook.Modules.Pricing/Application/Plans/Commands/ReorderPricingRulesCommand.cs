@@ -8,19 +8,17 @@ using VrBook.Modules.Pricing.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Pricing.Application.Plans.Commands;
 
-public sealed record ReorderPricingRulesCommand(Guid PropertyId, IReadOnlyList<Guid> RuleIds)
-    : IRequest<PricingPlanDto>;
+public sealed record ReorderPricingRulesCommand(Guid PropertyId, IReadOnlyList<Guid> RuleIds, Guid TenantId)
+    : IRequest<PricingPlanDto>, ITenantScoped;
 
 internal sealed class ReorderPricingRulesHandler(
-    ICurrentUser currentUser,
-    IPropertyOwnerLookup ownerLookup,
     IPricingPlanRepository plans,
     PricingDbContext db) : IRequestHandler<ReorderPricingRulesCommand, PricingPlanDto>
 {
     public async Task<PricingPlanDto> Handle(ReorderPricingRulesCommand request, CancellationToken cancellationToken)
     {
-        await PricingAuthorization.RequireOwnerOrAdminAsync(
-            currentUser, ownerLookup, request.PropertyId, cancellationToken);
+        // OPS.M.4 Step 3 — PricingAuthorization owner-equality check deleted;
+        // TenantAuthorizationBehavior + controller [Authorize(Roles)] cover it.
 
         var plan = await plans.GetByPropertyIdAsync(request.PropertyId, cancellationToken)
             ?? throw new NotFoundException("PricingPlan", request.PropertyId);
