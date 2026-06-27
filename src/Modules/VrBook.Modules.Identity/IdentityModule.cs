@@ -39,8 +39,11 @@ public sealed class IdentityModule : IModuleRegistration
         // MediatR handlers + FluentValidation validators (assembly scan).
         services.AddModuleAssembly(typeof(IdentityModule).Assembly);
 
-        // Audit pipeline behavior — registered AFTER cross-cutting behaviors from
-        // Application.Common so it doesn't audit invalid requests.
+        // Pipeline order: Validation (Common) → TenantAuthorization → AuditLog → handler.
+        // Per OPS_M_4_PLAN section 3.4: tenant gate runs BEFORE audit so cross-tenant
+        // attempts become "<action>.failed" audit rows via AuditLogBehavior's
+        // exception path. Registration order = pipeline order in MediatR.
+        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(TenantAuthorizationBehavior<,>));
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(AuditLogBehavior<,>));
 
         return services;

@@ -39,7 +39,27 @@ public sealed class ConflictException : DomainException
     public ConflictException(string message) : base(message) { }
 }
 
-public sealed class ForbiddenException : DomainException
+public class ForbiddenException : DomainException
 {
     public ForbiddenException(string message) : base(message) { }
+}
+
+/// <summary>
+/// Thrown by <c>TenantAuthorizationBehavior</c> when a tenant-scoped command's
+/// <c>TenantId</c> does not match <c>ICurrentUser.TenantId</c>. Subclasses
+/// <see cref="ForbiddenException"/> so it maps to 403 via the existing RFC 7807
+/// pipeline, but carries the two tenant ids for audit + telemetry filtering.
+/// Per OPS_M_4_PLAN section 3.3.
+/// </summary>
+public sealed class CrossTenantAccessException : ForbiddenException
+{
+    public CrossTenantAccessException(Guid attempted, Guid? actual)
+        : base($"Cross-tenant write rejected. Attempted={attempted:D}, actual={actual?.ToString("D") ?? "<null>"}.")
+    {
+        AttemptedTenantId = attempted;
+        ActualTenantId = actual;
+    }
+
+    public Guid AttemptedTenantId { get; }
+    public Guid? ActualTenantId { get; }
 }
