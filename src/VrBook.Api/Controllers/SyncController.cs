@@ -2,6 +2,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VrBook.Contracts.Dtos;
+using VrBook.Contracts.Interfaces;
+using VrBook.Domain.Common;
 using VrBook.Modules.Sync.Application.ChannelFeeds.Commands;
 using VrBook.Modules.Sync.Application.ChannelFeeds.Queries;
 using VrBook.Modules.Sync.Application.Conflicts.Commands;
@@ -34,8 +36,11 @@ public sealed class FeedsController(IMediator mediator) : ControllerBase
 [Route("api/v1/admin/channel-feeds")]
 [Tags("Sync — Admin")]
 [Authorize(Roles = "Admin")]
-public sealed class ChannelFeedsController(IMediator mediator) : ControllerBase
+public sealed class ChannelFeedsController(IMediator mediator, ICurrentUser currentUser) : ControllerBase
 {
+    private Guid CallerTenantId() => currentUser.TenantId
+        ?? throw new ForbiddenException("Admin action requires a tenant membership.");
+
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ChannelFeedDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ChannelFeedDto>>> List(CancellationToken cancellationToken) =>
@@ -54,7 +59,7 @@ public sealed class ChannelFeedsController(IMediator mediator) : ControllerBase
         [FromBody] CreateChannelFeedRequest request, CancellationToken cancellationToken)
     {
         var dto = await mediator.Send(new CreateChannelFeedCommand(
-            request.PropertyId, request.Channel, request.InboundUrl, request.PollIntervalMinutes),
+            request.PropertyId, request.Channel, request.InboundUrl, request.PollIntervalMinutes, CallerTenantId()),
             cancellationToken);
         return CreatedAtAction(nameof(Get), new { id = dto.Id }, dto);
     }
@@ -65,7 +70,7 @@ public sealed class ChannelFeedsController(IMediator mediator) : ControllerBase
     public async Task<ActionResult<ChannelFeedDto>> Update(
         Guid id, [FromBody] UpdateChannelFeedRequest request, CancellationToken cancellationToken) =>
         Ok(await mediator.Send(new UpdateChannelFeedCommand(
-            id, request.InboundUrl, request.PollIntervalMinutes, request.IsEnabled),
+            id, request.InboundUrl, request.PollIntervalMinutes, request.IsEnabled, CallerTenantId()),
             cancellationToken));
 
     [HttpDelete("{id:guid}")]
@@ -73,7 +78,7 @@ public sealed class ChannelFeedsController(IMediator mediator) : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        await mediator.Send(new DeleteChannelFeedCommand(id), cancellationToken);
+        await mediator.Send(new DeleteChannelFeedCommand(id, CallerTenantId()), cancellationToken);
         return NoContent();
     }
 }

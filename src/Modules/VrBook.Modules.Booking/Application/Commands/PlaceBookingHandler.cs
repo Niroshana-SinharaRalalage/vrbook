@@ -79,7 +79,7 @@ internal sealed class PlaceBookingHandler(
         // tenant-less per MTOP §1). PropertyDto doesn't carry TenantId; look
         // up via the cross-module IPropertyOwnerLookup contract.
         var ownerSnapshot = await propertyOwners.GetAsync(property.Id, cancellationToken);
-        var bookingTenantId = ownerSnapshot?.TenantId ?? new Guid("00000000-0000-0000-0000-000000000001");
+        var bookingTenantId = ownerSnapshot!.TenantId;
         var booking = DomainBooking.Place(
             tenantId: bookingTenantId,
             propertyId: property.Id,

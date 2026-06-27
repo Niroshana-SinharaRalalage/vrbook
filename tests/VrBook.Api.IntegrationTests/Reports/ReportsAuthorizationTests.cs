@@ -34,9 +34,9 @@ public sealed class ReportsAuthorizationTests
 
         var lookup = Substitute.For<IPropertyOwnerLookup>();
         lookup.GetAsync(PropertyOfA, Arg.Any<CancellationToken>())
-            .Returns(new PropertyOwnerSnapshot(PropertyOfA, OwnerA, "A's Property"));
+            .Returns(new PropertyOwnerSnapshot(PropertyOfA, OwnerA, "A's Property", new Guid("00000000-0000-0000-0000-000000000001")));
         lookup.GetAsync(PropertyOfB, Arg.Any<CancellationToken>())
-            .Returns(new PropertyOwnerSnapshot(PropertyOfB, OwnerB, "B's Property"));
+            .Returns(new PropertyOwnerSnapshot(PropertyOfB, OwnerB, "B's Property", new Guid("00000000-0000-0000-0000-000000000001")));
         lookup.ListPropertyIdsOwnedByAsync(OwnerA, Arg.Any<CancellationToken>())
             .Returns(new[] { PropertyOfA });
         lookup.ListPropertyIdsOwnedByAsync(OwnerB, Arg.Any<CancellationToken>())

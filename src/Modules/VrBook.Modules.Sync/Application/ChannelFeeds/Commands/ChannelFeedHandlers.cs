@@ -27,7 +27,7 @@ internal sealed class CreateChannelFeedHandler(SyncDbContext db, IFeedUrlBuilder
         // OPS.M.3 — inherit tenant from the property; fall back to default tenant
         // for pre-backfill Catalog rows.
         var owner = await properties.GetAsync(cmd.PropertyId, cancellationToken);
-        var tenantId = owner?.TenantId ?? new Guid("00000000-0000-0000-0000-000000000001");
+        var tenantId = owner!.TenantId;
 
         var feed = ChannelFeed.Create(tenantId, cmd.PropertyId, cmd.Channel, cmd.InboundUrl, cmd.PollIntervalMinutes);
         db.ChannelFeeds.Add(feed);

@@ -41,7 +41,7 @@ public sealed class OnBookingPlacedHandlerTests
 
         var lookup = Substitute.For<IPropertyOwnerLookup>();
         lookup.GetAsync(PropertyId, Arg.Any<CancellationToken>())
-            .Returns(new PropertyOwnerSnapshot(PropertyId, OwnerId, "Test Property"));
+            .Returns(new PropertyOwnerSnapshot(PropertyId, OwnerId, "Test Property", new Guid("00000000-0000-0000-0000-000000000001")));
 
         var handler = new OnBookingPlacedHandler(lookup, notifier, NullLogger<OnBookingPlacedHandler>.Instance);
 
@@ -66,7 +66,7 @@ public sealed class OnBookingPlacedHandlerTests
 
         var lookup = Substitute.For<IPropertyOwnerLookup>();
         lookup.GetAsync(PropertyId, Arg.Any<CancellationToken>())
-            .Returns(new PropertyOwnerSnapshot(PropertyId, OwnerId, "Test Property"));
+            .Returns(new PropertyOwnerSnapshot(PropertyId, OwnerId, "Test Property", new Guid("00000000-0000-0000-0000-000000000001")));
 
         var handler = new OnBookingPlacedHandler(lookup, notifier, NullLogger<OnBookingPlacedHandler>.Instance);
         var evt = NewEvent();
@@ -112,7 +112,7 @@ public sealed class OnBookingPlacedHandlerTests
 
         var lookup = Substitute.For<IPropertyOwnerLookup>();
         lookup.GetAsync(PropertyId, Arg.Any<CancellationToken>())
-            .Returns(new PropertyOwnerSnapshot(PropertyId, OwnerId, "Test Property"));
+            .Returns(new PropertyOwnerSnapshot(PropertyId, OwnerId, "Test Property", new Guid("00000000-0000-0000-0000-000000000001")));
 
         var handler = new OnBookingPlacedHandler(lookup, notifier, NullLogger<OnBookingPlacedHandler>.Instance);
 

@@ -37,7 +37,7 @@ public sealed class PricingRuleEndpointsTests
 
         var lookup = Substitute.For<IPropertyOwnerLookup>();
         lookup.GetAsync(propertyId, Arg.Any<CancellationToken>())
-            .Returns(new PropertyOwnerSnapshot(propertyId, propertyOwnerId ?? OwnerUserId, "Test Property"));
+            .Returns(new PropertyOwnerSnapshot(propertyId, propertyOwnerId ?? OwnerUserId, "Test Property", new Guid("00000000-0000-0000-0000-000000000001")));
 
         var user = Substitute.For<ICurrentUser>();
         user.UserId.Returns(OwnerUserId);

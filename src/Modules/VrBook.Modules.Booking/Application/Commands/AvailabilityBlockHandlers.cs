@@ -63,7 +63,7 @@ internal sealed class CreateAvailabilityBlockHandler(
         // OPS.M.3c — derive tenant from the property's owner snapshot. Wave B
         // backfilled all rows, so the cross-schema lookup will always find one.
         var ownerSnapshot = await propertyOwners.GetAsync(request.PropertyId, cancellationToken);
-        var blockTenantId = ownerSnapshot?.TenantId ?? new Guid("00000000-0000-0000-0000-000000000001");
+        var blockTenantId = ownerSnapshot!.TenantId;
 
         var block = AvailabilityBlock.Create(
             tenantId: blockTenantId,

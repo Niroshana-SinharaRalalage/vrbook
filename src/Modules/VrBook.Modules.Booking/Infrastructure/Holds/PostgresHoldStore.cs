@@ -98,7 +98,7 @@ internal sealed class PostgresHoldStore(
             // OPS.M.3c — TenantId from the property; default-tenant fallback
             // for orphan property rows (should be zero post-Wave-B).
             var owner = await propertyOwners.GetAsync(propertyId, ct);
-            var holdTenantId = owner?.TenantId ?? new Guid("00000000-0000-0000-0000-000000000001");
+            var holdTenantId = owner!.TenantId;
             var hold = BookingHold.Create(
                 holdTenantId,
                 holdId, propertyId, checkin, checkout, guests, sessionId, expiresAt);

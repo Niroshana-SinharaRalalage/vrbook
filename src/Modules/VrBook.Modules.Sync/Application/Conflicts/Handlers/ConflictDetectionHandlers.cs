@@ -35,7 +35,7 @@ internal sealed class OnExternalReservationImported(
             notification.PropertyId, notification.Checkin, notification.Checkout, cancellationToken);
 
         var owner = await properties.GetAsync(notification.PropertyId, cancellationToken);
-        var tenantId = owner?.TenantId ?? new Guid("00000000-0000-0000-0000-000000000001");
+        var tenantId = owner!.TenantId;
 
         if (bookingOverlaps.Count == 0)
         {
@@ -76,7 +76,7 @@ internal sealed class OnBookingConfirmed(
             notification.PropertyId, notification.Checkin, notification.Checkout, cancellationToken);
 
         var owner = await properties.GetAsync(notification.PropertyId, cancellationToken);
-        var tenantId = owner?.TenantId ?? new Guid("00000000-0000-0000-0000-000000000001");
+        var tenantId = owner!.TenantId;
 
         if (externalOverlaps.Count == 0)
         {

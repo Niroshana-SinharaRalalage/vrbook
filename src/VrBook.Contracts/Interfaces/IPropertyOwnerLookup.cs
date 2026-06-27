@@ -17,8 +17,16 @@ public interface IPropertyOwnerLookup
     Task<IReadOnlyList<Guid>> ListPropertyIdsOwnedByAsync(Guid ownerUserId, CancellationToken ct = default);
 }
 
+/// <summary>
+/// OPS.M.4 Step 3c — <c>TenantId</c> is now non-nullable. OPS.M.3 §14 deviation 3
+/// kept it <c>Guid?</c> as a forward-compat seam during Wave A/B/C; that
+/// constraint dissolved once every <c>catalog.properties</c> row was backfilled
+/// in Wave B and the column flipped <c>NOT NULL</c> in Wave C. Slice OPS.M.4
+/// tightens the contract and deletes the <c>?? new Guid("…0001")</c> widening
+/// sites at every consumer.
+/// </summary>
 public sealed record PropertyOwnerSnapshot(
     Guid PropertyId,
     Guid OwnerUserId,
     string Title,
-    Guid? TenantId = null);
+    Guid TenantId);
