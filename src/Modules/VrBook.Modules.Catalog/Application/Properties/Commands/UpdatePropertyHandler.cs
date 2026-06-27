@@ -36,18 +36,16 @@ internal sealed class UpdatePropertyHandler(
             throw new ArgumentException("Address is required.", nameof(request));
         }
 
-        // Load the row's owner + slug WITHOUT tracking. We use the result for
-        // authZ and to refetch the canonical state at the end.
-        var existing = await db.Properties.AsNoTracking()
+        // OPS.M.4 Step 3 — owner-equality check deleted. TenantAuthorizationBehavior
+        // rejects commands whose TenantId does not match currentUser.TenantId at the
+        // pipeline; the controller stamps TenantId server-side so tenant-A users
+        // cannot edit a tenant-B property. RBAC (Owner/Admin role) is on the
+        // controller. Existence is still validated for the 404 contract.
+        _ = await db.Properties.AsNoTracking()
             .Where(p => p.Id == request.Id)
-            .Select(p => new { p.Id, p.OwnerUserId, p.Slug })
+            .Select(p => new { p.Id, p.Slug })
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Property", request.Id);
-
-        if (existing.OwnerUserId != currentUser.UserId.Value && !currentUser.IsAdmin)
-        {
-            throw new ForbiddenException("You are not the owner of this property.");
-        }
 
         // Validate domain VOs by constructing them - throws if invariants violated.
         var address = new Address(

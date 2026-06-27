@@ -16,8 +16,11 @@ namespace VrBook.Api.Controllers;
 /// <summary>Catalog properties — proposal §6.2.</summary>
 [Route("api/v1/properties")]
 [Tags("Catalog")]
-public sealed class PropertiesController(IMediator mediator) : ControllerBase
+public sealed class PropertiesController(IMediator mediator, ICurrentUser currentUser) : ControllerBase
 {
+    private Guid CallerTenantId() => currentUser.TenantId
+        ?? throw new ForbiddenException("Owner action requires a tenant membership.");
+
     [HttpGet]
     [AllowAnonymous]
     [SwaggerOperation(Summary = "Public property search.")]
@@ -53,7 +56,7 @@ public sealed class PropertiesController(IMediator mediator) : ControllerBase
     [ProducesResponseType(typeof(PropertyDto), StatusCodes.Status201Created)]
     public async Task<ActionResult<PropertyDto>> Create([FromBody] CreatePropertyRequest request, CancellationToken cancellationToken)
     {
-        var dto = await mediator.Send(new CreatePropertyCommand(request), cancellationToken);
+        var dto = await mediator.Send(new CreatePropertyCommand(request, CallerTenantId()), cancellationToken);
         return CreatedAtAction(nameof(GetBySlug), new { slug = dto.Slug }, dto);
     }
 
@@ -62,7 +65,7 @@ public sealed class PropertiesController(IMediator mediator) : ControllerBase
     [ProducesResponseType(typeof(PropertyDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<PropertyDto>> Update(Guid id, [FromBody] UpdatePropertyRequest request, CancellationToken cancellationToken)
     {
-        var dto = await mediator.Send(new UpdatePropertyCommand(id, request), cancellationToken);
+        var dto = await mediator.Send(new UpdatePropertyCommand(id, request, CallerTenantId()), cancellationToken);
         return Ok(dto);
     }
 
