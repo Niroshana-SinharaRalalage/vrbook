@@ -20,4 +20,5 @@ public interface IPropertyOwnerLookup
 public sealed record PropertyOwnerSnapshot(
     Guid PropertyId,
     Guid OwnerUserId,
-    string Title);
+    string Title,
+    Guid? TenantId = null);

@@ -39,6 +39,7 @@ internal sealed class BookingMessagingContext(
             GuestDisplayName: b.GuestDisplayName,
             OwnerUserId: owner.OwnerUserId,
             OwnerDisplayName: "Property owner",
-            PropertyTitle: owner.Title);
+            PropertyTitle: owner.Title,
+            TenantId: owner.TenantId);
     }
 }

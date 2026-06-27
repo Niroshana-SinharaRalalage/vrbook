@@ -30,6 +30,11 @@ internal sealed class MessageThreadConfiguration : IEntityTypeConfiguration<Mess
     {
         builder.ToTable("threads", MessagingDbContext.SchemaName);
         builder.HasKey(x => x.Id);
+
+        // OPS.M.3a — tenant_id, nullable until 3c; cross-schema FK in migration.
+        builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        builder.HasIndex(x => x.TenantId);
+
         builder.Property(x => x.BookingId).HasColumnName("booking_id").IsRequired();
         builder.HasIndex(x => x.BookingId).IsUnique();
         builder.Property(x => x.BookingReference).HasColumnName("booking_reference").HasMaxLength(40).IsRequired();
@@ -59,6 +64,11 @@ internal sealed class MessageConfiguration : IEntityTypeConfiguration<Message>
     {
         builder.ToTable("messages", MessagingDbContext.SchemaName);
         builder.HasKey(x => x.Id);
+
+        // OPS.M.3a — denorm tenant_id, nullable until 3c.
+        builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired(false);
+        builder.HasIndex(x => x.TenantId);
+
         builder.Property(x => x.ThreadId).HasColumnName("thread_id").IsRequired();
         builder.Property(x => x.SenderUserId).HasColumnName("sender_user_id").IsRequired();
         builder.Property(x => x.SenderDisplayName).HasColumnName("sender_display_name").HasMaxLength(200).IsRequired();

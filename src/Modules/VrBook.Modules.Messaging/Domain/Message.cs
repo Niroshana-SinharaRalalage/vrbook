@@ -12,6 +12,12 @@ namespace VrBook.Modules.Messaging.Domain;
 /// </summary>
 public sealed class Message : AggregateRoot
 {
+    /// <summary>
+    /// Denormalised tenant id (inherits from MessageThread.TenantId). Per
+    /// OPS_M_3_PLAN §1 - the denorm lives so RLS doesn't have to join threads.
+    /// </summary>
+    public Guid? TenantId { get; private set; }
+
     public Guid ThreadId { get; private set; }
     public Guid SenderUserId { get; private set; }
     public string SenderDisplayName { get; private set; } = default!;
@@ -53,9 +59,12 @@ public sealed class Message : AggregateRoot
         }
 
         var recipient = thread.CounterpartyOf(senderUserId);
+        var messageTenantId = thread.TenantId ?? throw new InvalidOperationException(
+            "Thread has no TenantId; cannot send message. Aggregate invariant violated.");
         var message = new Message
         {
             Id = Guid.NewGuid(),
+            TenantId = messageTenantId,
             ThreadId = thread.Id,
             SenderUserId = senderUserId,
             SenderDisplayName = senderDisplayName.Trim(),

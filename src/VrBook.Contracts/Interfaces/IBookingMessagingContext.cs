@@ -21,4 +21,5 @@ public sealed record BookingMessagingSnapshot(
     string GuestDisplayName,
     Guid OwnerUserId,
     string OwnerDisplayName,
-    string PropertyTitle);
+    string PropertyTitle,
+    Guid? TenantId = null);

@@ -15,6 +15,13 @@ namespace VrBook.Modules.Messaging.Domain;
 /// </summary>
 public sealed class MessageThread : AggregateRoot
 {
+    /// <summary>
+    /// Tenant the thread belongs to (inherits from the property's tenant via
+    /// the booking). Per OPS_M_3_PLAN §3.1 — `Guid?` during 3a/3b; flips to
+    /// `Guid` in 3c.
+    /// </summary>
+    public Guid? TenantId { get; private set; }
+
     public Guid BookingId { get; private set; }
     public string BookingReference { get; private set; } = default!;
     public Guid GuestUserId { get; private set; }
@@ -28,6 +35,7 @@ public sealed class MessageThread : AggregateRoot
     private MessageThread() { } // EF
 
     public static MessageThread CreateForBooking(
+        Guid tenantId,
         Guid bookingId,
         string bookingReference,
         Guid guestUserId,
@@ -35,6 +43,10 @@ public sealed class MessageThread : AggregateRoot
         Guid ownerUserId,
         string ownerDisplayName)
     {
+        if (tenantId == Guid.Empty)
+        {
+            throw new ArgumentException("TenantId required.", nameof(tenantId));
+        }
         ArgumentException.ThrowIfNullOrWhiteSpace(bookingReference);
         ArgumentException.ThrowIfNullOrWhiteSpace(guestDisplayName);
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerDisplayName);
@@ -42,6 +54,7 @@ public sealed class MessageThread : AggregateRoot
         return new MessageThread
         {
             Id = Guid.NewGuid(),
+            TenantId = tenantId,
             BookingId = bookingId,
             BookingReference = bookingReference,
             GuestUserId = guestUserId,

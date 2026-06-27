@@ -38,7 +38,11 @@ internal sealed class OnBookingConfirmedHandler(
             return;
         }
 
+        // OPS.M.3 — pipe TenantId from the booking's property. Fall back to the
+        // default tenant when Catalog 3b hasn't backfilled yet.
+        var tenantId = snapshot.TenantId ?? new Guid("00000000-0000-0000-0000-000000000001");
         var thread = MessageThread.CreateForBooking(
+            tenantId,
             snapshot.BookingId,
             snapshot.Reference,
             snapshot.GuestUserId,
