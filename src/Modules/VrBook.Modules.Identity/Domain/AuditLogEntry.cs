@@ -9,6 +9,15 @@ public sealed class AuditLogEntry
 {
     public Guid Id { get; private set; } = Guid.NewGuid();
     public DateTimeOffset OccurredAt { get; private set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>
+    /// Tenant the actor was scoped to (currentUser.TenantId). Nullable forever
+    /// per OPS_M_3_PLAN §1.7 — Super Admin actions and anonymous login-flow
+    /// requests have no tenant. Target-tenant joins for "who modified tenant X"
+    /// happen at read time in OPS.M.8.
+    /// </summary>
+    public Guid? TenantId { get; private set; }
+
     public Guid? ActorUserId { get; private set; }
     public string ActorRole { get; private set; } = "anonymous";
     public string Action { get; private set; } = default!;
@@ -32,9 +41,11 @@ public sealed class AuditLogEntry
         string? afterJson,
         string? ip,
         string? userAgent,
-        string? traceId) =>
+        string? traceId,
+        Guid? tenantId = null) =>
         new()
         {
+            TenantId = tenantId,
             ActorUserId = actorUserId,
             ActorRole = actorRole,
             Action = action,
