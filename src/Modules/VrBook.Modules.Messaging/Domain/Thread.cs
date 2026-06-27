@@ -17,10 +17,9 @@ public sealed class MessageThread : AggregateRoot
 {
     /// <summary>
     /// Tenant the thread belongs to (inherits from the property's tenant via
-    /// the booking). Per OPS_M_3_PLAN §3.1 — `Guid?` during 3a/3b; flips to
-    /// `Guid` in 3c.
+    /// the booking). OPS.M.3c flipped to non-nullable.
     /// </summary>
-    public Guid? TenantId { get; private set; }
+    public Guid TenantId { get; private set; }
 
     public Guid BookingId { get; private set; }
     public string BookingReference { get; private set; } = default!;
