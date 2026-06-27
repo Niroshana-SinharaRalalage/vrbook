@@ -1,8 +1,10 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
+using VrBook.Contracts.Interfaces;
+using VrBook.Domain.Common;
 using VrBook.Modules.Payment.Domain;
 using VrBook.Modules.Payment.Infrastructure.Persistence;
 using VrBook.Modules.Payment.Infrastructure.Stripe;
@@ -11,16 +13,23 @@ namespace VrBook.Modules.Payment.Application.Commands;
 
 internal sealed class CreatePaymentIntentForBookingHandler(
     IStripeGateway stripe,
+    ITenantStripeContextLookup tenantStripe,
     IPaymentIntentRepository repo,
-    PaymentDbContext db,
+    IUnitOfWork uow,
+    IConfiguration configuration,
     ILogger<CreatePaymentIntentForBookingHandler> logger)
     : IRequestHandler<CreatePaymentIntentForBookingCommand, PaymentIntentDto?>
 {
-    public async Task<PaymentIntentDto?> Handle(CreatePaymentIntentForBookingCommand cmd, CancellationToken cancellationToken)
+    private const string AllowPlatformFallbackKey = "Payment:AllowPlatformFallback";
+
+    public async Task<PaymentIntentDto?> Handle(
+        CreatePaymentIntentForBookingCommand cmd, CancellationToken cancellationToken)
     {
         if (!stripe.IsConfigured)
         {
-            logger.LogWarning("Stripe not configured; skipping PaymentIntent creation for booking {BookingId}.", cmd.BookingId);
+            logger.LogWarning(
+                "Stripe not configured; skipping PaymentIntent creation for booking {BookingId}.",
+                cmd.BookingId);
             return null;
         }
 
@@ -30,19 +39,64 @@ internal sealed class CreatePaymentIntentForBookingHandler(
             return Map(existing);
         }
 
-        var created = await stripe.CreatePaymentIntentAsync(
-            cmd.Amount.Amount,
-            cmd.Amount.Currency,
-            idempotencyKey: $"booking:{cmd.BookingId:N}:pi",
-            metadata: new Dictionary<string, string> { ["booking_id"] = cmd.BookingId.ToString("D") },
-            cancellationToken: cancellationToken);
+        // OPS.M.5 §3.4 (D4) — replace the OPS.M.3 raw-SQL ResolveTenantIdAsync with
+        // the ITenantStripeContextLookup contract; same data, typed shape.
+        var ctx = await tenantStripe.GetAsync(cmd.TenantId, cancellationToken)
+            ?? throw new BusinessRuleViolationException(
+                "payment.tenant_context_missing",
+                $"Tenant {cmd.TenantId:D} has no Stripe context row.");
 
-        // OPS.M.3 — derive tenant via cross-schema lookup; default-tenant fallback
-        // until Catalog/Booking 3b backfills.
-        var tenantId = await ResolveTenantIdAsync(db, cmd.BookingId, cancellationToken);
+        // OPS.M.5 §3.5 (D5/D15) — throw if no Stripe account; staging may opt
+        // into the legacy platform path via feature flag (production default off).
+        var fallbackAllowed = configuration.GetValue<bool>(AllowPlatformFallbackKey, false);
+        if (ctx.StripeAccountId is null && !fallbackAllowed)
+        {
+            throw new BusinessRuleViolationException(
+                "payment.connect_account_missing",
+                $"Tenant {cmd.TenantId:D} has no Stripe Connect account. Publishing should be gated on " +
+                $"StripeAccountStatus = Active; this is upstream-bug territory.");
+        }
+
+        var idempotencyKey = StripeIdempotency.ForPaymentIntent(cmd.BookingId);
+        var metadata = new Dictionary<string, string>
+        {
+            ["booking_id"] = cmd.BookingId.ToString("D"),
+            ["tenant_id"] = cmd.TenantId.ToString("D"),
+        };
+
+        StripeIntentCreated created;
+        if (ctx.StripeAccountId is not null)
+        {
+            var feeCents = StripeFeeCalculator.ApplicationFeeCents(cmd.Amount.Amount, ctx.PlatformFeeBps);
+            created = await stripe.CreatePaymentIntentAsync(
+                cmd.Amount.Amount,
+                cmd.Amount.Currency,
+                idempotencyKey: idempotencyKey,
+                metadata: metadata,
+                destinationAccountId: ctx.StripeAccountId,
+                applicationFeeAmount: feeCents,
+                cancellationToken: cancellationToken);
+            logger.LogInformation(
+                "PaymentIntent routed via Connect tenant_id={TenantId} stripe_account_id={AccountId} fee_cents={Fee}",
+                cmd.TenantId, ctx.StripeAccountId, feeCents);
+        }
+        else
+        {
+            // Staging fallback per AllowPlatformFallback — platform Stripe handles
+            // the charge. Audit-trail leakage is acceptable in staging only.
+            created = await stripe.CreatePaymentIntentAsync(
+                cmd.Amount.Amount,
+                cmd.Amount.Currency,
+                idempotencyKey: idempotencyKey,
+                metadata: metadata,
+                cancellationToken: cancellationToken);
+            logger.LogWarning(
+                "PaymentIntent routed via platform fallback (no tenant Stripe account; flag {Flag}=true) tenant_id={TenantId}",
+                AllowPlatformFallbackKey, cmd.TenantId);
+        }
 
         var pi = PaymentIntent.Create(
-            tenantId,
+            cmd.TenantId,
             cmd.BookingId,
             created.Id,
             created.ClientSecret,
@@ -52,23 +106,9 @@ internal sealed class CreatePaymentIntentForBookingHandler(
             initialStatus: created.Status);
 
         await repo.AddAsync(pi, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
+        await uow.SaveChangesAsync(cancellationToken);
         return Map(pi);
     }
-
-#pragma warning disable EF1002
-    private static async Task<Guid> ResolveTenantIdAsync(PaymentDbContext db, Guid bookingId, CancellationToken ct)
-    {
-        // Cross-schema lookup booking → property → tenant. Raw SQL with controlled
-        // GUID is safe; suppression matches the TenantClaimWiringTests test-seed
-        // pattern. After Booking 3c lands the lookup will be a normal load.
-        var raw = await db.Database
-            .SqlQueryRaw<Guid?>(
-                $"SELECT p.tenant_id AS \"Value\" FROM booking.bookings b JOIN catalog.properties p ON b.property_id = p.\"Id\" WHERE b.\"Id\" = '{bookingId}'")
-            .FirstOrDefaultAsync(ct);
-        return raw ?? new Guid("00000000-0000-0000-0000-000000000001");
-    }
-#pragma warning restore EF1002
 
     private static PaymentIntentDto Map(PaymentIntent pi) => new(
         Id: pi.Id,

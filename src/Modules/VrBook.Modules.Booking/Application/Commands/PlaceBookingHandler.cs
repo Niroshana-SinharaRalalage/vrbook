@@ -200,7 +200,8 @@ internal sealed class PlaceBookingHandler(
         await mediator.Send(
             new CreatePaymentIntentForBookingCommand(
                 booking.Id,
-                new Money(booking.Total, booking.Currency)),
+                new Money(booking.Total, booking.Currency),
+                booking.TenantId),
             cancellationToken);
 
         return booking.ToDto();

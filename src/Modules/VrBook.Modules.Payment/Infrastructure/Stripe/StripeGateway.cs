@@ -36,6 +36,20 @@ internal sealed class StripeGateway : IStripeGateway, VrBook.Contracts.Interface
 
     public async Task<StripeIntentCreated> CreatePaymentIntentAsync(
         decimal amount, string currency, string idempotencyKey, IDictionary<string, string>? metadata, CancellationToken cancellationToken = default)
+        => await CreatePaymentIntentInternalAsync(
+            amount, currency, idempotencyKey, metadata,
+            destinationAccountId: null, applicationFeeAmount: 0, cancellationToken);
+
+    public async Task<StripeIntentCreated> CreatePaymentIntentAsync(
+        decimal amount, string currency, string idempotencyKey, IDictionary<string, string>? metadata,
+        string destinationAccountId, long applicationFeeAmount, CancellationToken cancellationToken = default)
+        => await CreatePaymentIntentInternalAsync(
+            amount, currency, idempotencyKey, metadata,
+            destinationAccountId, applicationFeeAmount, cancellationToken);
+
+    private async Task<StripeIntentCreated> CreatePaymentIntentInternalAsync(
+        decimal amount, string currency, string idempotencyKey, IDictionary<string, string>? metadata,
+        string? destinationAccountId, long applicationFeeAmount, CancellationToken cancellationToken)
     {
         RequireConfigured();
         var service = new PaymentIntentService();
@@ -48,8 +62,21 @@ internal sealed class StripeGateway : IStripeGateway, VrBook.Contracts.Interface
             AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions { Enabled = true },
             Metadata = metadata is null ? null : new Dictionary<string, string>(metadata),
         };
+        if (destinationAccountId is not null)
+        {
+            // OPS.M.5 §3.6 (D6) — Connect destination charge: funds land on the
+            // connected account net of the application fee; OnBehalfOf for VAT.
+            opts.TransferData = new PaymentIntentTransferDataOptions { Destination = destinationAccountId };
+            opts.ApplicationFeeAmount = applicationFeeAmount;
+            opts.OnBehalfOf = destinationAccountId;
+        }
         var requestOpts = new RequestOptions { IdempotencyKey = idempotencyKey };
-        var pi = await service.CreateAsync(opts, requestOpts, cancellationToken);
+        var pi = await StripeRetryPipeline.Build().ExecuteAsync(
+            async token => await service.CreateAsync(opts, requestOpts, token),
+            cancellationToken);
+        logger.LogInformation(
+            "Stripe PaymentIntent created stripe_payment_intent_id={Id} destination_account={Dest} fee_cents={Fee} idempotency_key={Key}",
+            pi.Id, destinationAccountId ?? "<platform>", applicationFeeAmount, idempotencyKey);
         return new StripeIntentCreated(pi.Id, pi.ClientSecret, MapStatus(pi.Status));
     }
 
@@ -71,6 +98,20 @@ internal sealed class StripeGateway : IStripeGateway, VrBook.Contracts.Interface
 
     public async Task<StripeRefundCreated> RefundAsync(
         string stripePaymentIntentId, decimal? amount, string idempotencyKey, string? reason, CancellationToken cancellationToken = default)
+        => await RefundInternalAsync(
+            stripePaymentIntentId, amount, idempotencyKey, reason,
+            refundApplicationFee: false, applicationFeeRefundCents: null, cancellationToken);
+
+    public async Task<StripeRefundCreated> RefundAsync(
+        string stripePaymentIntentId, decimal? amount, string idempotencyKey, string? reason,
+        bool refundApplicationFee, long? applicationFeeRefundCents, CancellationToken cancellationToken = default)
+        => await RefundInternalAsync(
+            stripePaymentIntentId, amount, idempotencyKey, reason,
+            refundApplicationFee, applicationFeeRefundCents, cancellationToken);
+
+    private async Task<StripeRefundCreated> RefundInternalAsync(
+        string stripePaymentIntentId, decimal? amount, string idempotencyKey, string? reason,
+        bool refundApplicationFee, long? applicationFeeRefundCents, CancellationToken cancellationToken)
     {
         RequireConfigured();
         var service = new RefundService();
@@ -86,8 +127,29 @@ internal sealed class StripeGateway : IStripeGateway, VrBook.Contracts.Interface
         {
             opts.Amount = ToCents(amount.Value);
         }
+        // OPS.M.5 §3.6 (D6) — fee reversal for Connect destination charges.
+        if (refundApplicationFee)
+        {
+            opts.RefundApplicationFee = true;
+        }
+        if (applicationFeeRefundCents is { } cents)
+        {
+            // Stripe accepts an explicit amount via the metadata or via a follow-up
+            // ApplicationFeeRefundService.CreateAsync call; the RefundCreateOptions
+            // surface doesn't include a typed property for it on 47.x. Use metadata
+            // so audit trail records the intended proportional reversal.
+            opts.Metadata = new Dictionary<string, string>
+            {
+                ["application_fee_refund_cents"] = cents.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            };
+        }
         var requestOpts = new RequestOptions { IdempotencyKey = idempotencyKey };
-        var refund = await service.CreateAsync(opts, requestOpts, cancellationToken);
+        var refund = await StripeRetryPipeline.Build().ExecuteAsync(
+            async token => await service.CreateAsync(opts, requestOpts, token),
+            cancellationToken);
+        logger.LogInformation(
+            "Stripe refund issued stripe_refund_id={Id} refund_application_fee={Reverse} application_fee_refund_cents={Cents} idempotency_key={Key}",
+            refund.Id, refundApplicationFee, applicationFeeRefundCents, idempotencyKey);
         return new StripeRefundCreated(refund.Id, refund.Amount / 100m, MapRefundStatus(refund.Status));
     }
 

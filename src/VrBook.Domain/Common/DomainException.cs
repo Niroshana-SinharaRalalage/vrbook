@@ -10,7 +10,7 @@ public abstract class DomainException : Exception
     protected DomainException(string message, Exception inner) : base(message, inner) { }
 }
 
-public sealed class BusinessRuleViolationException : DomainException
+public class BusinessRuleViolationException : DomainException
 {
     public BusinessRuleViolationException(string rule, string message)
         : base($"{rule}: {message}")
