@@ -29,13 +29,30 @@ internal static class ReportsAuthorization
             throw new ForbiddenException("Sign-in required.");
         }
 
+        // OPS.M.10.2 C3 (#13 High) — verify the requested property belongs
+        // to the caller's tenant on BOTH the Admin and the Owner paths.
+        // Previously: the Admin-with-explicit-propertyId branch trusted the
+        // input GUID without any check, returning the report scoped to a
+        // cross-tenant propertyId (RLS filters bookings to empty but the
+        // report shape implies the property exists). The Owner branch
+        // checked OwnerUserId but NOT TenantId, so an Owner with
+        // multi-tenant membership could probe a property they own in
+        // another tenant.
         if (currentUser.IsAdmin)
         {
-            // Admin: no scope filter unless explicitly asked.
             if (requestedPropertyId is { } pid)
             {
+                var snapshot = await ownerLookup.GetAsync(pid, ct)
+                    ?? throw new NotFoundException("Property", pid);
+                if (currentUser.TenantId is null || snapshot.TenantId != currentUser.TenantId.Value)
+                {
+                    throw new ForbiddenException(
+                        "Admins may only run reports against properties in their own tenant.");
+                }
                 return new[] { pid };
             }
+            // Admin without an explicit property id: M.9 RLS scopes the
+            // downstream report query to the caller's tenant.
             return null;
         }
 
@@ -49,9 +66,19 @@ internal static class ReportsAuthorization
             {
                 throw new ForbiddenException("You are not the owner of this property.");
             }
+            if (currentUser.TenantId is null || snapshot.TenantId != currentUser.TenantId.Value)
+            {
+                throw new ForbiddenException(
+                    "This property belongs to a different tenant than your current membership.");
+            }
             return new[] { requested };
         }
 
+        // OPS.M.10.2 C3 — the listing must be tenant-scoped at the source.
+        // IPropertyOwnerLookup.ListPropertyIdsOwnedByAsync today does not
+        // accept a tenant filter; the M.9 RLS on catalog.properties scopes
+        // the lookup to the caller's tenant via the GUC, so we rely on
+        // that. Defense-in-depth flagged in OPS.M.10.2 audit #13 fix note (c).
         var owned = await ownerLookup.ListPropertyIdsOwnedByAsync(ownerId, ct);
         return owned;
     }
