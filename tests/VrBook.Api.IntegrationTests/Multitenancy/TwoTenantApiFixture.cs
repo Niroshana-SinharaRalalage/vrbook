@@ -78,6 +78,34 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
 
     public async Task InitializeAsync()
     {
+        // OPS.M.10.2 F0'' — the REAL Cluster A fix. CI's cd-staging-api.yml:78
+        // exports `ConnectionStrings__Postgres=Host=localhost;Port=5432;
+        // Database=vrbook;...` pointing at the service-container Postgres.
+        // The WebApplicationFactory host's IConfiguration picks up that env
+        // var BEFORE `ConfigureAppConfiguration` adds our in-memory
+        // Testcontainer URL — but env vars rank higher than in-memory in
+        // the .NET 8 WebApplicationBuilder pipeline (`WebApplication.
+        // CreateBuilder()` adds `AddEnvironmentVariables()` last, overriding
+        // in-memory adds). So:
+        //   - the migrator-side service provider (which uses its own
+        //     ConfigurationBuilder with ONLY in-memory cfg) migrated the
+        //     Testcontainer DB,
+        //   - the seed-side service provider (the WebApplicationFactory host)
+        //     resolved a CatalogDbContext bound to the service-container DB,
+        //   - the seed insert at line 256 then crashed because the service
+        //     container had no migrations applied → "catalog.outbox_messages
+        //     does not exist".
+        //
+        // IdentityApiFixture (which doesn't fail) avoided this by using a
+        // SINGLE service provider for both migrate and read. TwoTenantApiFixture
+        // can't easily do that because it must register migration-only
+        // DbContexts via `AddXxxDbContextForMigrator` separately from the
+        // host's RLS-scoped registrations. Cleanest scoped fix: clear the
+        // env var at fixture init so the in-memory Testcontainer URL is the
+        // only source. `DisposeAsync` restores it.
+        _originalPostgresEnvVar = Environment.GetEnvironmentVariable("ConnectionStrings__Postgres");
+        Environment.SetEnvironmentVariable("ConnectionStrings__Postgres", null);
+
         await _postgres.StartAsync();
 
         // Apply every module's migrations (matches VrBook.Migrator).
@@ -141,19 +169,31 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
             await MigrateWithDiag<NotificationsDbContext>();
         }
 
-        // OPS.M.10.2 F0' DIAGNOSTIC — verify the seed-side service provider
-        // sees the same DB the migrator wrote to.
+        // OPS.M.10.2 F0' DIAGNOSTIC — Console.WriteLine in InitializeAsync
+        // is silenced by xUnit's fixture-init output capture (no stdout).
+        // Switching to exception-based delivery: if the seed-side connection
+        // string differs from the Testcontainer URL OR if the table is
+        // missing on the seed-side, throw with the captured strings so
+        // xUnit surfaces them as the test failure message — the only
+        // reliable transport to the GH Actions log.
         using (var scope0 = Services.CreateScope())
         {
             var ctx0 = scope0.ServiceProvider.GetRequiredService<CatalogDbContext>();
-            var conn0 = ctx0.Database.GetDbConnection().ConnectionString;
-            var applied0 = (await ctx0.Database.GetAppliedMigrationsAsync()).ToArray();
-            Console.WriteLine(
-                $"[OPS.M.10.2 F0'] seed-side CatalogDbContext conn={conn0} applied=[{string.Join(",", applied0)}]");
+            var seedConn = ctx0.Database.GetDbConnection().ConnectionString;
+            var fixtureConn = ConnectionString;
             var exists = await ctx0.Database.SqlQueryRaw<int>(
                 "SELECT COUNT(*)::int AS \"Value\" FROM information_schema.tables WHERE table_schema='catalog' AND table_name='outbox_messages'")
                 .FirstAsync();
-            Console.WriteLine($"[OPS.M.10.2 F0'] catalog.outbox_messages exists count={exists}");
+            if (exists == 0)
+            {
+                throw new InvalidOperationException(
+                    "[OPS.M.10.2 F0' DIAGNOSTIC] catalog.outbox_messages MISSING on seed-side.\n" +
+                    $"  fixture (Testcontainer) ConnectionString = {fixtureConn}\n" +
+                    $"  seed-side CatalogDbContext.Connection    = {seedConn}\n" +
+                    $"  match = {string.Equals(fixtureConn, seedConn, StringComparison.Ordinal)}\n" +
+                    "If match=False, the WebApplicationFactory's in-memory cfg LOST to " +
+                    "env var ConnectionStrings__Postgres (set by cd-staging-api.yml:78).");
+            }
         }
 
         // Trigger initial WebApplicationFactory build so we can seed via DI.
@@ -170,7 +210,11 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
     {
         await base.DisposeAsync();
         await _postgres.DisposeAsync();
+        // OPS.M.10.2 F0'' — restore the env var we cleared in InitializeAsync.
+        Environment.SetEnvironmentVariable("ConnectionStrings__Postgres", _originalPostgresEnvVar);
     }
+
+    private string? _originalPostgresEnvVar;
 
     private async Task SeedAsync(IServiceProvider sp)
     {
