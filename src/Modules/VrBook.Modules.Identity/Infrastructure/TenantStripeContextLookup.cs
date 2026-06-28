@@ -24,4 +24,18 @@ internal sealed class TenantStripeContextLookup(IdentityDbContext db) : ITenantS
                 t.DefaultCurrency))
             .FirstOrDefaultAsync(ct);
     }
+
+    public async Task<TenantStripeContext?> GetByStripeAccountAsync(
+        string stripeAccountId, CancellationToken ct = default)
+    {
+        return await db.Tenants
+            .AsNoTracking()
+            .Where(t => t.StripeAccountId == stripeAccountId)
+            .Select(t => new TenantStripeContext(
+                t.Id,
+                t.StripeAccountId,
+                t.PlatformFeeBps,
+                t.DefaultCurrency))
+            .FirstOrDefaultAsync(ct);
+    }
 }

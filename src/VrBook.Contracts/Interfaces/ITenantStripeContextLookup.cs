@@ -15,6 +15,13 @@ namespace VrBook.Contracts.Interfaces;
 public interface ITenantStripeContextLookup
 {
     Task<TenantStripeContext?> GetAsync(Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// OPS.M.5 §3.7 — webhook routing. Stripe Connect events carry a top-level
+    /// <c>account</c> string; the handler resolves it to a tenant id. Returns
+    /// <c>null</c> for unknown account ids (stale events for deleted tenants).
+    /// </summary>
+    Task<TenantStripeContext?> GetByStripeAccountAsync(string stripeAccountId, CancellationToken ct = default);
 }
 
 /// <summary>

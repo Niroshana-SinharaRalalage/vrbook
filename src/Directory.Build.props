@@ -71,6 +71,7 @@
        boundaries kept; only the test assembly gets to peek). See EXECUTION_PLAN.md A0.2.2. -->
   <ItemGroup Condition="$(MSBuildProjectName.StartsWith('VrBook.Modules.')) Or '$(MSBuildProjectName)' == 'VrBook.Application'">
     <InternalsVisibleTo Include="VrBook.Api.IntegrationTests" />
+    <InternalsVisibleTo Include="VrBook.Architecture.Tests" />
   </ItemGroup>
 
 </Project>

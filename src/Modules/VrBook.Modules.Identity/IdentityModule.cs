@@ -31,6 +31,9 @@ public sealed class IdentityModule : IModuleRegistration
         services.AddScoped<IUserEmailLookup, UserEmailLookup>();
         // OPS.M.5 §3.4 (D4) — cross-module lookup for Stripe Connect routing.
         services.AddScoped<ITenantStripeContextLookup, TenantStripeContextLookup>();
+        // OPS.M.5 §3.7 + §3.8 — Payment-module webhook handler invokes this
+        // to apply Tenant.UpdateStripeAccountReadiness on account.updated events.
+        services.AddScoped<IConnectAccountReadinessUpdater, ConnectAccountReadinessUpdater>();
 
         // The DbContext doubles as the module's IUnitOfWork.
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<IdentityDbContext>());
