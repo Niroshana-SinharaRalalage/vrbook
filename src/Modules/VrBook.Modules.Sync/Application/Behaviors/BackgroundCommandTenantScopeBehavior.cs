@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
+using VrBook.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Sync.Application.Behaviors;
 
@@ -50,6 +51,12 @@ public sealed class BackgroundCommandTenantScopeBehavior<TRequest, TResponse>(
             ["tenant_id"] = scoped.TenantId,
             ["request_type"] = typeof(TRequest).Name,
         }))
+        // OPS.M.9 §4.5 (D5) — push the tenant id into the AsyncLocal
+        // BackgroundTenantScope so the TenantGucCommandInterceptor stamps
+        // app.tenant_id on every DbContext command inside the handler.
+        // The interceptor reads ICurrentUser.TenantId first, then falls
+        // back to this scope when running outside an HTTP request.
+        using (BackgroundTenantScope.Enter(scoped.TenantId))
         {
             return await next();
         }
