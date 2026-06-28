@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using VrBook.Contracts.Enums;
 using VrBook.Contracts.Interfaces;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Payment.Domain;
 using VrBook.Modules.Payment.Infrastructure.Persistence;
 using VrBook.Modules.Payment.Infrastructure.Stripe;
@@ -46,6 +47,16 @@ internal sealed class HandleStripeWebhookHandler : IRequestHandler<HandleStripeW
         {
             return false;
         }
+
+        // OPS.M.9 §4.6 (D6) — the webhook arrives without an authenticated
+        // ICurrentUser; the per-statement interceptor would stamp empty
+        // app.tenant_id and every RLS-protected SELECT/INSERT would deny.
+        // Open the bypass scope around the entire handler body. The
+        // injected PaymentDbContext + IPaymentIntentRepository pick up the
+        // AsyncLocal flag automatically via the interceptor.
+        logger.LogInformation(
+            "RLS bypass open reason=stripe-webhook caller=HandleStripeWebhookHandler");
+        using var bypass = RlsBypassScope.Enter();
 
         var doc = JsonDocument.Parse(rawJson!);
         var stripeEventId = doc.RootElement.GetProperty("id").GetString()!;

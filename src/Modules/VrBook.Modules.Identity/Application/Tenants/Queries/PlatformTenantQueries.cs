@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Identity.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Identity.Application.Tenants.Queries;
@@ -18,7 +19,8 @@ public sealed record ListPlatformTenantsQuery(
     string? SearchTerm) : IRequest<PlatformTenantListResponse>;
 
 internal sealed class ListPlatformTenantsHandler(
-    IdentityDbContext db, ICurrentUser currentUser)
+    IRlsBypassDbContextFactory<IdentityDbContext> bypassFactory,
+    ICurrentUser currentUser)
     : IRequestHandler<ListPlatformTenantsQuery, PlatformTenantListResponse>
 {
     public async Task<PlatformTenantListResponse> Handle(
@@ -32,7 +34,13 @@ internal sealed class ListPlatformTenantsHandler(
         var page = Math.Clamp(query.Page, 1, 1000);
         var pageSize = Math.Clamp(query.PageSize, 1, 100);
 
-        var q = db.Tenants.AsNoTracking().AsQueryable();
+        // OPS.M.9 §4.6 — cross-tenant read explicitly opens the bypass scope
+        // so the per-statement interceptor stamps app.is_platform_admin=true.
+        // identity.tenants is carved out of RLS today (§3.2) but the bypass
+        // documents intent + survives any future policy addition.
+        await using var bypass = await bypassFactory.CreateForBypassAsync(
+            "list-platform-tenants", cancellationToken);
+        var q = bypass.Db.Tenants.AsNoTracking().AsQueryable();
         if (!string.IsNullOrWhiteSpace(query.StatusFilter))
         {
             q = q.Where(t => t.Status == query.StatusFilter);
@@ -67,7 +75,7 @@ internal sealed class ListPlatformTenantsHandler(
 public sealed record GetPlatformTenantQuery(Guid TenantId) : IRequest<PlatformTenantDto>;
 
 internal sealed class GetPlatformTenantHandler(
-    IdentityDbContext db,
+    IRlsBypassDbContextFactory<IdentityDbContext> bypassFactory,
     ICurrentUser currentUser,
     IPlatformTenantStatsLookup stats)
     : IRequestHandler<GetPlatformTenantQuery, PlatformTenantDto>
@@ -80,10 +88,16 @@ internal sealed class GetPlatformTenantHandler(
             throw new ForbiddenException("Platform-admin role required.");
         }
 
-        var t = await db.Tenants.AsNoTracking()
+        // OPS.M.9 §4.6 — cross-tenant read explicit bypass.
+        await using var bypass = await bypassFactory.CreateForBypassAsync(
+            "get-platform-tenant", cancellationToken);
+        var t = await bypass.Db.Tenants.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == query.TenantId, cancellationToken)
             ?? throw new NotFoundException("Tenant", query.TenantId);
 
+        // PlatformTenantStatsLookup opens its own bypass scope per §7.2
+        // pitfall (delegates to IPropertyCountByTenant which uses the
+        // request-scoped CatalogDbContext).
         var s = await stats.GetAsync(t.Id, cancellationToken);
 
         return new PlatformTenantDto(

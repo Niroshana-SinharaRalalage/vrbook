@@ -72,12 +72,24 @@ try
     };
 
     using var scope = host.Services.CreateScope();
-    var feeds = scope.ServiceProvider.GetRequiredService<IChannelFeedRepository>();
     var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
     var clock = scope.ServiceProvider.GetRequiredService<IDateTimeProvider>();
     var now = clock.UtcNow;
 
-    var due = await feeds.ListDueForPollAsync(now);
+    // OPS.M.9 §4.5 (D5) Step 9 — the bootstrap enumeration crosses every
+    // tenant's due feeds; per-feed processing then runs under each feed's
+    // BackgroundTenantScope (M.6 behavior wraps the handler). Bypass-open
+    // the worker's initial read.
+    var bypassFactory = scope.ServiceProvider.GetRequiredService<
+        VrBook.Infrastructure.Persistence.IRlsBypassDbContextFactory<
+            VrBook.Modules.Sync.Infrastructure.Persistence.SyncDbContext>>();
+    System.Collections.Generic.IReadOnlyList<VrBook.Modules.Sync.Domain.ChannelFeed> due;
+    await using (var bypass = await bypassFactory.CreateForBypassAsync(
+        "sync-worker.list-due-feeds", cts.Token))
+    {
+        var feeds = scope.ServiceProvider.GetRequiredService<IChannelFeedRepository>();
+        due = await feeds.ListDueForPollAsync(now);
+    }
     logger.LogInformation("Sync Worker started. Due feeds: {DueCount}", due.Count);
 
     var ok = 0;
