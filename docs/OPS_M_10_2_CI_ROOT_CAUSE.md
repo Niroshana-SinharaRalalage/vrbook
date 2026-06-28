@@ -662,3 +662,184 @@ Cluster E — same as Cluster A, separate xUnit line
 ```
 
 End of report.
+
+---
+
+## 5. §5 F0 post-mortem (appended 2026-06-28, post commit `26a6e28`)
+
+### 5.1 What F0 prescribed
+
+§1.3 Cluster A above asserted:
+
+> The fixture's `sp.GetServices<DbContext>()` iteration only yields the
+> last-registered DbContext (Notifications) because `AddScoped<DbContext>(…)`
+> is last-wins. Catalog never migrates, so `catalog.outbox_messages` doesn't
+> exist when the seed runs.
+
+Prescribed fix: replace the iteration with explicit
+`sp.GetRequiredService<TContext>()` per module.
+
+Implemented as commit `0ed16f9`. Followed by F1 (`45da18f`), F2 (`591a383`),
+F3 (`26a6e28`). CI re-run `28333634153` against `26a6e28`:
+
+| Run | Failed | Passed |
+|---|---|---|
+| Pre-F0 (`4f7ff20`) | 79 | 398 |
+| Post F0+F1+F2+F3 (`26a6e28`) | 70 | 407 |
+
+F1 closed its 9 (`ICurrentUser` resolve). F2/F3 close their 2+2. **F0 closed
+zero of the ≈60 Cluster A failures.** Every Cluster A test still fails on
+`catalog.outbox_messages does not exist` at the seed `SaveChangesAsync`.
+
+### 5.2 Why the F0 diagnosis was wrong
+
+The "last-wins" claim was incorrect. `IServiceCollection.AddScoped<T>(factory)`
+calls `Add(ServiceDescriptor.Scoped<T>(factory))` which **appends** a new
+descriptor. `IServiceProvider.GetServices<T>()` returns ALL registered
+descriptors as `IEnumerable<T>`; only `GetService<T>()` returns the last one.
+Proof in the wild: `src/VrBook.Migrator/Program.cs:59` uses the exact same
+`GetServices<DbContext>().ToArray()` pattern in production and migrations
+DO land — staging Postgres has all 10 schemas + outbox tables.
+
+So the original loop was correct. The F0 fix replaced one correct iteration
+pattern with another equivalent correct one. No behavioural change, no test
+delta. The Cluster A root cause is somewhere else.
+
+### 5.3 What we now know about the real root cause
+
+The migrator block runs to completion (no exception bubbles up the stack —
+the failure stack tops out at SeedAsync line 226, not at the migrator block
+lines 101-129). Yet `catalog.outbox_messages` is missing when the seed
+inserts a Property. Static analysis confirms:
+
+- The migration `20260609145637_A0_3_OutboxMessages` exists in
+  `src/Modules/VrBook.Modules.Catalog/Infrastructure/Persistence/Migrations/`
+  and emits `CreateTable("outbox_messages", schema: "catalog")`. Migration
+  code is correct.
+- `AddCatalogDbContextForMigrator` registers `CatalogDbContext` with
+  `MigrationsHistoryTable("__ef_migrations_history", "catalog")`. Concrete
+  registration; no last-wins collision possible against other modules'
+  concrete `XxxDbContext` types.
+- `BaseDbContext.OnModelCreating` maps `OutboxMessage` to every module's
+  schema. `CatalogDbContext.Schema == "catalog"`.
+- The migrator-side `ServiceProvider` and the WebApplicationFactory-side
+  `ServiceProvider` both pull the connection string from
+  `_postgres.GetConnectionString()` — same testcontainer, same DB
+  (`vrbook_m10`), same mapped port (stable per container instance).
+- No host-side startup task migrates, drops, or recreates the catalog
+  schema after the fixture's migrator block completes.
+- The M.9 RLS migration on catalog (`20260628132914_OpsM9_Catalog_RlsPolicies`)
+  only ALTERs `catalog.properties` and `catalog.property_images`. It does
+  NOT touch `catalog.outbox_messages` and cannot drop it.
+- CI's environment variable `ConnectionStrings__Postgres` would override
+  in-memory config if added later, but `ConfigureAppConfiguration` adds the
+  in-memory provider AFTER env vars in WebApplicationFactory<Program>, so
+  the testcontainer URL wins. (If that order is wrong, both the migrator AND
+  the seed would hit the WRONG DB and the seed's identity tenant/user
+  inserts would fail too — they don't.)
+
+So the migrations *should* be applying. Something about the actual CI
+runtime contradicts the static reading. Without diagnostic output from a
+real CI run we cannot tell whether:
+
+- (H1) Migrations are silently being marked applied without their `Up()`
+  running (Npgsql / EF Core 8 bug we haven't seen).
+- (H2) The migrator block IS hitting a different database than the seed
+  (e.g., Testcontainers race where `GetConnectionString()` returns one URL
+  before `StartAsync` finishes wiring the port, and another after — very
+  unlikely but observable).
+- (H3) The migrator block's `await using (var sp = ...BuildServiceProvider())`
+  disposes the provider mid-`MigrateAsync` (e.g., due to a missed `await`
+  somewhere) and the transactional CREATE TABLE never commits.
+- (H4) Migration history table is mis-targeted: the `MigrationsHistoryTable`
+  option puts history in `catalog.__ef_migrations_history`, but if Npgsql
+  silently falls back to `public.__ef_migrations_history`, the migrator
+  could *think* migrations are unapplied on first run, but the actual
+  CREATE TABLE runs against `catalog` and succeeds — that contradicts the
+  observed failure, so probably not this one.
+
+We need ground truth from CI before sinking another commit on a guess.
+
+### 5.4 New prescription — F0' DIAGNOSTIC
+
+Replace the F0 fix with a diagnostic-enriched version that logs to stdout
+exactly what's happening. Console.WriteLine survives xUnit's output capture
+and lands in the GH Actions log. After the diagnostic CI run completes,
+its log tells us:
+
+1. Which migrations EF thinks are pending for `CatalogDbContext` before
+   `MigrateAsync` runs.
+2. Which migrations EF thinks are applied AFTER `MigrateAsync` returns.
+3. The actual connection string Catalog's DbContext is using (so we can
+   diff against what the seed-side context uses).
+4. Whether `catalog.outbox_messages` exists at the end of the migrator
+   block AND immediately before the seed insert.
+
+Exact lines to add to `tests/VrBook.Api.IntegrationTests/Multitenancy/TwoTenantApiFixture.cs`,
+inside the `await using (var sp = ...)` block, replacing the 10
+`MigrateAsync` calls with a single helper-loop that logs:
+
+```csharp
+await using (var sp = migratorServices.BuildServiceProvider())
+{
+    // OPS.M.10.2 F0' DIAGNOSTIC — F0 closed zero Cluster A failures. The
+    // static-analysis case for the "last-wins" diagnosis fell apart (the
+    // production migrator uses the same iteration and it works). Need
+    // ground truth from CI to find the real root cause. Console.WriteLine
+    // lands in the GH Actions step log via xUnit's output capture.
+    async Task MigrateWithDiag<TContext>(IServiceProvider sp) where TContext : DbContext
+    {
+        var ctx = sp.GetRequiredService<TContext>();
+        var name = typeof(TContext).Name;
+        var conn = ctx.Database.GetDbConnection().ConnectionString;
+        var pending = (await ctx.Database.GetPendingMigrationsAsync()).ToArray();
+        Console.WriteLine($"[OPS.M.10.2 F0'] {name} conn={conn} pending=[{string.Join(",", pending)}]");
+        await ctx.Database.MigrateAsync();
+        var applied = (await ctx.Database.GetAppliedMigrationsAsync()).ToArray();
+        Console.WriteLine($"[OPS.M.10.2 F0'] {name} applied=[{string.Join(",", applied)}]");
+    }
+    await MigrateWithDiag<IdentityDbContext>(sp);
+    await MigrateWithDiag<CatalogDbContext>(sp);
+    await MigrateWithDiag<PricingDbContext>(sp);
+    await MigrateWithDiag<BookingDbContext>(sp);
+    await MigrateWithDiag<PaymentDbContext>(sp);
+    await MigrateWithDiag<ReviewsDbContext>(sp);
+    await MigrateWithDiag<SyncDbContext>(sp);
+    await MigrateWithDiag<MessagingDbContext>(sp);
+    await MigrateWithDiag<LoyaltyDbContext>(sp);
+    await MigrateWithDiag<NotificationsDbContext>(sp);
+}
+
+// Immediately before SeedAsync — verify the table is visible to the
+// seed-side connection.
+using (var scope0 = Services.CreateScope())
+{
+    var ctx = scope0.ServiceProvider.GetRequiredService<CatalogDbContext>();
+    var conn = ctx.Database.GetDbConnection().ConnectionString;
+    var applied = (await ctx.Database.GetAppliedMigrationsAsync()).ToArray();
+    Console.WriteLine($"[OPS.M.10.2 F0'] seed-side CatalogDbContext conn={conn} applied=[{string.Join(",", applied)}]");
+    var exists = await ctx.Database.SqlQueryRaw<int>(
+        "SELECT COUNT(*)::int AS \"Value\" FROM information_schema.tables WHERE table_schema='catalog' AND table_name='outbox_messages'")
+        .FirstAsync();
+    Console.WriteLine($"[OPS.M.10.2 F0'] catalog.outbox_messages exists count={exists}");
+}
+```
+
+### 5.5 Revised commit sequence
+
+| # | Commit | Purpose | Closes |
+|---|---|---|---|
+| ~~F0~~ | `0ed16f9` | (wrong diagnosis — leave reverted-in-spirit but don't revert; harmless) | 0 |
+| F1 | `45da18f` | `ICurrentUser` in hand-rolled fixtures | 9 ✓ |
+| F2 | `591a383` | `users.phone` test seed | 2 ✓ |
+| F3 | `26a6e28` | ReportsAuthorization mock TenantId | 2 ✓ |
+| **F0'** | TBD | DIAGNOSTIC commit (above) | 0 (telemetry) |
+| F0'' | TBD after CI log read | Actual Cluster A fix informed by F0' output | ≈60 |
+
+### 5.6 Action requested of user
+
+Apply the F0' diff exactly as above. Push. `gh run watch` to green-or-red.
+Either way, the GH Actions log for the unit-test step will contain the
+`[OPS.M.10.2 F0']` lines — paste them back to the architect (me) and I will
+prescribe F0'' against ground truth instead of a fifth guess.
+
