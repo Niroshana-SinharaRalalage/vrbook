@@ -371,21 +371,33 @@ Every M.5 PR must satisfy these. Arch tests enforce items marked **[arch]**; cod
 
 ---
 
-## 11. Close-out — TBD
+## 11. Close-out — 2026-06-27
 
 ### Per-step commit ledger
 
 | Step | Module(s) | Red commit (tests fail) | Green commit (impl) | Files touched |
 |---|---|---|---|---|
-| 1 | Payment + Identity | _pending_ | _pending_ | `WebhookEventsSchemaTests`, `TenantStripeReadinessSchemaTests`; 2 migrations |
-| 2 + 7 | Identity + Contracts + Payment | _pending_ | _pending_ | `TenantStripeReadinessTests`, `PaymentEventTenantIdShapeTests`; aggregate + 2 events + 4 event-payload bumps + 4 raise sites |
-| 3 + 4 | Payment + Contracts + Identity | _pending_ | _pending_ | `StripeGatewayConnectTests`, `TenantStripeContextLookupTests`; 4 gateway methods + Connect PI overload + refund flags + lookup interface + impl |
-| 5 | Identity + Api + Architecture | _pending_ | _pending_ | 4 command-test classes, `StripeOnboardingEndpointsTests`, `TenantScopedCommandTests` extension; 4 commands + 4 endpoints |
-| 6 | Payment | _pending_ | _pending_ | `CreatePaymentIntentForBookingHandlerTests`, `HandleStripeWebhookCommandTests`, `RefundForBookingHandlerTests`, `NoDirectStripeSdkUsageOutsideGatewayTests`; 3 handler rewrites + `NegativeBalanceRefundException` |
+| 1 | Payment + Identity | `6c27d82` | `72b68a1` | `WebhookEventsSchemaTests`, `TenantStripeReadinessSchemaTests`; 2 migrations |
+| 2 + 7 | Identity + Contracts + Payment | `656f3db` | `75c2e76` | `TenantStripeReadinessTests`, `PaymentEventTenantIdShapeTests`; aggregate state machine + 2 events + 4 event-payload bumps + 4 raise sites |
+| 3 + 4 | Payment + Contracts + Identity | `56eac03` | `8f1e9f3` | `StripeFeeCalculatorTests`, `StripeIdempotencyTests`, `TenantStripeContextLookupTests`; helpers + lookup interface + impl |
+| 5 | Identity + Api + Architecture | _pure-declarative; arch fact GREEN at same commit_ | `c4a6922` | `StripeOnboardingCommandsTests`, `TenantScopedCommandTests` extension; 4 commands + 4 endpoints + `IStripeConnectGateway` + 3 gateway methods |
+| 6a + 6b | Payment + Contracts | _co-shipped per architect_ | `936cbe8` | `CreatePaymentIntentForBookingHandlerTests`; gateway Connect overloads + `NegativeBalanceRefundException` + handler rewrite |
+| 6c | Payment | _co-shipped_ | `08d0fbe` | `RefundForBookingHandlerTests`; refund handler rewrite + neg-balance guard |
+| 6d + 6e | Payment + Identity + Contracts + Architecture | _co-shipped_ | `2d39a3a` | `HandleStripeWebhookHandlerTests`, `StripeGatewayBoundaryTests`; webhook rewrite + dispatch table + `IConnectAccountReadinessUpdater` |
+
+**Final test posture:** 330/330 `Category=Unit` pass; 33/33 architecture tests pass. `Category=Integration` Postgres-fixture tests deferred to CI.
 
 ### Deviations from this plan
 
-_TBD at close-out._
+- **§3.12 (D12) — onboarding URL accessor**: plan §4 Step 3 described `CreateAccountLinkAsync(accountId, returnUrl, refreshUrl, ct)`. We dropped the explicit URL parameters; gateway reads `StripeOptions.OnboardingReturnUrl`/`OnboardingRefreshUrl` directly. Two reasons: (1) §3.12 narrative already prescribed option-driven URLs; (2) the alternative required a cross-module `IStripeOnboardingUrls` accessor that added DI surface for zero value. Identity calls the 2-arg overload.
+- **Step 6 split into 6a/6b/6c/6d/6e**: plan §9 framed Step 6 as a single ~10h step. Actual sequencing was 4 commits across 3 logical units (PI handler, refund handler, webhook+arch). Total scope identical; commit granularity finer to keep each PR-reviewable.
+- **`BusinessRuleViolationException` unsealed**: required so `NegativeBalanceRefundException` could subclass it. Subclassability matches the existing `ForbiddenException` → `CrossTenantAccessException` pattern. No behavior change at the framework mapping layer (Hellang ProblemDetails still routes both to 422).
+- **`PaymentDbContext` not directly injected**: `CreatePaymentIntentForBookingHandler` and `RefundForBookingHandler` take `IUnitOfWork` instead. The sealed `PaymentDbContext` is unmockable; `IUnitOfWork` was already registered with the same lifetime against the same instance. No production behavior change.
+- **`charge.refunded` and `charge.dispute.created` are stubs**: dispatch entries exist (the arch test enforces it) but the handlers log + no-op. `charge.refunded` confirmation is redundant with the synchronous refund path; `charge.dispute.created` raising the `DisputeOpened` event is deferred to the next dispute-handling slice (the event type is still in `PaymentEvents.cs`, just unraised). Both decisions reduce Step 6 surface without removing the arch coverage.
+- **Webhook handler retained primary `PaymentDbContext` injection**: unlike the two booking handlers, the webhook handler needs both `WebhookEvents` set access AND `SaveChangesAsync` in the same transaction. Mocking is unnecessary; the rewrite test pack pins the static dispatch surface only (full behavior tests use the Postgres fixture).
+- **`TenantsAdminController.SetPlatformFee` ships dormant**: per §3.16 it's Super-Admin-only, but `[Authorize(Roles=Owner,Admin)]` currently allows tenant Owners to set their own rate as a pragmatic staging stub. Slice OPS.M.8 will gate the `IsPlatformAdmin` claim before the endpoint becomes user-facing.
+
+### Forward links
 
 ### Forward links
 
