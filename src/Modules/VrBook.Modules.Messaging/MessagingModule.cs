@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
 using VrBook.Infrastructure.Outbox;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Messaging.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Messaging;
@@ -14,11 +15,9 @@ public sealed class MessagingModule : IModuleRegistration
 
     public IServiceCollection AddModule(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<MessagingDbContext>((sp, opts) =>
-            opts.UseNpgsql(
-                configuration.GetConnectionString("Postgres") ?? string.Empty,
-                npg => npg.MigrationsHistoryTable("__ef_migrations_history", MessagingDbContext.SchemaName))
-                .UseOutbox(sp));
+        // OPS.M.9 §4.3 + §4.4 — registers DbContext + DbContextFactory +
+        // TenantGucCommandInterceptor + IRlsBypassDbContextFactory together.
+        services.AddTenantScopedDbContext<MessagingDbContext>(configuration, MessagingDbContext.SchemaName);
 
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<MessagingDbContext>());
 

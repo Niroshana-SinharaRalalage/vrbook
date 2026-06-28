@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
 using VrBook.Infrastructure.Outbox;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Identity.Application.Behaviors;
 using VrBook.Modules.Identity.Infrastructure;
 using VrBook.Modules.Identity.Infrastructure.Auth;
@@ -21,11 +22,10 @@ public sealed class IdentityModule : IModuleRegistration
     public IServiceCollection AddModule(IServiceCollection services, IConfiguration configuration)
     {
         // DbContext — module owns its schema.
-        services.AddDbContext<IdentityDbContext>((sp, opts) =>
-            opts.UseNpgsql(
-                configuration.GetConnectionString("Postgres") ?? string.Empty,
-                npg => npg.MigrationsHistoryTable("__ef_migrations_history", IdentityDbContext.SchemaName))
-                .UseOutbox(sp));
+        // OPS.M.9 §4.3 + §4.4 — single-call helper registers the
+        // DbContext + DbContextFactory + TenantGucCommandInterceptor +
+        // IRlsBypassDbContextFactory all together.
+        services.AddTenantScopedDbContext<IdentityDbContext>(configuration, IdentityDbContext.SchemaName);
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IUserEmailLookup, UserEmailLookup>();

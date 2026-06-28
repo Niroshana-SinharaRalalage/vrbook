@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
 using VrBook.Infrastructure.Outbox;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Notifications.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Notifications;
@@ -14,11 +15,9 @@ public sealed class NotificationsModule : IModuleRegistration
 
     public IServiceCollection AddModule(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<NotificationsDbContext>((sp, opts) =>
-            opts.UseNpgsql(
-                configuration.GetConnectionString("Postgres") ?? string.Empty,
-                npg => npg.MigrationsHistoryTable("__ef_migrations_history", NotificationsDbContext.SchemaName))
-                .UseOutbox(sp));
+        // OPS.M.9 §4.3 + §4.4 — registers DbContext + DbContextFactory +
+        // TenantGucCommandInterceptor + IRlsBypassDbContextFactory together.
+        services.AddTenantScopedDbContext<NotificationsDbContext>(configuration, NotificationsDbContext.SchemaName);
 
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<NotificationsDbContext>());
 

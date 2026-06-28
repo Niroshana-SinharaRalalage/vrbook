@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
 using VrBook.Infrastructure.Outbox;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Catalog.Application.Common;
 using VrBook.Modules.Catalog.Infrastructure.Persistence;
 using VrBook.Modules.Catalog.Infrastructure.Storage;
@@ -16,11 +17,9 @@ public sealed class CatalogModule : IModuleRegistration
 
     public IServiceCollection AddModule(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<CatalogDbContext>((sp, opts) =>
-            opts.UseNpgsql(
-                configuration.GetConnectionString("Postgres") ?? string.Empty,
-                npg => npg.MigrationsHistoryTable("__ef_migrations_history", CatalogDbContext.SchemaName))
-                .UseOutbox(sp));
+        // OPS.M.9 §4.3 + §4.4 — registers DbContext + DbContextFactory +
+        // TenantGucCommandInterceptor + IRlsBypassDbContextFactory together.
+        services.AddTenantScopedDbContext<CatalogDbContext>(configuration, CatalogDbContext.SchemaName);
 
         services.AddScoped<IPropertyRepository, PropertyRepository>();
         services.AddScoped<IAmenityRepository, AmenityRepository>();

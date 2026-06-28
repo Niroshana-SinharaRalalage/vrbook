@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
 using VrBook.Infrastructure.Outbox;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Sync.Application.Behaviors;
 using VrBook.Modules.Sync.Infrastructure;
 using VrBook.Modules.Sync.Infrastructure.Channels;
@@ -20,11 +21,9 @@ public sealed class SyncModule : IModuleRegistration
 
     public IServiceCollection AddModule(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<SyncDbContext>((sp, opts) =>
-            opts.UseNpgsql(
-                configuration.GetConnectionString("Postgres") ?? string.Empty,
-                npg => npg.MigrationsHistoryTable("__ef_migrations_history", SyncDbContext.SchemaName))
-                .UseOutbox(sp));
+        // OPS.M.9 §4.3 + §4.4 — registers DbContext + DbContextFactory +
+        // TenantGucCommandInterceptor + IRlsBypassDbContextFactory together.
+        services.AddTenantScopedDbContext<SyncDbContext>(configuration, SyncDbContext.SchemaName);
 
         services.AddScoped<IChannelFeedRepository, ChannelFeedRepository>();
         services.AddScoped<IExternalReservationRepository, ExternalReservationRepository>();

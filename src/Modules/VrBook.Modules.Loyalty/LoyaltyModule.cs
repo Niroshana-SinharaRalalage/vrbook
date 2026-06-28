@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
 using VrBook.Infrastructure.Outbox;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Loyalty.Infrastructure;
 using VrBook.Modules.Loyalty.Infrastructure.Persistence;
 
@@ -16,11 +17,9 @@ public sealed class LoyaltyModule : IModuleRegistration
 
     public IServiceCollection AddModule(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<LoyaltyDbContext>((sp, opts) =>
-            opts.UseNpgsql(
-                configuration.GetConnectionString("Postgres") ?? string.Empty,
-                npg => npg.MigrationsHistoryTable("__ef_migrations_history", LoyaltyDbContext.SchemaName))
-                .UseOutbox(sp));
+        // OPS.M.9 §4.3 + §4.4 — registers DbContext + DbContextFactory +
+        // TenantGucCommandInterceptor + IRlsBypassDbContextFactory together.
+        services.AddTenantScopedDbContext<LoyaltyDbContext>(configuration, LoyaltyDbContext.SchemaName);
 
         // A8.1: replace the A0 stub from VrBook.Infrastructure with the real resolver
         // backed by loyalty.accounts. The pricing module's ComputeQuoteHandler picks

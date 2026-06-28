@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
 using VrBook.Infrastructure.Outbox;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Booking.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Booking;
@@ -14,11 +15,9 @@ public sealed class BookingModule : IModuleRegistration
 
     public IServiceCollection AddModule(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<BookingDbContext>((sp, opts) =>
-            opts.UseNpgsql(
-                configuration.GetConnectionString("Postgres") ?? string.Empty,
-                npg => npg.MigrationsHistoryTable("__ef_migrations_history", BookingDbContext.SchemaName))
-                .UseOutbox(sp));
+        // OPS.M.9 §4.3 + §4.4 — registers DbContext + DbContextFactory +
+        // TenantGucCommandInterceptor + IRlsBypassDbContextFactory together.
+        services.AddTenantScopedDbContext<BookingDbContext>(configuration, BookingDbContext.SchemaName);
 
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<BookingDbContext>());
