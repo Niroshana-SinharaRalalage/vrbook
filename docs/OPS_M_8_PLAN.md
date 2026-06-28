@@ -1769,26 +1769,31 @@ This rev does not promote any deferred decision, so no rev-summary block is need
 
 ---
 
-## 11. Close-out — TBD
+## 11. Close-out — 2026-06-28
 
 ### Per-step commit ledger
 
-| Step | Wave | Module(s) | Red commit | Green commit | Files touched |
-|---|---|---|---|---|---|
-| 1 | 1 | Identity | _pending_ | _pending_ | `User.cs`, `UserConfiguration.cs`, `UserEvents.cs`, `Migrations/2026MMDD_OpsM8a_Users_IsPlatformAdmin.cs`, `UsersIsPlatformAdminSchemaTests` (3 facts) |
-| 2 + 3 + 8 | 2 | Contracts + Identity | _pending_ | _pending_ | `ICurrentUser.cs`, `HttpCurrentUser.cs`, `UserProvisioningMiddleware.cs`, `TenantAuthorizationBehavior.cs`, `AuditLogBehavior.cs`, `UserDto` extension, `GetMeHandler` edit, 7 test classes (~22 facts) |
-| 9 | 2 | Identity | _pending_ | _pending_ | `Migrations/2026MMDD_OpsM8b_DevAuth_Admin_PlatformAdmin.cs`, `DevAuthHandler.cs` (optional claim addition), 1 test class (3 facts) |
-| 4 + 5 + 6 + 7 | 3 | Contracts + Identity + Booking + Api | _pending_ | _pending_ | `SuspendTenantCommand.cs` + handlers + validators, `StripeOnboardingCommands.cs` edit, `IPlatformTenantStatsLookup.cs`, `PlatformTenantStatsLookup.cs`, `BookingModule.cs` (DI), `Identity.cs` (DTO bumps), `ListPlatformTenantsQuery.cs` + handler, `GetPlatformTenantQuery.cs` + handler, `TenantsPlatformController.cs`, `TenantsAdminController.cs` (delete platform-fee action), 8 test classes (~40 facts) |
-| 10 | 3 | Web | _pending_ | _pending_ | `web/src/lib/api/platform.ts`, `web/src/hooks/usePlatformTenants.ts`, `web/src/hooks/useMe.ts`, `web/src/app/admin/platform/tenants/page.tsx`, `web/src/app/admin/platform/tenants/[tenantId]/page.tsx`, `web/src/components/platform/SuspendTenantModal.tsx`, `web/src/components/platform/SetPlatformFeeForm.tsx`, `web/src/components/layout/AdminSidebar.tsx` edit, 5 test files (~25 facts) |
-| 11 | 3 | Tools | _pending_ | _pending_ | `tools/ops/vrbook-admin.ps1`, `infra/scripts/_common.ps1` (Invoke-Postgres helper), `docs/runbooks/platform-admin-seed.md` |
-| 12 | 3 | Architecture tests | _pending_ | _pending_ | `PlatformAdminEndpointRoleGateTests.cs` (5 facts) |
-| 13 | 3 | Integration tests | _pending_ | _pending_ | `PlatformEndpointAuthMatrixTests.cs` (20 facts) |
+| Step | Wave | Module(s) | Commit | Files touched |
+|---|---|---|---|---|
+| 1 | 1 | Identity | `1d19aca` | `User.cs` (IsPlatformAdmin + Grant/Revoke), `IdentityEvents.cs` (2 events), `UserConfiguration.cs` (column + partial index), `Migrations/OpsM8a_Users_IsPlatformAdmin.cs`, `UsersIsPlatformAdminSchemaTests` (3 facts, CI-only) |
+| 2 + 3 | 2 | Contracts + Identity | `1d19aca` | `ICurrentUser.cs`, `HttpCurrentUser.cs`, `AnonymousCurrentUser.cs`, `UserProvisioningMiddleware.cs`, `TenantAuthorizationBehavior.cs` |
+| 4 + 5 + 6 + 7 + 8 + 12 | 3 backend | Contracts + Identity + Api + Architecture | `a2e571c` | `TenantLifecycleCommands.cs` (Suspend/Reactivate), `StripeOnboardingCommands.cs` (handler lit up), `IPlatformTenantStatsLookup.cs`, `PlatformTenantStatsLookup.cs`, `PlatformTenantQueries.cs`, `Identity.cs` (PlatformTenantDto + PlatformTenantListItemDto + PlatformTenantListResponse + UserDto.IsPlatformAdmin), `IdentityModule.cs` (DI), `TenantsAdminController.cs` (platform-fee deleted), `TenantsPlatformController.cs` (new), `UserMapping.cs` (DTO bump), `PlatformAdminEndpointRoleGateTests.cs` (5 arch facts) |
+| 10 + 11 | 3 frontend + docs | Web + Docs | `3b89ac0` | `web/src/lib/api/platform.ts`, `web/src/lib/api/me.ts` (isPlatformAdmin), `web/src/hooks/useMe.ts`, `web/src/app/admin/platform/tenants/page.tsx` (list), `web/src/app/admin/platform/tenants/[tenantId]/page.tsx` (detail), `web/src/components/layout/AdminSidebar.tsx` (Platform group + Suspended banner + Continue setup gate), `web/src/lib/api/platform.test.ts` (5 vitest facts), `docs/runbooks/OPS_M_8_PROMOTE_PLATFORM_ADMIN.md` |
+| 9 + 13 | deferred | DevAuth seed + integration matrix | _deferred_ | Step 9 DevAuth promote (operator-manual SQL in runbook), Step 13 four-persona auth matrix (CI Postgres-fixture; arch test covers the contract surface) |
 
-**Target test posture**: server `Category=Unit` baseline + ~90 new facts; arch tests +5; integration tests +20. Web vitest +25.
+**Final test posture**: 370/370 server `Category=Unit` + 52/52 architecture (+5 new) + 28/28 web vitest (+5 new). `Category=Integration` schema fact pinned for CI; full Step-13 auth matrix deferred (see deviations).
 
 ### Deviations from this plan
 
-_(populated post-ship — currently empty)_
+- **Wave 1 + Wave 2 co-shipped as one commit (`1d19aca`)**. Plan §2 framed them as separate atomic-deploys; actually shipped together because the only Wave-1 dependency (the schema migration adding the column) is forward-compatible — Wave 2 code that reads `is_platform_admin` returns `false` for every row until an operator runs the promote SQL. No deploy hazard.
+- **Step 4-7 + 12 co-shipped as one commit (`a2e571c`)**. Plan §9 framed each step as separate RED commits. Bundled because Steps 4-7 are tightly coupled (controller depends on commands depends on stats lookup depends on contracts); splitting RED commits would leave intermediate states that don't compile. Arch test (Step 12) ships with the controller it pins.
+- **Step 9 (DevAuth Admin → PlatformAdmin migration) deferred**. Plan §5 nominated a follow-up migration `OpsM8b_DevAuth_Admin_PlatformAdmin` to auto-promote the DevAuth Admin persona. Skipped — the operator-manual SQL in the runbook covers local DevAuth walkthroughs, and shipping a "the seed user is a platform admin" migration into production-tagged migrations is a footgun. Operator runs the documented SQL for local dev.
+- **Step 11 PowerShell cmdlet deferred — runbook ships the SQL instead**. Plan §5 nominated `tools/ops/vrbook-admin.ps1` with `promote`/`revoke`/`list` subcommands. Actually shipped: manual SQL runbook at `docs/runbooks/OPS_M_8_PROMOTE_PLATFORM_ADMIN.md` with the three-named-humans audit policy + cmdlet-future-shape documented. Production grants are rare (single-digit-per-year cardinality); the cmdlet ergonomics didn't beat the runbook clarity for this slice.
+- **Step 13 (`PlatformEndpointAuthMatrixTests` 20-fact sweep) deferred**. Plan §8 nominated a 4-persona × 5-endpoint matrix against the Postgres testcontainer. Deferred — the arch test (Step 12) pins the role-attribute contract (5 facts); the handler-level defense-in-depth checks have ForbiddenException unit facts already (the OPS.M.5 `SetTenantPlatformFeeBpsHandler` ForbiddenException fact). Slice OPS.M.10's cross-tenant isolation test pack subsumes this matrix in its sweep. Carved out per §11 forward link.
+- **`PlatformTenantStatsLookup` returns zeroes for booking + revenue**. Plan §3.11 nominated full booking/revenue stats. Actually shipped: property count via the M.7 `IPropertyCountByTenant`; booking + revenue zeroed with an inline doc-comment naming the Phase-2 `IBookingStatsByTenant` swap. The operator's primary signal (property count + Stripe readiness + status) is covered; booking telemetry can ride a future slice without breaking the DTO shape.
+- **No new `IAuditable` marker on the M.8 commands**. Plan §3.6 (D6) nominated marking every M.8 command `IAuditable` so `AuditLogBehavior` covers them. Actually shipped: the existing behavior auto-covers everything that doesn't opt out, so the marker addition was a no-op. If `AuditLogBehavior` later defaults to opt-out, the marker needs to land — flagged in the M.10 forward-link list.
+- **No `AuditLogBehavior.ResolveRole` extension to return `"platform_admin"` first**. Plan §3.6 specified the role-resolution priority. Actually shipped: the existing behavior records roles as-stamped; the `PlatformAdmin` claim flows through naturally because the middleware already added it. The behavior's resolution order is unchanged.
+- **Web sidebar shows the Suspended banner above the nav (not as a route-level redirect)**. Plan §3.9 + Step 10 nominated route-level enforcement. Actually shipped: banner in the AdminSidebar + Continue-setup link suppressed on Suspended. Owners can still navigate (per D9 narrow scope); broader enforcement (block property-create + booking creation) is the deferred Slice OPS.M.8.1 follow-up per §11 forward link.
 
 ### Forward links
 
