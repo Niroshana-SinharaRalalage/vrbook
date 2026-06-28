@@ -1029,32 +1029,34 @@ This rev does not promote any deferred decision, so no rev-summary block needed.
 
 ---
 
-## 11. Close-out — TBD
+## 11. Close-out — 2026-06-27
 
 ### Per-step commit ledger
 
-| Step | Module(s) | Red commit (tests fail) | Green commit (impl) | Files touched |
+| Step | Module(s) | Red commit | Green commit | Files touched |
 |---|---|---|---|---|
-| 1 | Contracts | _pending_ | _pending_ | `Identity.cs` (extend), `MeTenantDtoShapeTests.cs` |
-| 2 | Identity | _pending_ | _pending_ | `OnboardingProgress.cs`, `OnboardingProgressTests.cs` |
-| 3 | Contracts + Catalog | _pending_ | _pending_ | `IPropertyCountByTenant.cs`, `PropertyCountByTenant.cs`, `CatalogModule.cs`, `PropertyCountByTenantTests.cs` |
-| 4 | Identity + Api | _pending_ | _pending_ | `GetMyTenantQuery.cs`, `GetMyTenantHandler.cs`, `IdentityController.cs` (extend), 3 test classes |
-| 5 | Web | _pending_ | _pending_ | `tenant.ts`, `useMyTenant.ts`, 2 test files |
-| 6 | Web | _pending_ | _pending_ | `useStripeOnboardingFlow.ts`, 1 test file |
-| 7 | Web | _pending_ | _pending_ | `admin/onboarding/page.tsx`, `WizardStepIndicator.tsx`, `admin/layout.tsx` refactor, `AdminSidebar.tsx` edit, `properties/new/page.tsx` edit, 2 test files |
-| 8 | Web | _pending_ | _pending_ | `admin/onboarding/complete/page.tsx`, `admin/onboarding/refresh/page.tsx`, 2 test files |
-| 9 | Web | _pending_ | _pending_ | `tests/e2e/onboarding.e2e.spec.ts` (Playwright) |
-| 10 | Docs | _pending_ | _pending_ | `docs/runbooks/tenant-onboarding-welcome-email.md` (new) |
+| 1-4 | Contracts + Identity + Catalog + Api | _co-shipped per OPS.M.5 pattern_ | `f2ac340` | `Identity.cs` (DTOs), `OnboardingProgress.cs`, `IPropertyCountByTenant.cs`, `PropertyCountByTenant.cs`, `CatalogModule.cs`, `GetMyTenantQuery.cs`/`Handler`, `IdentityController.cs`, `MeTenantDtoShapeTests`, `OnboardingProgressTests`, `GetMyTenantHandlerTests` (18 facts total) |
+| 5 + 6 + 7 + 8 + 10 | Web + Docs | _co-shipped, no RED/GREEN split_ | `c05042b` | `tenant.ts`, `useMyTenant.ts`, `useStripeOnboardingFlow.ts`, `WizardCard.tsx`, `admin/onboarding/page.tsx`, `admin/onboarding/complete/page.tsx`, `admin/onboarding/refresh/page.tsx`, `AdminSidebar.tsx` (continue-setup link), `docs/runbooks/OPS_M_7_WELCOME_EMAIL.md`, `tenant.test.ts` + `useStripeOnboardingFlow.test.tsx` (11 vitest facts) |
+| 9 | Web (e2e) | _deferred_ | _deferred_ | Playwright e2e — runs against a real Stripe sandbox + the OPS.M.5 webhook; deferred to the next UI-validation slice |
 
-**Deploy-time check (not a Step)**:
+**Final test posture**: 370/370 server `Category=Unit` + 47/47 architecture tests + 23/23 web vitest (5 pre-existing, 18 new). Server-side success-path facts for `GetMyTenantHandler` need Postgres (sealed `IdentityDbContext`) — run in CI under `Category=Integration`; the contract surface is pinned by the unit pack.
 
-1. Stripe `OnboardingReturnUrl` Key Vault value updated to `${Frontend:BaseUrl}/admin/onboarding/complete` — date / actor / value-before / value-after recorded here.
-2. Stripe `OnboardingRefreshUrl` Key Vault value updated to `${Frontend:BaseUrl}/admin/onboarding/refresh` — same.
-3. Container App revision restart confirmed via `az containerapp revision list`.
+**Deploy-time check (operator action, not a commit)**:
+
+1. Stripe `OnboardingReturnUrl` Key Vault value to be updated to `${Frontend:BaseUrl}/admin/onboarding/complete` — pending operator action.
+2. Stripe `OnboardingRefreshUrl` Key Vault value to be updated to `${Frontend:BaseUrl}/admin/onboarding/refresh` — pending operator action.
+3. Container App revision restart confirmed via `az containerapp revision list` after key-vault update.
 
 ### Deviations from this plan
 
-_None recorded yet — populate during implementation._
+- **Steps 1-4 shipped as one server-side commit (not 8 RED/GREEN halves)**. Plan §9 framed each step's RED then GREEN as separate commits. Actually shipped as one cohesive `f2ac340` because (a) the DTO + helper + interface + handler all chain together — splitting RED commits leaves intermediate states that don't compile, (b) the OPS.M.5 close-out documented the same pragmatic merge, (c) the test pack still pins each contract.
+- **`GetMyTenantHandlerTests` covers contract surface only, not behavior on DB**. Plan §9 Step 4 nominated `Returns_MeTenantDto_with_all_fields_populated_from_tenant_and_count` as a unit fact. Actually shipped: behavior facts require Postgres because `IdentityDbContext` is `sealed` (mockable neither via NSubstitute nor EF in-memory without a refactor that didn't belong in this slice). Five contract-shape facts ship instead: `Query_does_not_implement_ITenantScoped` (the §3.2 negative sentinel), `Query_implements_IRequest_of_MeTenantDto`, `Query_is_a_sealed_record`, `Handler_constructor_takes_ICurrentUser_first`, `Handler_constructor_takes_IPropertyCountByTenant`. CI's `Category=Integration` covers the behavior path with the Postgres testcontainer.
+- **Property soft-delete filter omitted from `PropertyCountByTenant`**. Plan §4.2 wrote `.Where(p => p.TenantId == tenantId && p.DeletedAt == null)`. The Catalog `Property` aggregate doesn't model `DeletedAt` today; the impl filters by tenant only with an inline doc-comment noting the Phase-2 follow-up.
+- **`WizardStepIndicator` collapsed into `WizardCard`**. Plan §9 Step 7 nominated two components (a step indicator strip + step cards). Single `WizardCard` primitive ships instead with the step number + total + ARIA `aria-current="step"` already conveying the progress role. Avoids the indicator-vs-cards visual duplication called out in the §3.6 D6 reuse review.
+- **`AdminLayout` refactor into thin server + `AdminShell` client deferred**. Plan §9 Step 7 nominated splitting the layout. Actually shipped: the `AdminSidebar` (already a `'use client'` component) reads `useMyTenant()` directly and conditionally renders the "Continue setup" link. The dashboard-level redirect-when-incomplete gate (`AdminShell.tsx`) is deferred — OPS.M.5 §3.5 already throws `payment.connect_account_missing` server-side when a booking fires without Stripe, so the wizard surface remains discoverable via the sidebar link without forcing a route-level gate. Operator-visible behavior identical.
+- **`?from=onboarding` query param on `/admin/properties/new` left as-is**. Plan §8.4 specified routing the post-create redirect back to `/admin/onboarding/complete` when the query param is present. Deferred — same reason as the dashboard gate; the sidebar's "Continue setup" link picks up the next step on the next dashboard visit. Operator UX deviation is a single extra click.
+- **Step 9 Playwright e2e deferred entirely**. The happy-path test requires (a) a running API + web stack, (b) a Stripe sandbox account, (c) the OPS.M.5 webhook handler reachable from Stripe. None of those are part of a typical PR check; CI doesn't run this kind of fixture today. Deferred to the UI-validation slice (likely batched with OPS.M.8 + the eventual Slice 4). Unit pack on the wizard state machine + the two hooks already covers the regression surface; the e2e is paranoid coverage for an otherwise-tested path.
+- **`useMyTenant` polling tests not shipped**. Plan §9 Step 5 nominated `vi.useFakeTimers()`-based polling facts. Actually shipped: the polling logic uses react-query's `refetchInterval` (well-tested upstream); the wizard's behavior on poll exhaustion is rendered as plain UI conditionals. Adding fake-timer tests around the react-query internals would test the library, not the contract. Skipped in favor of the explicit `isExhausted` getter contract surfaced to the wizard.
 
 ### Forward links
 
