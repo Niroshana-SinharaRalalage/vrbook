@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Swashbuckle.AspNetCore.Annotations;
 using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Interfaces;
+using VrBook.Modules.Identity.Application.Tenants.Queries;
 using VrBook.Modules.Identity.Application.Users.Commands;
 using VrBook.Modules.Identity.Application.Users.Queries;
 using VrBook.Modules.Identity.Infrastructure.Auth;
@@ -40,6 +41,22 @@ public sealed class IdentityController(IMediator mediator) : ControllerBase
         await mediator.Send(new DeactivateMeCommand(), ct);
         return NoContent();
     }
+
+    /// <summary>
+    /// OPS.M.7 §3.2 (D2) — read-side projection of the caller's tenant for
+    /// the onboarding wizard. Onboarding-progress is server-derived; the
+    /// web client never re-computes <c>NextStep</c>. <c>Cache-Control: no-store</c>
+    /// per §3.2 so the polling loop after Stripe return sees fresh state.
+    /// </summary>
+    [HttpGet("tenant")]
+    [Authorize(Roles = "Owner,Admin")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [SwaggerOperation(Summary = "Get the caller's tenant + onboarding progress (OPS.M.7).")]
+    [ProducesResponseType(typeof(MeTenantDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<MeTenantDto>> GetTenant(CancellationToken ct) =>
+        Ok(await mediator.Send(new GetMyTenantQuery(), ct));
 }
 
 /// <summary>

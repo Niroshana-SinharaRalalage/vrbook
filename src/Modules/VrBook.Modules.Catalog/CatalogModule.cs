@@ -26,6 +26,10 @@ public sealed class CatalogModule : IModuleRegistration
         services.AddScoped<IAmenityRepository, AmenityRepository>();
         services.AddScoped<VrBook.Contracts.Interfaces.IPropertyOwnerLookup,
                            VrBook.Modules.Catalog.Infrastructure.Persistence.PropertyOwnerLookup>();
+        // OPS.M.7 §4.2 — cross-module count read for the onboarding wizard's
+        // "have you created your first property yet?" check.
+        services.AddScoped<VrBook.Contracts.Interfaces.IPropertyCountByTenant,
+                           VrBook.Modules.Catalog.Infrastructure.PropertyCountByTenant>();
 
         // The Catalog DbContext doubles as the module's IUnitOfWork. Each module
         // saves its own context; we don't span transactions across schemas here.
