@@ -16,9 +16,11 @@ import {
   Settings,
   Sparkles,
   Mail,
+  Rocket,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils/cn';
+import { useMyTenant } from '@/hooks/useMyTenant';
 
 /** Admin nav per proposal §12.1. */
 type NavItem = {
@@ -46,6 +48,8 @@ const items: readonly NavItem[] = [
 
 export const AdminSidebar = () => {
   const pathname = usePathname();
+  const { data: tenant } = useMyTenant();
+  const showContinueSetup = tenant && !tenant.onboarding.isComplete;
   return (
     <aside className="hidden border-r border-border bg-muted/30 md:flex md:w-60 md:flex-col">
       <div className="flex h-16 items-center gap-2 border-b border-border px-4 font-semibold">
@@ -53,6 +57,16 @@ export const AdminSidebar = () => {
         VrBook Admin
       </div>
       <nav className="flex-1 space-y-0.5 p-2" aria-label="Admin">
+        {showContinueSetup && (
+          <Link
+            href="/admin/onboarding"
+            className="mb-1 flex items-center gap-3 rounded-md border border-brand-orange-200 bg-brand-orange-50 px-3 py-2 text-sm text-brand-maroon-700 hover:bg-brand-orange-100 dark:border-brand-maroon-700 dark:bg-brand-maroon-800/40 dark:text-brand-orange-100"
+            data-testid="continue-setup-link"
+          >
+            <Rocket className="h-4 w-4" aria-hidden />
+            Continue setup
+          </Link>
+        )}
         {items.map(({ href, label, icon: Icon, exact }) => {
           const active = exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
           return (
