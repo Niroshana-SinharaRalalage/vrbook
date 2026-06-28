@@ -21,7 +21,11 @@ public sealed class RlsCarveOutSchemaFactPack
     private static async Task<NpgsqlConnection?> TryOpenAsync()
     {
         var cs = PostgresConnString;
-        if (string.IsNullOrWhiteSpace(cs)) return null;
+        if (string.IsNullOrWhiteSpace(cs))
+        {
+            return null;
+        }
+
         var c = new NpgsqlConnection(cs);
         try { await c.OpenAsync(); }
         catch { await c.DisposeAsync(); return null; }
@@ -55,7 +59,10 @@ public sealed class RlsCarveOutSchemaFactPack
         string schema, string table)
     {
         await using var conn = await TryOpenAsync();
-        if (conn is null) return;
+        if (conn is null)
+        {
+            return;
+        }
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
@@ -74,7 +81,6 @@ public sealed class RlsCarveOutSchemaFactPack
             // 42P01 = undefined_table. Some carve-outs (amenities) only exist
             // after specific migrations; if the table isn't present the
             // carve-out invariant is vacuously satisfied.
-            return;
         }
     }
 }

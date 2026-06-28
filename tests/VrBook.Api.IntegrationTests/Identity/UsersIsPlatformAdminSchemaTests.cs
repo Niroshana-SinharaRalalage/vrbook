@@ -47,7 +47,10 @@ public sealed class UsersIsPlatformAdminSchemaTests
     public async Task Column_is_platform_admin_exists_with_boolean_not_null()
     {
         await using var conn = await TryOpenAsync();
-        if (conn is null) return; // CI-only
+        if (conn is null)
+        {
+            return; // CI-only
+        }
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
@@ -66,7 +69,10 @@ public sealed class UsersIsPlatformAdminSchemaTests
     public async Task Column_default_value_is_false()
     {
         await using var conn = await TryOpenAsync();
-        if (conn is null) return;
+        if (conn is null)
+        {
+            return;
+        }
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
@@ -84,7 +90,10 @@ public sealed class UsersIsPlatformAdminSchemaTests
     public async Task Partial_index_for_true_values_exists()
     {
         await using var conn = await TryOpenAsync();
-        if (conn is null) return;
+        if (conn is null)
+        {
+            return;
+        }
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """

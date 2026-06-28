@@ -56,17 +56,30 @@ public sealed class EndpointCoverageArchTest
             foreach (var m in c.GetMethods(
                 BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
             {
-                if (m.IsSpecialName) continue;
+                if (m.IsSpecialName)
+                {
+                    continue;
+                }
 
                 var hasHttpVerb = m.GetCustomAttributes<HttpMethodAttribute>(inherit: false).Any();
-                if (!hasHttpVerb) continue;
+                if (!hasHttpVerb)
+                {
+                    continue;
+                }
 
                 var methodLevelExempt = m.GetCustomAttribute<ExemptFromCrossTenantMatrixAttribute>(inherit: false) is not null;
                 var methodLevelAuth = m.GetCustomAttribute<AuthorizeAttribute>(inherit: false) is not null
                     || m.GetCustomAttribute<AllowAnonymousAttribute>(inherit: false) is not null;
 
-                if (methodLevelExempt) continue;
-                if (controllerLevelAuth || methodLevelAuth) continue;
+                if (methodLevelExempt)
+                {
+                    continue;
+                }
+
+                if (controllerLevelAuth || methodLevelAuth)
+                {
+                    continue;
+                }
 
                 offenders.Add($"{c.FullName}.{m.Name}");
             }

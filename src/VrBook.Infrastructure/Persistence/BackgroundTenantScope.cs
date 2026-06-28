@@ -46,7 +46,10 @@ public static class BackgroundTenantScope
         private bool _disposed;
         public void Dispose()
         {
-            if (_disposed) return;
+            if (_disposed)
+            {
+                return;
+            }
             _disposed = true;
             if (_stack.Value is { Count: > 0 } s)
             {

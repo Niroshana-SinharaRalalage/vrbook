@@ -39,7 +39,7 @@ public sealed class CrossTenantEndpointMatrix(TwoTenantApiFixture fixture)
 
         var resolvedRoute = cell.Route.Replace(
             "{tenantId}",
-            fixture.IdFor(cell.Target switch
+            TwoTenantApiFixture.IdFor(cell.Target switch
             {
                 RouteMatrix.TargetTenant.A => "A",
                 RouteMatrix.TargetTenant.B => "B",

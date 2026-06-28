@@ -7,11 +7,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
+using VrBook.Contracts.Enums;
 using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Booking;
 using VrBook.Modules.Booking.Infrastructure.Persistence;
 using VrBook.Modules.Catalog;
-using VrBook.Contracts.Enums;
 using VrBook.Modules.Catalog.Domain;
 using VrBook.Modules.Catalog.Infrastructure.Persistence;
 using VrBook.Modules.Identity;
@@ -256,7 +256,7 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
         return client;
     }
 
-    public Guid IdFor(string tenant) => tenant switch
+    public static Guid IdFor(string tenant) => tenant switch
     {
         "A" => TenantA,
         "B" => TenantB,

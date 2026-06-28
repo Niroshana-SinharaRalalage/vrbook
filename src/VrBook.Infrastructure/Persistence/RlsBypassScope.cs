@@ -44,7 +44,10 @@ public static class RlsBypassScope
         private bool _disposed;
         public void Dispose()
         {
-            if (_disposed) return;
+            if (_disposed)
+            {
+                return;
+            }
             _disposed = true;
             _depth.Value = Math.Max(0, _depth.Value - 1);
         }

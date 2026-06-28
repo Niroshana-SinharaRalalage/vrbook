@@ -52,7 +52,6 @@ public sealed class CrossTenantRejectionAuditFactPack(TwoTenantApiFixture fixtur
     [Fact]
     public async Task OwnerA_successful_call_to_own_tenant_records_NON_failed_audit_row()
     {
-        var initialFailedCount = await CountFailedAuditRowsAsync();
         var initialAllCount = await CountAllAuditRowsAsync();
 
         var clientA = fixture.CreateClientAs("OwnerA");
@@ -60,12 +59,11 @@ public sealed class CrossTenantRejectionAuditFactPack(TwoTenantApiFixture fixtur
             HttpMethod.Post,
             $"/api/v1/admin/tenants/{TwoTenantApiFixture.TenantA:D}/stripe/onboard");
         req.Content = System.Net.Http.Json.JsonContent.Create(new { country = "US" });
-        var resp = await clientA.SendAsync(req);
+        _ = await clientA.SendAsync(req);
 
         // The call passed the tenant gate. It may still 502 if the Stripe
         // sandbox isn't reachable, but the audit pipeline is independent
-        // of the Stripe call outcome.
-        var finalFailedCount = await CountFailedAuditRowsAsync();
+        // of the Stripe call outcome — the audit row lands either way.
         var finalAllCount = await CountAllAuditRowsAsync();
 
         // If the call succeeded, the success-suffix audit row landed.

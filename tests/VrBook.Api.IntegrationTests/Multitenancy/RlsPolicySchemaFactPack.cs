@@ -30,7 +30,11 @@ public sealed class RlsPolicySchemaFactPack
     private static async Task<NpgsqlConnection?> TryOpenAsync()
     {
         var cs = PostgresConnString;
-        if (string.IsNullOrWhiteSpace(cs)) return null;
+        if (string.IsNullOrWhiteSpace(cs))
+        {
+            return null;
+        }
+
         var c = new NpgsqlConnection(cs);
         try { await c.OpenAsync(); }
         catch { await c.DisposeAsync(); return null; }
@@ -66,11 +70,16 @@ public sealed class RlsPolicySchemaFactPack
 
     [Theory]
     [MemberData(nameof(ProtectedTables))]
+#pragma warning disable xUnit1026 // Theory MemberData provides 4 args; only schema+table are used by this fact.
     public async Task Table_has_row_level_security_enabled(
         string schema, string table, string _, bool __)
+#pragma warning restore xUnit1026
     {
         await using var conn = await TryOpenAsync();
-        if (conn is null) return;
+        if (conn is null)
+        {
+            return;
+        }
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
@@ -83,11 +92,16 @@ public sealed class RlsPolicySchemaFactPack
 
     [Theory]
     [MemberData(nameof(ProtectedTables))]
+#pragma warning disable xUnit1026
     public async Task Table_has_row_level_security_FORCED(
         string schema, string table, string _, bool __)
+#pragma warning restore xUnit1026
     {
         await using var conn = await TryOpenAsync();
-        if (conn is null) return;
+        if (conn is null)
+        {
+            return;
+        }
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
@@ -104,7 +118,10 @@ public sealed class RlsPolicySchemaFactPack
         string schema, string table, string expectedPolicy, bool _)
     {
         await using var conn = await TryOpenAsync();
-        if (conn is null) return;
+        if (conn is null)
+        {
+            return;
+        }
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
@@ -123,7 +140,10 @@ public sealed class RlsPolicySchemaFactPack
         string schema, string table, string expectedPolicy, bool nullable)
     {
         await using var conn = await TryOpenAsync();
-        if (conn is null) return;
+        if (conn is null)
+        {
+            return;
+        }
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"

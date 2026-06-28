@@ -50,7 +50,10 @@ public sealed class BypassedDbContext<TContext> : IAsyncDisposable, IDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_disposed) return;
+        if (_disposed)
+        {
+            return;
+        }
         _disposed = true;
         await Db.DisposeAsync().ConfigureAwait(false);
         _scope.Dispose();
@@ -58,7 +61,10 @@ public sealed class BypassedDbContext<TContext> : IAsyncDisposable, IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
+        if (_disposed)
+        {
+            return;
+        }
         _disposed = true;
         Db.Dispose();
         _scope.Dispose();
