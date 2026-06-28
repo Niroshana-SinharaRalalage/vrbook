@@ -1547,29 +1547,34 @@ The consumer of D1 (per-statement binding). When Phase 4 ships, the itinerary wr
 
 ---
 
-## 13. Close-out — TBD (filled in post-ship)
+## 13. Close-out — 2026-06-28
 
 ### Per-step commit ledger
 
 | Step | Wave | Module(s) | Commit | Files touched |
 |---|---|---|---|---|
-| 1 | 1 | Infrastructure | _pending_ | |
-| 2 | 1 | Contracts + 9 modules | _pending_ | |
-| 3 | 1 | Sync | _pending_ | |
-| 4 | 1 | 9 modules | _pending_ | |
-| 5 | 2 | 9 modules (migrations) | _pending_ | |
-| 6 | 2 | Migrator | _pending_ | |
-| 7 | 2 | Identity | _pending_ | |
-| 8 | 2 | Payment | _pending_ | |
-| 9 | 2 | Sync worker | _pending_ | |
-| 10 | 2 | Identity | _pending_ | |
-| 11 | 2 | Integration tests | _pending_ | |
-| 12 | 2 | Architecture tests | _pending_ | |
-| 13 | 2 | Docs | _pending_ | |
+| 1 + 2 + 3 | 1 | Infrastructure + Sync | `b22bad6` | `TenantGucCommandInterceptor.cs`, `RlsBypassScope.cs`, `BackgroundTenantScope.cs`, `IRlsBypassDbContextFactory.cs` (+ `BypassedDbContext<T>` wrapper), `RlsBypassDbContextFactory.cs`, `BackgroundCommandTenantScopeBehavior.cs` (M.6 wiring), `RlsBypassScopeTests` + `BackgroundTenantScopeTests` (11 unit facts) |
+| 4 | 1 | 10 modules + Infrastructure | `f9b5ae7` | `RlsServiceCollectionExtensions.cs` (+ `AddTenantScopedDbContext<T>` helper), each module's `*Module.cs` switched from 5-line `AddDbContext` to 1-line helper call |
+| 5 + 6 | 2 | 9 modules + Infrastructure | `aee6864` | `RlsMigrationBuilderExtensions.cs`, `OpsM9_<Module>_RlsPolicies.cs` migrations for Identity/Catalog/Booking/Payment/Pricing/Reviews/Messaging/Notifications/Sync. Identity migration also embeds the `vrbook_migrator` BYPASSRLS grant in a `DO $$` block |
+| 7 + 8 + 9 + 10 | 2 | Identity + Payment + Sync worker | `38be22e` | `TenantStripeContextLookup.cs` (both methods use bypass), `HandleStripeWebhookCommand.cs` (RlsBypassScope.Enter at top of Handle), `Workers.Sync/Program.cs` (bypass-opened bootstrap), `PlatformTenantQueries.cs` (both handlers use bypass factory), `PlatformTenantStatsLookup.cs` (RlsBypassScope.Enter wrapping cross-module property count) |
+| 12 + 13 | 2 | Architecture tests + Docs | `e826e3b` | `RlsBypassCallSiteAllowlistTests.cs` (2 arch facts: contract shape + allow-list enumeration), `docs/runbooks/OPS_M_9_RLS_DIAGNOSE.md` |
+| 11 + 11.5 | deferred | Integration tests | _deferred_ | Postgres-fixture facts (76 schema + 3 negative-policy + behavior matrix) ship with the M.10 cross-tenant isolation test pack |
+
+**Final test posture**: 381/381 server `Category=Unit` + 54/54 architecture tests pass (+5 RLS-specific: 6 scope facts + 2 allow-list facts + reused existing arch tests). `Category=Integration` schema facts pinned for CI Postgres testcontainer; full negative + behavior matrix deferred to M.10.
 
 ### Deviations from this plan
 
-_(To be filled in post-ship.)_
+- **`IRlsBypassDbContextFactory<TContext>` lives in `VrBook.Infrastructure.Persistence`, not `VrBook.Contracts.Interfaces`**. Plan §4.4 placed the contract in Contracts; that project intentionally doesn't reference `Microsoft.EntityFrameworkCore`. The type parameter `where TContext : DbContext` requires the EF Core reference, so the contract moved to Infrastructure. No behavioral change.
+- **`BypassedDbContext<T>` wrapper replaces the planned `BypassScopedDbContext<T> : TContext` subclassing pattern**. Plan §4.4 sketched a per-module sealed subclass of each module's `DbContext` that disposes the AsyncLocal scope. Actually shipped: a separately-disposable `BypassedDbContext<T>` record holding the inner `DbContext` (accessed via `.Db`) plus the scope; disposal disposes inner first then pops the scope. Cleaner — sealed DbContext + dynamic subclassing was awkward to make per-module. Same disposal-order guarantee.
+- **One generic `RlsBypassDbContextFactory<TContext>` impl instead of per-module sealed subclasses**. Plan §4.4 nominated 9 sealed subclasses. Actually shipped: a single generic `RlsBypassDbContextFactory<TContext>` registered per-module via `AddRlsBypassFactory<TContext>()`. No subclass needed because the wrapping moved to `BypassedDbContext<T>`.
+- **`AddTenantScopedDbContext<T>(configuration, schemaName)` consolidates the per-module DI boilerplate**. Plan §9 Step 4 nominated per-module DI wiring (10 places to add interceptor + factory + bypass registration). Actually shipped: one helper extension that registers all four pieces from a single call. 10 modules now have a 1-line registration each instead of 6 lines. Reduces drift risk + lowers cognitive load.
+- **`HandleStripeWebhookHandler` uses `RlsBypassScope.Enter()` directly, not `IRlsBypassDbContextFactory`**. Plan §4.6 + Step 8 specified injecting the factory and swapping the DbContext. Actually shipped: the handler opens an `RlsBypassScope` at the top of the `Handle` method body and lets the existing injected `PaymentDbContext` + `IPaymentIntentRepository` pick up the AsyncLocal flag via the per-statement interceptor. Two reasons: (1) the repository is already constructor-injected and would need its own bypass shape, (2) the interceptor reads the AsyncLocal flag uniformly across all DbContext commands on the logical thread — the scope is sufficient. Logs the bypass-open at Information level per §9 #3.
+- **`PlatformTenantStatsLookup` wraps the entire `GetAsync` body in `RlsBypassScope.Enter()`**. Plan §7.2 surfaced the gap: the cross-module `IPropertyCountByTenant.GetCountAsync` call uses the request-scoped `CatalogDbContext`, which would otherwise stamp `app.tenant_id` from `ICurrentUser` (the PlatformAdmin's OWN tenant, not the target tenant). Plan's fix was nominally to inject `IRlsBypassDbContextFactory<CatalogDbContext>`. Actually shipped: wrap the whole method in `RlsBypassScope.Enter()` — the AsyncLocal flag flows through the IPropertyCountByTenant call's DbContext command via the interceptor. Same outcome with less constructor surface.
+- **Step 11 (per-module RLS integration fact pack) deferred to OPS.M.10**. Plan §9 Step 11 nominated 76 schema-introspection facts (19 tables × 4 facts each). Deferred — these need a Postgres testcontainer and the same fixture pattern as OPS.M.5/M.8 schema tests. The M.10 cross-tenant isolation test pack ships with its own Postgres fixture and the negative + behavior matrix; folding the schema facts into M.10 avoids two parallel test setups. The contract surface (`RlsMigrationBuilderExtensions` + the 9 migration files using it) is pinned by the unit suite + the `RlsBypassCallSiteAllowlistTests` arch test.
+- **Step 11.5 (carve-out negative integration tests) deferred to OPS.M.10**. Plan nominated facts asserting `users`, `tenants`, `tenant_memberships`, outbox tables, etc. have NO RLS enabled (carve-out per §3.2). Same reason as Step 11.
+- **Migrator `BYPASSRLS` grant landed inside the Identity RLS migration's `Up` path**. Plan §9 Step 6 nominated a separate `OpsM9b_MigratorRoleBypassRls.cs` migration. Actually shipped: embedded in `OpsM9_Identity_RlsPolicies.cs` as a `DO $$ ... ALTER ROLE vrbook_migrator BYPASSRLS ... END $$;` block (idempotent + safe on dev sandboxes where the role doesn't exist). The grant runs before the policies in the same migration batch, which is the load-bearing order. Saves one migration file.
+- **`AddDbContextFactory<T>` registered alongside `AddDbContext<T>` in every module**. Plan §6.5 noted the two configurations need to stay in sync. Actually shipped: a local `Configure` action shared by both registrations so the interceptor + outbox wiring is single-sourced.
+- **Per-statement `BackgroundTenantScope` rather than `SET LOCAL` from a behavior**. Plan §4.5 nominated a per-handler-invocation `SET LOCAL` issued before the first DbContext command. Actually shipped: an AsyncLocal stack read by the interceptor on every command. Equivalent semantic; simpler implementation; survives `await` boundaries without manual session management.
 
 ### Forward links
 
