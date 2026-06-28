@@ -3,8 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Enums;
 using VrBook.Contracts.Interfaces;
+using VrBook.Domain.Common;
 using VrBook.Modules.Booking.Domain;
 using VrBook.Modules.Booking.Infrastructure.Persistence;
+using VrBook.Modules.Catalog.Application.Properties.Queries;
 
 namespace VrBook.Modules.Booking.Application.Queries;
 
@@ -23,11 +25,32 @@ public sealed record GetPropertyCalendarQuery(
     DateOnly To) : IRequest<PropertyCalendarDto>;
 
 internal sealed class GetPropertyCalendarHandler(
+    ICurrentUser currentUser,
+    IMediator mediator,
     BookingDbContext db,
     IExternalChannelConflictChecker externalChannel) : IRequestHandler<GetPropertyCalendarQuery, PropertyCalendarDto>
 {
     public async Task<PropertyCalendarDto> Handle(GetPropertyCalendarQuery request, CancellationToken cancellationToken)
     {
+        // OPS.M.10.2 C2 (#12 High) — add the same auth gate the sibling
+        // ListAvailabilityBlocksHandler:23-34 carries. Previously this
+        // handler had ZERO app-layer authorization check; it relied solely
+        // on M.9 RLS to filter bookings/blocks. The IExternalChannelConflictChecker
+        // call still runs and may leak conflicts for cross-tenant property
+        // ids depending on its internal scoping.
+        if (currentUser.UserId is null)
+        {
+            throw new ForbiddenException("Sign-in required.");
+        }
+
+        var property = await mediator.Send(new GetPropertyByIdQuery(request.PropertyId), cancellationToken)
+            ?? throw new NotFoundException("Property", request.PropertyId);
+
+        if (property.OwnerUserId != currentUser.UserId.Value && !currentUser.IsAdmin)
+        {
+            throw new ForbiddenException("Only the property owner can view the calendar.");
+        }
+
         // Direct bookings overlapping the window. Anything not Cancelled/Rejected
         // (matches the conflict-check rule).
         var bookings = await db.Bookings
