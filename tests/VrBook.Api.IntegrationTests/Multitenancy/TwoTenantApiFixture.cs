@@ -311,6 +311,28 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+
+        // OPS.M.10.2 F0''' (architect-prescribed) — the env var
+        // `ConnectionStrings__Postgres` exported by cd-staging-api.yml:78
+        // (`Host=localhost;Port=5432;Database=vrbook;...` → the CI
+        // service-container Postgres) wins over our `ConfigureAppConfiguration`
+        // in-memory adds because `WebApplication.CreateBuilder` (Program.cs:30)
+        // appends `AddEnvironmentVariables` LAST in its app-config pipeline.
+        //
+        // F0' diagnostic CI run 28336563463 captured both connection strings:
+        //   fixture (Testcontainer): Host=127.0.0.1;Port=32771;Database=vrbook_m10
+        //   seed-side host:          Host=localhost;Port=5432;Database=vrbook
+        // → match=False → seed-side `CatalogDbContext` connects to the
+        // CI service container which has zero migrations applied →
+        // `42P01: relation "catalog.outbox_messages" does not exist`.
+        //
+        // `UseSetting` writes to host-config (read FIRST in the
+        // `WebApplication.CreateBuilder` pipeline, higher precedence than
+        // `AddEnvironmentVariables`) and seeds the same key into the app
+        // config root. This is the WebApplicationFactory-supported
+        // override pattern for in-test connection strings in .NET 8.
+        builder.UseSetting("ConnectionStrings:Postgres", ConnectionString);
+
         builder.ConfigureAppConfiguration((_, cfg) =>
         {
             cfg.AddInMemoryCollection(new Dictionary<string, string?>
