@@ -126,7 +126,15 @@ public sealed class StripeOnboardingCommandsTests
 
     private IdentityDbContext NewDb()
     {
+        // OPS.M.10.2 F1 — M.9 Step 4 added `ICurrentUser` + `IDateTimeProvider`
+        // to `BaseDbContext`'s ctor (for app.tenant_id GUC stamping). The
+        // wider DI graph and `AddIdentityDbContextForMigrator` register the
+        // stubs; this hand-rolled fixture DI was missed and resolved with
+        // `InvalidOperationException: Unable to resolve service for type
+        // 'ICurrentUser'`. Register the same anonymous stubs the migrator uses.
         var services = new ServiceCollection();
+        services.AddSingleton<IDateTimeProvider, VrBook.Infrastructure.Common.SystemClock>();
+        services.AddSingleton<ICurrentUser, VrBook.Infrastructure.Common.AnonymousCurrentUser>();
         services.AddDbContext<IdentityDbContext>(opts => opts.UseNpgsql(_fixture.ConnectionString));
         var sp = services.BuildServiceProvider();
         return sp.GetRequiredService<IdentityDbContext>();

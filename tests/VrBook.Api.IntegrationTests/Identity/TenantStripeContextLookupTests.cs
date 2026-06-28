@@ -97,7 +97,12 @@ public sealed class TenantStripeContextLookupTests
 
     private IdentityDbContext NewIdentityDb()
     {
+        // OPS.M.10.2 F1 — see StripeOnboardingCommandsTests.NewDb for context.
+        // M.9 Step 4 added ICurrentUser + IDateTimeProvider to BaseDbContext's
+        // ctor; the hand-rolled DI here had to be updated to register them.
         var services = new ServiceCollection();
+        services.AddSingleton<IDateTimeProvider, VrBook.Infrastructure.Common.SystemClock>();
+        services.AddSingleton<ICurrentUser, VrBook.Infrastructure.Common.AnonymousCurrentUser>();
         services.AddDbContext<IdentityDbContext>(opts =>
             opts.UseNpgsql(_fixture.ConnectionString));
         var sp = services.BuildServiceProvider();
