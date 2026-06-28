@@ -66,7 +66,13 @@ public static class RlsServiceCollectionExtensions
                 .UseOutbox(sp)
                 .AddInterceptors(sp.GetRequiredService<TenantGucCommandInterceptor>());
         services.AddDbContext<TContext>(Configure);
-        services.AddDbContextFactory<TContext>(Configure);
+        // OPS.M.9 §4.4 CI fix — AddDbContextFactory<T> defaults to Singleton,
+        // but the shared Configure action consumes scoped services (the
+        // TenantGucCommandInterceptor + the outbox tools). Without the
+        // explicit Scoped lifetime, ASP.NET's ValidateScopes=true catches
+        // "Cannot consume scoped service from singleton" and fails startup
+        // in CI. Pass ServiceLifetime.Scoped to align the lifetimes.
+        services.AddDbContextFactory<TContext>(Configure, ServiceLifetime.Scoped);
         services.AddRlsBypassFactory<TContext>();
         return services;
     }
