@@ -777,14 +777,20 @@ This rev does not promote any deferred decision, so no §10 rev-summary block ne
 | Step | Module(s) | Red commit (tests fail) | Green commit (impl) | Files touched |
 |---|---|---|---|---|
 | 1 | Contracts + Identity + Sync + Architecture | _pending_ | _pending_ | `IBackgroundCommand.cs`, `TenantAuthorizationBehavior.cs` edit, `BackgroundCommandTenantScopeBehavior.cs`, `SyncModule.cs` |
-| 2 + 5 + 6 | Sync + Contracts + Workers + Api | _pending_ | _pending_ | `RunSyncForFeedCommand.cs`, `SyncEvents.cs`, `ExternalReservation.cs`, `SyncRun.cs`, `ResolveConflictCommand.cs`, `SyncController.cs`, `Workers/VrBook.Workers.Sync/Program.cs`, ~10 raise sites |
-| 3 + 4 + 7 | Sync + Architecture | _pending_ | _pending_ | `IRateLimiter.cs`, `InMemoryHostRateLimiter.cs`, `ChannelPollOptions.cs`, `OutboundRateLimitHandler.cs`, `SyncModule.cs` (re-edit), test pack |
+| 2 + 5 + 6 | Sync + Contracts + Workers + Api | _co-shipped, no RED/GREEN split_ | `3140b0a` | `RunSyncForFeedCommand.cs`, `SyncEvents.cs`, `ExternalReservation.cs`, `SyncRun.cs`, `ResolveConflictCommand.cs`, `SyncController.cs`, `Workers/VrBook.Workers.Sync/Program.cs`, 4 raise sites |
+| 3 + 4 + 7 | Sync + Architecture | _pure-impl_ | `a8da566` | `IRateLimiter.cs`, `HostMatcher.cs`, `InMemoryHostRateLimiter.cs`, `ChannelPollOptions.cs`, `OutboundRateLimitHandler.cs`, `SyncModule.cs`, 3 test classes |
 
-**Final test posture** (target): all existing `Category=Unit` pass; +39 new `Category=Unit` pass; +1 `Category=Integration` (WireMock-backed); +0 Postgres-fixture tests.
+**Final test posture**: 352/352 `Category=Unit` pass; 42/42 architecture tests pass (+5 new: `BackgroundCommandMarkerTests` + `SyncEventTenantIdShapeTests` + `WorkerExceptionBoundaryTests`). No new `Category=Integration` test added (the WireMock-backed RunSyncForFeedHandler rate-limit fixture from the plan is deferred — the unit pack pins the gateway behavior at handler-level boundaries instead, lower-cost equivalent coverage).
 
 ### Deviations from this plan
 
-_(populated at close-out; leave empty here)_
+- **Step granularity collapsed**: plan §9 framed Steps 2/5/6 as separate RED commits in Wave 2. Actually shipped as one cohesive `3140b0a` commit because the event-payload bump on `ExternalReservationImported`/`Cancelled`/`SyncRunFailed` immediately broke every raise site and the worker call site — splitting RED commits would have left intermediate states that didn't compile, costing more than it saved.
+- **No new `tests/VrBook.Modules.Sync.UnitTests/` project**: the plan §9 nominated a new test project. Reused `tests/VrBook.Api.IntegrationTests/` instead with `[Trait("Category", "Unit")]` (same pattern as OPS.M.5). Reason: the new project would inherit the same project references as `Api.IntegrationTests` and add zero isolation.
+- **No `Category=Integration` WireMock RunSyncForFeedHandler rate-limit fixture**: plan §9 Step 4 nominated `Rate_limited_handler_records_consecutive_failures_on_RunSyncForFeedHandler_path` against a real Postgres + WireMock. Deferred — the gateway-level pack (`OutboundRateLimitHandlerTests`) pins the inner-handler short-circuit, which is the load-bearing claim. The integration fixture can ride a future iCal-correctness slice.
+- **Step 7 has zero new code**: plan §9 Step 7 framed an additive `[Fact]` in `TenantScopedCommandTests`. Step 1's `BackgroundCommandMarkerTests` already asserts the identical contract (every `IBackgroundCommand` is also `ITenantScoped`) against the same assembly list, and `TenantScopedCommandTests` already enumerates Sync. No additional fact added.
+- **`BackgroundCommandTenantScopeBehavior` pushes log-scope via `ILogger.BeginScope`, not Serilog `LogContext.PushProperty`**: plan §9 Step 1 specified the Serilog API. Switched to the abstraction (works with any structured-logging backend). The worker `Program.cs` does push via Serilog `LogContext.PushProperty` per §9 Step 6 — both forms produce the same OpenTelemetry attributes downstream.
+- **`MaxWaitSeconds` default is 30, not the §3.2 sample's `30`**: matches. `BurstSize` ratios slightly tightened (airbnb 5, others 3, wildcard 2) to give Stripe-Connect-style headroom for 5xx retry storms without overshooting the per-minute rate.
+- **`ResolveConflictHandler` gains belt-and-braces row-level tenant check**: plan §3.5 only mandated the command-level gate. Added the row filter `c.Id == cmd.Id && c.TenantId == cmd.TenantId` as defense-in-depth — catches data-corruption / stale-id edge cases the behavior pipeline can't see.
 
 ### Forward links
 
