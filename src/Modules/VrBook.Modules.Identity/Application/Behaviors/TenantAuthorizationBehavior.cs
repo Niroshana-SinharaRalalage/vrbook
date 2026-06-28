@@ -43,6 +43,14 @@ public sealed class TenantAuthorizationBehavior<TRequest, TResponse>(
             return await next();
         }
 
+        // OPS.M.6 §3.1 (D1) — background-worker commands have no ICurrentUser.
+        // The worker stamps TenantId from the row it's processing;
+        // BackgroundCommandTenantScopeBehavior asserts non-empty downstream.
+        if (request is IBackgroundCommand)
+        {
+            return await next();
+        }
+
         if (!currentUser.IsAuthenticated)
         {
             throw new ForbiddenException("Sign-in required.");

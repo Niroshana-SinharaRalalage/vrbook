@@ -1,3 +1,4 @@
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -5,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
 using VrBook.Infrastructure.Outbox;
+using VrBook.Modules.Sync.Application.Behaviors;
 using VrBook.Modules.Sync.Infrastructure;
 using VrBook.Modules.Sync.Infrastructure.Channels;
 using VrBook.Modules.Sync.Infrastructure.Persistence;
@@ -43,6 +45,13 @@ public sealed class SyncModule : IModuleRegistration
         services.AddScoped<IExternalChannel, AirBnBICalChannel>();
 
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<SyncDbContext>());
+
+        // OPS.M.6 §3.1 (D1) — paired with TenantAuthorizationBehavior's
+        // early-return for IBackgroundCommand. Asserts non-empty TenantId on
+        // worker-origin requests + pushes tenant_id into the logging scope.
+        services.AddTransient(
+            typeof(IPipelineBehavior<,>),
+            typeof(BackgroundCommandTenantScopeBehavior<,>));
 
         services.AddModuleAssembly(typeof(SyncModule).Assembly);
         return services;
