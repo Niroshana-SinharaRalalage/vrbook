@@ -61,11 +61,11 @@ public sealed class CarveOutAppLayerTests(TwoTenantApiFixture fixture)
     // pin the current behavior with an EXPLICIT failure assertion so the
     // gap is visible in CI and the fix lands deliberately.
 
-    [Fact(Skip = "OPS.M.10 known leak — SearchUsersHandler doesn't filter by " +
-                 "tenant_memberships join. Fix tracked as Slice OPS.M.10.1 follow-up: " +
-                 "either (a) add tenant_membership filter to UserRepository.SearchAsync, " +
-                 "or (b) restrict the /api/v1/admin/users endpoint to PlatformAdmin. " +
-                 "Test unskipped on the fix PR.")]
+    // OPS.M.10.2 C1 — formerly [Skip]'d (M.10 Wave 2 known leak); now an
+    // active regression-stake driver. SearchUsersHandler tenant-scopes via
+    // tenant_memberships join (or PlatformAdmin platform-wide).
+
+    [Fact]
     public async Task SearchUsersQuery_OwnerA_must_not_enumerate_OwnerB_user()
     {
         var clientA = fixture.CreateClientAs("OwnerA");
@@ -74,8 +74,33 @@ public sealed class CarveOutAppLayerTests(TwoTenantApiFixture fixture)
         var dto = await resp.Content.ReadFromJsonAsync<OffsetPagedResult<UserDto>>();
         dto.Should().NotBeNull();
         dto!.Items.Should().NotContain(u => u.Email.Contains("owner-b@", StringComparison.OrdinalIgnoreCase),
-            because: "M.9 §3.2 carve-out promised app-layer prevents cross-tenant user enumeration. " +
-                     "Until the fix lands, this assertion is the regression-stake driver.");
+            because: "OPS.M.10.2 C1 — OwnerA's tenant_memberships join excludes OwnerB " +
+                     "(who belongs only to TenantB).");
+    }
+
+    [Fact]
+    public async Task SearchUsersQuery_OwnerA_finds_own_email_in_results()
+    {
+        var clientA = fixture.CreateClientAs("OwnerA");
+        var resp = await clientA.GetAsync("/api/v1/admin/users?q=owner-a");
+        resp.EnsureSuccessStatusCode();
+        var dto = await resp.Content.ReadFromJsonAsync<OffsetPagedResult<UserDto>>();
+        dto.Should().NotBeNull();
+        dto!.Items.Should().Contain(u => u.Email.Contains("owner-a@", StringComparison.OrdinalIgnoreCase),
+            because: "OPS.M.10.2 C1 positive case — the tenant scope must INCLUDE the caller's own user.");
+    }
+
+    [Fact]
+    public async Task SearchUsersQuery_PlatformAdmin_can_enumerate_users_across_all_tenants()
+    {
+        var clientAdmin = fixture.CreateClientAs("PlatformAdmin");
+        var resp = await clientAdmin.GetAsync("/api/v1/admin/users?q=owner");
+        resp.EnsureSuccessStatusCode();
+        var dto = await resp.Content.ReadFromJsonAsync<OffsetPagedResult<UserDto>>();
+        dto.Should().NotBeNull();
+        dto!.Items.Should().Contain(u => u.Email.Contains("owner-a@", StringComparison.OrdinalIgnoreCase));
+        dto.Items.Should().Contain(u => u.Email.Contains("owner-b@", StringComparison.OrdinalIgnoreCase),
+            because: "OPS.M.10.2 C1 PlatformAdmin branch — scope=null returns the platform-wide list.");
     }
 
     // ====================================================================

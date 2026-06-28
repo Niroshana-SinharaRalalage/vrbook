@@ -15,16 +15,9 @@ internal sealed class UserRepository(IdentityDbContext db) : IUserRepository
         db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == id, ct);
 
     public async Task<IReadOnlyList<User>> SearchAsync(
-        string? q, int skip, int take, CancellationToken ct = default)
+        string? q, Guid? tenantId, int skip, int take, CancellationToken ct = default)
     {
-        var query = db.Users.AsQueryable();
-        if (!string.IsNullOrWhiteSpace(q))
-        {
-            var like = $"%{q.Trim().ToLowerInvariant()}%";
-            query = query.Where(u =>
-                EF.Functions.ILike(u.DisplayName, like) ||
-                EF.Functions.ILike(((string)(object)u.Email), like));
-        }
+        var query = ApplyScope(BuildQ(q), tenantId);
         return await query
             .OrderBy(u => u.DisplayName)
             .Skip(skip)
@@ -32,7 +25,10 @@ internal sealed class UserRepository(IdentityDbContext db) : IUserRepository
             .ToListAsync(ct);
     }
 
-    public Task<int> CountAsync(string? q, CancellationToken ct = default)
+    public Task<int> CountAsync(string? q, Guid? tenantId, CancellationToken ct = default) =>
+        ApplyScope(BuildQ(q), tenantId).CountAsync(ct);
+
+    private IQueryable<User> BuildQ(string? q)
     {
         var query = db.Users.AsQueryable();
         if (!string.IsNullOrWhiteSpace(q))
@@ -42,7 +38,25 @@ internal sealed class UserRepository(IdentityDbContext db) : IUserRepository
                 EF.Functions.ILike(u.DisplayName, like) ||
                 EF.Functions.ILike(((string)(object)u.Email), like));
         }
-        return query.CountAsync(ct);
+        return query;
+    }
+
+    /// <summary>
+    /// OPS.M.10.2 C1 (#1 Critical) — tenant-membership filter. Returns only
+    /// users with an active <c>tenant_memberships</c> row in
+    /// <paramref name="tenantId"/>. A null tenantId means "platform-wide" —
+    /// the caller (handler) is responsible for the PlatformAdmin role check.
+    /// </summary>
+    private IQueryable<User> ApplyScope(IQueryable<User> q, Guid? tenantId)
+    {
+        if (tenantId is null)
+        {
+            return q;
+        }
+        var scoped = tenantId.Value;
+        return q.Where(u =>
+            db.Set<TenantMembership>().Any(m =>
+                m.UserId == u.Id && m.TenantId == scoped && m.DeletedAt == null));
     }
 
     public async Task AddAsync(User user, CancellationToken ct = default) =>
