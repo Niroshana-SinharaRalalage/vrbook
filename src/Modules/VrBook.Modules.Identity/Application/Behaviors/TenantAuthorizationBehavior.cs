@@ -76,15 +76,17 @@ public sealed class TenantAuthorizationBehavior<TRequest, TResponse>(
     }
 
     /// <summary>
-    /// Slice OPS.M.4 ships this seam dormant per Q1 resolution. Slice OPS.M.8
-    /// will replace this body with a real claim check (<c>user.HasRole("PlatformAdmin")</c>)
-    /// once <c>users.is_platform_admin</c> flows into <see cref="ICurrentUser"/>.
-    /// Until then no user bypasses; the parameter is referenced so the contract
-    /// is locked at the call site.
+    /// Slice OPS.M.8 §3.3 (D3) — bypass surface. Reads
+    /// <see cref="ICurrentUser.IsPlatformAdmin"/>, which the
+    /// <c>UserProvisioningMiddleware</c> materializes from
+    /// <c>identity.users.is_platform_admin</c> per ADR-0014 DB-wins
+    /// precedence. The bypass covers every <c>ITenantScoped</c> command —
+    /// the operator can write across any tenant — and is audited by the
+    /// existing <c>AuditLogBehavior</c> per §3.6 (D6).
     /// </summary>
     private static bool IsPlatformAdmin(ICurrentUser user)
     {
         ArgumentNullException.ThrowIfNull(user);
-        return false;
+        return user.IsPlatformAdmin;
     }
 }

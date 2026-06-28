@@ -19,6 +19,19 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
     public const string AppUserIdItemKey = "VrBook:UserId";
     public const string OwnerClaim = "extension_isOwner";
     public const string AdminClaim = "extension_isAdmin";
+    /// <summary>
+    /// OPS.M.8 §3.2 (D2) — <c>HttpContext.Items</c> key holding the
+    /// DB-resolved <c>is_platform_admin</c> bit. Stamped by
+    /// <c>UserProvisioningMiddleware</c> on first hit per request; nullable
+    /// because anonymous + worker requests don't carry the flag.
+    /// </summary>
+    public const string PlatformAdminItemKey = "VrBook:IsPlatformAdmin";
+    /// <summary>
+    /// OPS.M.8 §3.2 — role string used for the platform-admin role-claim
+    /// shape (<c>[Authorize(Roles="PlatformAdmin")]</c>). The middleware also
+    /// adds this claim so <c>HasRole("PlatformAdmin")</c> works for free.
+    /// </summary>
+    public const string PlatformAdminRole = "PlatformAdmin";
 
     /// <summary>
     /// Claim type carrying the caller's primary-tenant id (per OPS.M.2 /
@@ -61,6 +74,29 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
 
     public bool IsOwner => ReadBoolClaim(OwnerClaim) || HasRole("Owner");
     public bool IsAdmin => ReadBoolClaim(AdminClaim) || HasRole("Admin");
+
+    /// <summary>
+    /// OPS.M.8 §3.2 — DB-authoritative read. Prefers the
+    /// <c>HttpContext.Items</c> bit stamped by the middleware (one DB query
+    /// per request); falls back to the role claim for the legacy /
+    /// pre-middleware path. Never reads the Entra app-role claim alone.
+    /// </summary>
+    public bool IsPlatformAdmin
+    {
+        get
+        {
+            var ctx = accessor.HttpContext;
+            if (ctx is null)
+            {
+                return false;
+            }
+            if (ctx.Items.TryGetValue(PlatformAdminItemKey, out var v) && v is bool b)
+            {
+                return b;
+            }
+            return HasRole(PlatformAdminRole);
+        }
+    }
 
     public Guid? TenantId
     {

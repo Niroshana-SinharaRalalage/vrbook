@@ -62,17 +62,34 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<Use
                     ctx.Items[HttpCurrentUser.AppUserIdItemKey] = userId;
 
                     // OPS.M.2 — DB-wins per-tenant claim enrichment.
+                    // OPS.M.8 §3.2 (D2) — also read the user's is_platform_admin
+                    // bit on the same round-trip; stamp it onto HttpContext.Items
+                    // and add a "PlatformAdmin" role claim so [Authorize] works.
                     var memberships = await db.Set<TenantMembership>()
                         .Where(m => m.UserId == userId && m.DeletedAt == null)
                         .Select(m => new { m.TenantId, m.Role, m.IsPrimary })
                         .ToListAsync(ctx.RequestAborted);
 
-                    if (memberships.Count > 0 && ctx.User.Identity is ClaimsIdentity primaryIdentity)
+                    var isPlatformAdmin = await db.Users
+                        .Where(u => u.Id == userId)
+                        .Select(u => u.IsPlatformAdmin)
+                        .FirstOrDefaultAsync(ctx.RequestAborted);
+
+                    ctx.Items[HttpCurrentUser.PlatformAdminItemKey] = isPlatformAdmin;
+
+                    if ((memberships.Count > 0 || isPlatformAdmin)
+                        && ctx.User.Identity is ClaimsIdentity primaryIdentity)
                     {
                         foreach (var m in memberships)
                         {
                             // Duplicate role-name claims across tenants are OK — IsInRole is set membership.
                             primaryIdentity.AddClaim(new Claim(ClaimTypes.Role, m.Role));
+                        }
+
+                        if (isPlatformAdmin)
+                        {
+                            primaryIdentity.AddClaim(new Claim(
+                                ClaimTypes.Role, HttpCurrentUser.PlatformAdminRole));
                         }
 
                         var primary = memberships.FirstOrDefault(m => m.IsPrimary);

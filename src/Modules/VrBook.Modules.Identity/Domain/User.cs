@@ -18,6 +18,13 @@ public sealed class User : AggregateRoot
     public PhoneNumber Phone { get; private set; } = new(string.Empty);
     public bool IsOwner { get; private set; }
     public bool IsAdmin { get; private set; }
+    /// <summary>
+    /// OPS.M.8 §3.1 (D1) — DB-authoritative platform-admin flag. The
+    /// <c>TenantAuthorizationBehavior</c> reads this via the DB-wins
+    /// precedence per ADR-0014 (OPS.M.2). Granted/revoked exclusively by
+    /// ops Powershell <c>vrbook-admin promote</c> per §3.8 (D8).
+    /// </summary>
+    public bool IsPlatformAdmin { get; private set; }
     public bool EmailVerified { get; private set; }
     public DateTimeOffset? LastLoginAt { get; private set; }
 
@@ -107,6 +114,34 @@ public sealed class User : AggregateRoot
     public void RevokeOwner() => IsOwner = false;
     public void GrantAdmin() => IsAdmin = true;
     public void RevokeAdmin() => IsAdmin = false;
+
+    /// <summary>
+    /// OPS.M.8 §3.1 + §3.8 — promote a user to platform-admin. Idempotent
+    /// (re-granting is a no-op). Raises <see cref="UserPlatformAdminGranted"/>
+    /// for the audit trail.
+    /// </summary>
+    public void GrantPlatformAdmin(Guid actorId)
+    {
+        if (IsPlatformAdmin)
+        {
+            return;
+        }
+        IsPlatformAdmin = true;
+        Raise(new UserPlatformAdminGranted(Id, actorId));
+    }
+
+    /// <summary>
+    /// OPS.M.8 §3.1 + §3.8 — revoke platform-admin. Idempotent.
+    /// </summary>
+    public void RevokePlatformAdmin(Guid actorId)
+    {
+        if (!IsPlatformAdmin)
+        {
+            return;
+        }
+        IsPlatformAdmin = false;
+        Raise(new UserPlatformAdminRevoked(Id, actorId));
+    }
 
     public void Deactivate(string reason, Guid actorId)
     {

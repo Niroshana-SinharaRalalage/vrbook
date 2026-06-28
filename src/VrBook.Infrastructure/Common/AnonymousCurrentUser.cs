@@ -14,6 +14,7 @@ public sealed class AnonymousCurrentUser : ICurrentUser
     public bool IsAuthenticated => false;
     public bool IsOwner => false;
     public bool IsAdmin => false;
+    public bool IsPlatformAdmin => false;
     public Guid? TenantId => null;
     public bool HasRole(string role) => false;
     public bool HasTenantRole(Guid tenantId, string role) => false;

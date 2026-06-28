@@ -34,6 +34,14 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         b.Property(u => u.IsOwner).HasColumnName("is_owner").HasDefaultValue(false);
         b.Property(u => u.IsAdmin).HasColumnName("is_admin").HasDefaultValue(false);
+        // OPS.M.8 §3.1 (D1) — partial index "WHERE is_platform_admin = true"
+        // keeps the index tiny because the population is small (low single
+        // digits across the whole platform). Lookup speed at startup matters
+        // because the value flows into every authenticated request.
+        b.Property(u => u.IsPlatformAdmin).HasColumnName("is_platform_admin").HasDefaultValue(false);
+        b.HasIndex(u => u.IsPlatformAdmin)
+            .HasDatabaseName("ix_users_is_platform_admin")
+            .HasFilter("\"is_platform_admin\" = true");
         b.Property(u => u.EmailVerified).HasColumnName("email_verified").HasDefaultValue(false);
         b.Property(u => u.LastLoginAt).HasColumnName("last_login_at");
 
