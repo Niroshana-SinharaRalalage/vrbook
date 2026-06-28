@@ -2,22 +2,25 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using VrBook.Modules.Notifications.Infrastructure.Persistence;
+using VrBook.Modules.Reviews.Infrastructure.Persistence;
 
 #nullable disable
 
-namespace VrBook.Modules.Notifications.Infrastructure.Persistence.Migrations
+namespace VrBook.Modules.Reviews.Infrastructure.Persistence.Migrations
 {
-    [DbContext(typeof(NotificationsDbContext))]
-    partial class NotificationsDbContextModelSnapshot : ModelSnapshot
+    [DbContext(typeof(ReviewsDbContext))]
+    [Migration("20260628133246_OpsM9_Reviews_RlsPolicies")]
+    partial class OpsM9_Reviews_RlsPolicies
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("notifications")
+                .HasDefaultSchema("reviews")
                 .HasAnnotation("ProductVersion", "8.0.10")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -73,14 +76,23 @@ namespace VrBook.Modules.Notifications.Infrastructure.Persistence.Migrations
                     b.HasIndex("EventId")
                         .IsUnique();
 
-                    b.ToTable("outbox_messages", "notifications");
+                    b.ToTable("outbox_messages", "reviews");
                 });
 
-            modelBuilder.Entity("VrBook.Modules.Notifications.Domain.NotificationLog", b =>
+            modelBuilder.Entity("VrBook.Modules.Reviews.Domain.Review", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("body");
+
+                    b.Property<Guid>("BookingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("booking_id");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -98,62 +110,47 @@ namespace VrBook.Modules.Notifications.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("deleted_by");
 
-                    b.Property<DateTimeOffset?>("DispatchStartedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("dispatch_started_at");
-
-                    b.Property<int>("Kind")
-                        .HasColumnType("integer")
-                        .HasColumnName("kind");
-
-                    b.Property<string>("LastError")
-                        .HasColumnType("text")
-                        .HasColumnName("last_error");
-
-                    b.Property<DateTimeOffset?>("NotBeforeUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("not_before_utc");
-
-                    b.Property<string>("PayloadJson")
+                    b.Property<string>("GuestDisplayName")
                         .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("payload");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("guest_display_name");
 
-                    b.Property<string>("RecipientEmail")
-                        .IsRequired()
-                        .HasMaxLength(320)
-                        .HasColumnType("character varying(320)")
-                        .HasColumnName("recipient_email");
-
-                    b.Property<Guid>("RecipientUserId")
+                    b.Property<Guid>("GuestUserId")
                         .HasColumnType("uuid")
-                        .HasColumnName("recipient_user_id");
+                        .HasColumnName("guest_user_id");
 
-                    b.Property<int>("RetryCount")
-                        .ValueGeneratedOnAdd()
+                    b.Property<Guid>("PropertyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("property_id");
+
+                    b.Property<DateTimeOffset?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at");
+
+                    b.Property<int>("Rating")
                         .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("retry_count");
+                        .HasColumnName("rating");
+
+                    b.Property<DateTimeOffset?>("ResponseAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("response_at");
+
+                    b.Property<string>("ResponseBody")
+                        .HasColumnType("text")
+                        .HasColumnName("response_body");
 
                     b.Property<long>("RowVersion")
                         .HasColumnType("bigint")
                         .HasColumnName("row_version");
 
-                    b.Property<DateTimeOffset?>("SentAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("sent_at");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer")
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
                         .HasColumnName("status");
 
-                    b.Property<string>("Subject")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)")
-                        .HasColumnName("subject");
-
-                    b.Property<Guid?>("TenantId")
+                    b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
@@ -167,15 +164,16 @@ namespace VrBook.Modules.Notifications.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Status")
-                        .HasDatabaseName("ix_notification_log_status");
+                    b.HasIndex("BookingId")
+                        .IsUnique();
+
+                    b.HasIndex("GuestUserId");
+
+                    b.HasIndex("PropertyId");
 
                     b.HasIndex("TenantId");
 
-                    b.HasIndex("RecipientUserId", "CreatedAt")
-                        .HasDatabaseName("ix_notification_log_recipient");
-
-                    b.ToTable("notification_log", "notifications");
+                    b.ToTable("reviews", "reviews");
                 });
 #pragma warning restore 612, 618
         }
