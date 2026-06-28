@@ -34,6 +34,9 @@ public sealed class IdentityModule : IModuleRegistration
         // OPS.M.5 §3.7 + §3.8 — Payment-module webhook handler invokes this
         // to apply Tenant.UpdateStripeAccountReadiness on account.updated events.
         services.AddScoped<IConnectAccountReadinessUpdater, ConnectAccountReadinessUpdater>();
+        // OPS.M.8 §3.11 (D11) — composed stats lookup for the platform-admin
+        // detail page; delegates property count to the OPS.M.7 lookup.
+        services.AddScoped<IPlatformTenantStatsLookup, PlatformTenantStatsLookup>();
 
         // The DbContext doubles as the module's IUnitOfWork.
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<IdentityDbContext>());

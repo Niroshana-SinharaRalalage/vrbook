@@ -12,6 +12,7 @@ internal static class UserMapping
         Phone: u.Phone.IsEmpty ? null : u.Phone.Value,
         IsOwner: u.IsOwner,
         IsAdmin: u.IsAdmin,
+        IsPlatformAdmin: u.IsPlatformAdmin,
         EmailVerified: u.EmailVerified,
         CreatedAt: u.CreatedAt,
         LastLoginAt: u.LastLoginAt);

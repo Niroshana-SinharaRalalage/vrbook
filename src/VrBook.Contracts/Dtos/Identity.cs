@@ -1,6 +1,10 @@
 namespace VrBook.Contracts.Dtos;
 
-/// <summary>Public-shape of an authenticated user. See proposal §6.2 — GET /me.</summary>
+/// <summary>
+/// Public-shape of an authenticated user. See proposal §6.2 — GET /me.
+/// OPS.M.8 §3.10 (D10) — bumped to carry <see cref="IsPlatformAdmin"/> so the
+/// web client can show/hide the Platform nav group without a second round trip.
+/// </summary>
 public sealed record UserDto(
     Guid Id,
     string Email,
@@ -8,6 +12,7 @@ public sealed record UserDto(
     string? Phone,
     bool IsOwner,
     bool IsAdmin,
+    bool IsPlatformAdmin,
     bool EmailVerified,
     DateTimeOffset CreatedAt,
     DateTimeOffset? LastLoginAt);
@@ -46,3 +51,54 @@ public sealed record MeTenantDto(
 public sealed record OnboardingProgressDto(
     bool IsComplete,
     string NextStep);
+
+/// <summary>
+/// OPS.M.8 §4.3 — paged response for the platform-admin tenant list.
+/// </summary>
+public sealed record PlatformTenantListResponse(
+    IReadOnlyList<PlatformTenantListItemDto> Items,
+    int Total,
+    int Page,
+    int PageSize);
+
+/// <summary>
+/// OPS.M.8 §4.3 — lightweight row for the platform-admin tenant list.
+/// Property/booking counts are NOT included here (§3.11 D11: stats are
+/// fetched only on detail navigation to avoid N+1).
+/// </summary>
+public sealed record PlatformTenantListItemDto(
+    Guid Id,
+    string Slug,
+    string DisplayName,
+    string Status,
+    bool HasStripeAccount,
+    bool ChargesEnabled,
+    bool PayoutsEnabled,
+    string DefaultCurrency,
+    int PlatformFeeBps,
+    DateTimeOffset CreatedAt);
+
+/// <summary>
+/// OPS.M.8 §4.3 — full detail view for one tenant. Mirrors
+/// <see cref="MeTenantDto"/> with operator-only fields (SuspendedReason,
+/// timestamps, lifetime stats). The PlatformAdmin web detail page binds
+/// to this shape directly.
+/// </summary>
+public sealed record PlatformTenantDto(
+    Guid Id,
+    string Slug,
+    string DisplayName,
+    string Status,
+    string? SuspendedReason,
+    string DefaultCurrency,
+    int PlatformFeeBps,
+    string? StripeAccountStatus,
+    bool ChargesEnabled,
+    bool PayoutsEnabled,
+    bool HasStripeAccount,
+    int PropertyCount,
+    int ActiveBookingCount,
+    int TotalBookingCount,
+    decimal LifetimeGrossRevenue,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? UpdatedAt);

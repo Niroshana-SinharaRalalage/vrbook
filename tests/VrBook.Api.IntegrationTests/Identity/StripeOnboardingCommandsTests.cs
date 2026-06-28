@@ -94,16 +94,34 @@ public sealed class StripeOnboardingCommandsTests
     }
 
     [Fact]
-    public async Task SetTenantPlatformFeeBps_persists_new_fee_bps()
+    public async Task SetTenantPlatformFeeBps_persists_new_fee_bps_for_platform_admin()
     {
         await using var db = NewDb();
         var tenant = await SeedTenantAsync(db);
 
-        var handler = new SetTenantPlatformFeeBpsHandler(db);
+        // OPS.M.8 Step 5 — handler now requires platform-admin defense-in-depth.
+        var currentUser = Substitute.For<VrBook.Contracts.Interfaces.ICurrentUser>();
+        currentUser.IsPlatformAdmin.Returns(true);
+        var handler = new SetTenantPlatformFeeBpsHandler(db, currentUser);
         await handler.Handle(new SetTenantPlatformFeeBpsCommand(tenant.Id, 2000), default);
 
         var reloaded = await db.Tenants.AsNoTracking().FirstAsync(t => t.Id == tenant.Id);
         reloaded.PlatformFeeBps.Should().Be(2000);
+    }
+
+    [Fact]
+    public async Task SetTenantPlatformFeeBps_throws_ForbiddenException_for_non_platform_admin()
+    {
+        await using var db = NewDb();
+        var tenant = await SeedTenantAsync(db);
+
+        var currentUser = Substitute.For<VrBook.Contracts.Interfaces.ICurrentUser>();
+        currentUser.IsPlatformAdmin.Returns(false);
+        var handler = new SetTenantPlatformFeeBpsHandler(db, currentUser);
+
+        Func<Task> act = () => handler.Handle(
+            new SetTenantPlatformFeeBpsCommand(tenant.Id, 2000), default);
+        await act.Should().ThrowAsync<VrBook.Domain.Common.ForbiddenException>();
     }
 
     private IdentityDbContext NewDb()

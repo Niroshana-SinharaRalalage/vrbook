@@ -91,11 +91,21 @@ internal sealed class OpenStripeLoginLinkHandler(
     }
 }
 
-internal sealed class SetTenantPlatformFeeBpsHandler(IdentityDbContext db)
+internal sealed class SetTenantPlatformFeeBpsHandler(IdentityDbContext db, ICurrentUser currentUser)
     : IRequestHandler<SetTenantPlatformFeeBpsCommand, Unit>
 {
     public async Task<Unit> Handle(SetTenantPlatformFeeBpsCommand cmd, CancellationToken cancellationToken)
     {
+        // OPS.M.8 §3.5 (D5) — lit-up. Only platform-admins can set the fee.
+        // The TenantAuthorizationBehavior's PlatformAdmin bypass already allows
+        // a cross-tenant write here; this re-check is defense-in-depth so the
+        // command can't be dispatched from inside another handler under a
+        // non-admin caller.
+        if (!currentUser.IsPlatformAdmin)
+        {
+            throw new ForbiddenException(
+                "SetTenantPlatformFeeBpsCommand requires platform-admin privileges.");
+        }
         var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == cmd.TenantId, cancellationToken)
             ?? throw new NotFoundException("Tenant", cmd.TenantId);
         tenant.SetPlatformFeeBps(cmd.Bps);

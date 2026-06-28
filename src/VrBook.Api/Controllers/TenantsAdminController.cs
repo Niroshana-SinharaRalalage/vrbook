@@ -67,18 +67,10 @@ public sealed class TenantsAdminController(IMediator mediator, ICurrentUser curr
         return Ok(result);
     }
 
-    [HttpPut("platform-fee")]
-    [SwaggerOperation(Summary = "Override the tenant's platform fee (bps). Super Admin only; dormant until Slice OPS.M.8.")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> SetPlatformFee(
-        Guid tenantId, [FromBody] SetPlatformFeeRequest body, CancellationToken cancellationToken)
-    {
-        _ = tenantId;
-        await mediator.Send(
-            new SetTenantPlatformFeeBpsCommand(CallerTenantId(), body.Bps),
-            cancellationToken);
-        return NoContent();
-    }
+    // OPS.M.8 §4.4 — the dormant /platform-fee endpoint moved to
+    // TenantsPlatformController under the PlatformAdmin role gate. The
+    // Owner-self-set path is intentionally removed (Owners cannot adjust
+    // the platform fee they pay).
 }
 
 public sealed record OnboardTenantStripeRequest(string? Country);
