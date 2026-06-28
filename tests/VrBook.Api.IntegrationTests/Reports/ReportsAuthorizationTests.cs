@@ -22,6 +22,13 @@ public sealed class ReportsAuthorizationTests
     private static readonly Guid PropertyOfA = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static readonly Guid PropertyOfB = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 
+    // OPS.M.10.2 F3 — match the snapshot's `…0001` tenant. C3 added a
+    // currentUser.TenantId == snapshot.TenantId equality check to
+    // ReportsAuthorization. NSubstitute defaults `Guid?` to null, so the
+    // existing Setup left user.TenantId unset and every Admin/Owner-with-
+    // explicit-propertyId path went through Forbidden in C3 unit tests.
+    private static readonly Guid SeededTenant = Guid.Parse("00000000-0000-0000-0000-000000000001");
+
     private static (ICurrentUser user, IPropertyOwnerLookup lookup) Setup(
         Guid? currentUserId = null,
         bool isAdmin = false)
@@ -31,6 +38,7 @@ public sealed class ReportsAuthorizationTests
         user.IsAuthenticated.Returns(true);
         user.IsOwner.Returns(true);
         user.IsAdmin.Returns(isAdmin);
+        user.TenantId.Returns(SeededTenant);
 
         var lookup = Substitute.For<IPropertyOwnerLookup>();
         lookup.GetAsync(PropertyOfA, Arg.Any<CancellationToken>())
