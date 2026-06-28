@@ -87,8 +87,11 @@ public sealed class ChannelFeedsController(IMediator mediator, ICurrentUser curr
 [Route("api/v1/admin/sync-conflicts")]
 [Tags("Sync — Admin")]
 [Authorize(Roles = "Admin")]
-public sealed class SyncConflictsController(IMediator mediator) : ControllerBase
+public sealed class SyncConflictsController(IMediator mediator, ICurrentUser currentUser) : ControllerBase
 {
+    private Guid CallerTenantId() => currentUser.TenantId
+        ?? throw new ForbiddenException("Admin action requires a tenant membership.");
+
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<SyncConflictDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<SyncConflictDto>>> ListPending(CancellationToken cancellationToken) =>
@@ -101,7 +104,11 @@ public sealed class SyncConflictsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> Resolve(
         Guid id, [FromBody] ResolveConflictRequest request, CancellationToken cancellationToken)
     {
-        await mediator.Send(new ResolveConflictCommand(id, request.Resolution, request.Notes), cancellationToken);
+        // OPS.M.6 §3.5 (D5) Step 5 — stamp the caller's tenant id so the
+        // behavior pipeline rejects cross-tenant resolves.
+        await mediator.Send(
+            new ResolveConflictCommand(id, request.Resolution, request.Notes, CallerTenantId()),
+            cancellationToken);
         return NoContent();
     }
 }

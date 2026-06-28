@@ -78,6 +78,6 @@ public sealed class SyncRun : AggregateRoot
         EndedAt = DateTimeOffset.UtcNow;
         Status = SyncRunStatus.Failed;
         Error = error;
-        Raise(new SyncRunFailed(ChannelFeedId, PropertyId, Channel, consecutiveFailures, error));
+        Raise(new SyncRunFailed(TenantId, ChannelFeedId, PropertyId, Channel, consecutiveFailures, error));
     }
 }

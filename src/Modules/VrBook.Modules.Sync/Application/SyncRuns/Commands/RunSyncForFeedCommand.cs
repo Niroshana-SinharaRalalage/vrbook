@@ -14,8 +14,13 @@ namespace VrBook.Modules.Sync.Application.SyncRuns.Commands;
 /// <see cref="IExternalChannel"/>, upsert the returned reservations, mark
 /// reservations that disappeared from the feed as cancelled, and record a
 /// <see cref="SyncRun"/> audit row.
+///
+/// <para>OPS.M.6 §3.1 + Step 2 — the worker stamps <see cref="TenantId"/>
+/// from <c>ChannelFeed.TenantId</c>; <c>BackgroundCommandTenantScopeBehavior</c>
+/// asserts non-empty and pushes the value into the logging scope.</para>
 /// </summary>
-public sealed record RunSyncForFeedCommand(Guid ChannelFeedId) : IRequest<RunSyncForFeedResult>;
+public sealed record RunSyncForFeedCommand(Guid ChannelFeedId, Guid TenantId)
+    : IRequest<RunSyncForFeedResult>, IBackgroundCommand, ITenantScoped;
 
 public sealed record RunSyncForFeedResult(
     Guid ChannelFeedId,

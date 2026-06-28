@@ -70,7 +70,7 @@ public sealed class ExternalReservation : AggregateRoot
             ImportedAt = DateTimeOffset.UtcNow,
         };
         er.Raise(new ExternalReservationImported(
-            er.Id, propertyId, channel, er.ICalUid, checkin, checkout));
+            tenantId, er.Id, propertyId, channel, er.ICalUid, checkin, checkout));
         return er;
     }
 
@@ -94,7 +94,7 @@ public sealed class ExternalReservation : AggregateRoot
         RawPayload = rawPayload;
         // Re-raise the import event with the new dates so conflict re-detection runs.
         Raise(new ExternalReservationImported(
-            Id, PropertyId, Channel, ICalUid, checkin, checkout));
+            TenantId, Id, PropertyId, Channel, ICalUid, checkin, checkout));
     }
 
     public void MarkCancelled()
@@ -104,7 +104,7 @@ public sealed class ExternalReservation : AggregateRoot
             return; // idempotent — already cancelled
         }
         CancelledAt = DateTimeOffset.UtcNow;
-        Raise(new ExternalReservationCancelled(Id, PropertyId, Channel, ICalUid));
+        Raise(new ExternalReservationCancelled(TenantId, Id, PropertyId, Channel, ICalUid));
     }
 
     /// <summary>

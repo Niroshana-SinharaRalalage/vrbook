@@ -61,6 +61,16 @@ try
     using var host = builder.Build();
     var logger = host.Services.GetRequiredService<ILogger<Program>>();
 
+    // OPS.M.6 §3.7 (D7) Step 6 — Container Apps Jobs deliver SIGTERM with a
+    // 30-second grace window; honor it so an in-flight RunSyncForFeed call
+    // can finish cleanly. Console.CancelKeyPress also covers local Ctrl-C.
+    using var cts = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, e) =>
+    {
+        e.Cancel = true; // don't let the runtime kill us mid-write
+        cts.Cancel();
+    };
+
     using var scope = host.Services.CreateScope();
     var feeds = scope.ServiceProvider.GetRequiredService<IChannelFeedRepository>();
     var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
@@ -74,22 +84,43 @@ try
     var failed = 0;
     foreach (var feed in due)
     {
-        try
+        if (cts.IsCancellationRequested)
         {
-            var result = await mediator.Send(new RunSyncForFeedCommand(feed.Id));
-            if (result.Status == VrBook.Contracts.Enums.SyncRunStatus.Success)
+            logger.LogWarning("Cancellation requested; skipping remaining feeds.");
+            break;
+        }
+        // OPS.M.6 §9 #2 + Step 6 — tenant_id + channel_feed_id auto-enrich
+        // every log line inside the per-feed scope. The BackgroundCommandTenantScope
+        // behavior also pushes tenant_id; pushing here covers the catch path
+        // (which runs outside the behavior pipeline).
+        using (Serilog.Context.LogContext.PushProperty("tenant_id", feed.TenantId))
+        using (Serilog.Context.LogContext.PushProperty("channel_feed_id", feed.Id))
+        {
+            try
             {
-                ok++;
+                var cmd = new RunSyncForFeedCommand(feed.Id, feed.TenantId);
+                var result = await mediator.Send(cmd, cts.Token);
+                if (result.Status == VrBook.Contracts.Enums.SyncRunStatus.Success)
+                {
+                    ok++;
+                }
+                else
+                {
+                    failed++;
+                }
             }
-            else
+            catch (OperationCanceledException ex) when (cts.IsCancellationRequested)
+            {
+                logger.LogWarning(ex, "Cancelled mid-run for feed {FeedId}.", feed.Id);
+                break;
+            }
+            catch (Exception ex)
             {
                 failed++;
+                logger.LogError(ex,
+                    "Sync run threw outside of RunSyncForFeedHandler tenant_id={TenantId} feed_id={FeedId}",
+                    feed.TenantId, feed.Id);
             }
-        }
-        catch (Exception ex)
-        {
-            failed++;
-            logger.LogError(ex, "Sync run threw outside of RunSyncForFeedHandler for feed {FeedId}", feed.Id);
         }
     }
 
