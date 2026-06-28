@@ -19,12 +19,19 @@ using VrBook.Modules.Identity.Domain;
 using VrBook.Modules.Identity.Infrastructure.Auth;
 using VrBook.Modules.Identity.Infrastructure.Persistence;
 using VrBook.Modules.Loyalty;
+using VrBook.Modules.Loyalty.Infrastructure.Persistence;
 using VrBook.Modules.Messaging;
+using VrBook.Modules.Messaging.Infrastructure.Persistence;
 using VrBook.Modules.Notifications;
+using VrBook.Modules.Notifications.Infrastructure.Persistence;
 using VrBook.Modules.Payment;
+using VrBook.Modules.Payment.Infrastructure.Persistence;
 using VrBook.Modules.Pricing;
+using VrBook.Modules.Pricing.Infrastructure.Persistence;
 using VrBook.Modules.Reviews;
+using VrBook.Modules.Reviews.Infrastructure.Persistence;
 using VrBook.Modules.Sync;
+using VrBook.Modules.Sync.Infrastructure.Persistence;
 using Xunit;
 
 namespace VrBook.Api.IntegrationTests.Multitenancy;
@@ -93,10 +100,32 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
         migratorServices.AddNotificationsDbContextForMigrator(migratorConfig);
         await using (var sp = migratorServices.BuildServiceProvider())
         {
-            foreach (var ctx in sp.GetServices<DbContext>())
-            {
-                await ctx.Database.MigrateAsync();
-            }
+            // OPS.M.10.2 F0 — fix the migration iteration. The previous loop
+            // `foreach (var ctx in sp.GetServices<DbContext>())` only yields
+            // the LAST registered `DbContext` because each module's
+            // `AddXxxDbContextForMigrator` calls `AddScoped<DbContext>(sp =>
+            // sp.GetRequiredService<XxxDbContext>())`, and `IServiceCollection`
+            // treats subsequent `AddScoped<T>` registrations as last-wins (not
+            // additive — that's `TryAddEnumerable`). So only `NotificationsDbContext`
+            // migrated; `catalog.outbox_messages` (and every other module's
+            // tables) was never created and the seed insert at SeedAsync line
+            // 197 blew up with `42P01: relation "catalog.outbox_messages" does
+            // not exist` — the root cause of ~60 of the 79 CI failures.
+            //
+            // Resolved by explicit per-context resolution. Order chosen to
+            // match VrBook.Migrator/Program.cs §44-53 so the migration order
+            // matches production-migrator behavior (Identity FIRST because
+            // M.4 + M.9 schema deps reference identity.tenants).
+            await sp.GetRequiredService<IdentityDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<CatalogDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<PricingDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<BookingDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<PaymentDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<ReviewsDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<SyncDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<MessagingDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<LoyaltyDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<NotificationsDbContext>().Database.MigrateAsync();
         }
 
         // Trigger initial WebApplicationFactory build so we can seed via DI.
