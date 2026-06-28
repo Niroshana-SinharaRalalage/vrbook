@@ -10,6 +10,7 @@ using VrBook.Modules.Sync.Application.Behaviors;
 using VrBook.Modules.Sync.Infrastructure;
 using VrBook.Modules.Sync.Infrastructure.Channels;
 using VrBook.Modules.Sync.Infrastructure.Persistence;
+using VrBook.Modules.Sync.Infrastructure.RateLimiting;
 
 namespace VrBook.Modules.Sync;
 
@@ -34,6 +35,12 @@ public sealed class SyncModule : IModuleRegistration
         // container resolves the real one.
         services.Replace(ServiceDescriptor.Scoped<IExternalChannelConflictChecker, RealExternalChannelConflictChecker>());
 
+        // OPS.M.6 §3.2 + §3.3 + §3.4 (D2/D3/D4) — per-host outbound rate limit.
+        services.Configure<ChannelPollOptions>(
+            configuration.GetSection(ChannelPollOptions.SectionName));
+        services.AddSingleton<IRateLimiter, InMemoryHostRateLimiter>();
+        services.AddTransient<OutboundRateLimitHandler>();
+
         // A6 channel adapters. Each implements IExternalChannel for one ChannelKind.
         // The worker iterates the IEnumerable<IExternalChannel> resolved from DI.
         services.AddHttpClient(AirBnBICalChannel.HttpClientName, c =>
@@ -41,7 +48,8 @@ public sealed class SyncModule : IModuleRegistration
             c.Timeout = TimeSpan.FromSeconds(15);
             c.DefaultRequestHeaders.UserAgent.ParseAdd("VrBook-Sync/1.0 (+https://vrbook.example.com)");
             c.DefaultRequestHeaders.Accept.ParseAdd("text/calendar, text/plain;q=0.9, */*;q=0.5");
-        });
+        })
+        .AddHttpMessageHandler<OutboundRateLimitHandler>();
         services.AddScoped<IExternalChannel, AirBnBICalChannel>();
 
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<SyncDbContext>());
