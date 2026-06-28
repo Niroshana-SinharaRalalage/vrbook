@@ -40,7 +40,7 @@ public sealed class CreatePaymentIntentForBookingHandlerTests
     [Fact]
     public async Task Throws_payment_connect_account_missing_when_tenant_has_no_StripeAccountId()
     {
-        var (handler, gateway, lookup, repo) = NewHandler(AllowPlatformFallback: false);
+        var (handler, gateway, lookup, _) = NewHandler(AllowPlatformFallback: false);
         gateway.IsConfigured.Returns(true);
         lookup.GetAsync(TenantA, Arg.Any<CancellationToken>())
             .Returns(new TenantStripeContext(TenantA, StripeAccountId: null, PlatformFeeBps: 1500, DefaultCurrency: "USD"));

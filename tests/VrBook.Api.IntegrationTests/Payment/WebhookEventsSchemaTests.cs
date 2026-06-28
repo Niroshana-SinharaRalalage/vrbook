@@ -81,8 +81,9 @@ public sealed class WebhookEventsSchemaTests
 
         composite.Should().NotBeNull(
             "OPS.M.5 §3.7 (D7) requires a composite unique index on (stripe_event_id, stripe_account_id).");
-        composite!.Columns.Should().BeEquivalentTo(new[] { "stripe_event_id", "stripe_account_id" },
-            options => options.WithStrictOrdering() is null ? options : options,
+        composite!.Columns.Should().BeEquivalentTo(
+            new[] { "stripe_event_id", "stripe_account_id" },
+            options => options.WithStrictOrdering(),
             "Composite must cover exactly those two columns so platform + connected dual-delivery " +
             "rows persist as distinct rows but a true replay is rejected.");
     }
