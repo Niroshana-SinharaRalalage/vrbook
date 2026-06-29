@@ -67,4 +67,76 @@ public static class RlsMigrationBuilderExtensions
         mb.Sql($"ALTER TABLE {qualified} DISABLE ROW LEVEL SECURITY;");
         return mb;
     }
+
+    /// <summary>
+    /// Slice OPS.M.9.1 §1.3 — public-read carve-out. Adds a SECOND
+    /// PERMISSIVE policy on the table that allows SELECT for anonymous
+    /// callers when <paramref name="usingPredicate"/> holds.
+    ///
+    /// <para>Postgres OR-combines all PERMISSIVE policies for the same
+    /// command, so a row visible via EITHER the existing
+    /// <c>rls_{schema}_{table}_tenant_isolation</c> policy OR this carve-out
+    /// is returned. Tenant-internal callers keep seeing all their own rows
+    /// (active + inactive + deleted); anonymous callers see only rows
+    /// matching the carve-out predicate. The existing tenant-isolation
+    /// policy is left UNCHANGED — fully backward-compatible.</para>
+    ///
+    /// <para>The carve-out is <c>USING</c>-only — NO <c>WITH CHECK</c>.
+    /// Writes (INSERT/UPDATE/DELETE) still require the existing tenant
+    /// policy's WITH CHECK to pass, so anonymous callers cannot inject
+    /// rows even though they can SELECT them.</para>
+    ///
+    /// <para>The new policy name is <c>rls_{schema}_{table}_public_read</c>.</para>
+    /// </summary>
+    /// <param name="mb">The migration builder being extended.</param>
+    /// <param name="schema">The Postgres schema name (e.g. <c>"catalog"</c>).</param>
+    /// <param name="table">The table name within the schema.</param>
+    /// <param name="usingPredicate">
+    /// The raw SQL predicate (no leading <c>WHERE</c>) that determines
+    /// which rows are visible publicly. The caller is responsible for SQL-
+    /// safety — pass only static, statically-known expressions (column
+    /// references + literals + <c>EXISTS</c> subqueries). Examples:
+    /// <c>"is_active = true AND deleted_at IS NULL"</c>;
+    /// <c>"EXISTS (SELECT 1 FROM catalog.properties p WHERE p.id = property_id AND p.is_active AND p.deleted_at IS NULL)"</c>.
+    /// </param>
+    public static MigrationBuilder EnablePublicReadCarveOut(
+        this MigrationBuilder mb, string schema, string table, string usingPredicate)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(schema);
+        ArgumentException.ThrowIfNullOrWhiteSpace(table);
+        ArgumentException.ThrowIfNullOrWhiteSpace(usingPredicate);
+
+        var qualified = $"\"{schema}\".\"{table}\"";
+        var policyName = $"rls_{schema}_{table}_public_read";
+
+        // Predicate trusted by contract (migration code is engineering input,
+        // not user input). PERMISSIVE + USING-only + FOR SELECT keeps writes
+        // gated by the existing tenant-isolation policy's WITH CHECK clause.
+        mb.Sql($@"
+            CREATE POLICY {policyName} ON {qualified}
+                AS PERMISSIVE
+                FOR SELECT
+                USING ({usingPredicate});
+        ");
+
+        return mb;
+    }
+
+    /// <summary>
+    /// Reverse of <see cref="EnablePublicReadCarveOut"/> for the migration
+    /// <c>Down</c> path. Drops the public-read policy. The original
+    /// tenant-isolation policy is unaffected.
+    /// </summary>
+    public static MigrationBuilder DropPublicReadCarveOut(
+        this MigrationBuilder mb, string schema, string table)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(schema);
+        ArgumentException.ThrowIfNullOrWhiteSpace(table);
+
+        var qualified = $"\"{schema}\".\"{table}\"";
+        var policyName = $"rls_{schema}_{table}_public_read";
+
+        mb.Sql($"DROP POLICY IF EXISTS {policyName} ON {qualified};");
+        return mb;
+    }
 }
