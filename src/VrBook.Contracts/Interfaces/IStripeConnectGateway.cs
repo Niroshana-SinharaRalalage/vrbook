@@ -36,7 +36,29 @@ public interface IStripeConnectGateway
     /// dashboard. Tenant uses this to view payouts, 1099-K filings, etc.
     /// </summary>
     Task<string> CreateLoginLinkAsync(string stripeAccountId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Slice OPS.M.10.2 F11.4 — pull the current
+    /// <c>charges_enabled</c> + <c>payouts_enabled</c> flags from Stripe for
+    /// the given account. Used by the
+    /// <c>/admin/tenants/{tid}/stripe/refresh-readiness</c> endpoint to
+    /// reconcile when the <c>account.updated</c> webhook is delayed or
+    /// dropped (staging webhook flake is common; production retries
+    /// usually catch up within minutes).
+    /// </summary>
+    Task<StripeAccountReadiness> GetAccountReadinessAsync(
+        string stripeAccountId, CancellationToken ct = default);
 }
 
 /// <summary>The URL the tenant gets redirected to + when it expires.</summary>
 public sealed record StripeAccountLink(string Url, DateTimeOffset ExpiresAt);
+
+/// <summary>
+/// Slice OPS.M.10.2 F11.4 — projection of the two capability flags from a
+/// Stripe Connect account. Maps to the same fields the
+/// <c>account.updated</c> webhook payload exposes (per OPS.M.5 §3.8).
+/// </summary>
+public sealed record StripeAccountReadiness(
+    string StripeAccountId,
+    bool ChargesEnabled,
+    bool PayoutsEnabled);

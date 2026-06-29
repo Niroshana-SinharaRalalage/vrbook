@@ -68,6 +68,23 @@ public sealed class TenantsAdminController(IMediator mediator) : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Slice OPS.M.10.2 F11.4 — re-pull the tenant's Stripe
+    /// charges_enabled + payouts_enabled flags and re-run the domain
+    /// state machine. Use when the account.updated webhook is delayed.
+    /// </summary>
+    [HttpPost("stripe/refresh-readiness")]
+    [SwaggerOperation(Summary = "Re-pull Stripe Connect readiness flags + re-run state machine.")]
+    [ProducesResponseType(typeof(RefreshStripeReadinessResult), StatusCodes.Status200OK)]
+    public async Task<ActionResult<RefreshStripeReadinessResult>> RefreshStripeReadiness(
+        Guid tenantId, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new RefreshStripeReadinessCommand(tenantId),
+            cancellationToken);
+        return Ok(result);
+    }
+
     // OPS.M.8 §4.4 — the dormant /platform-fee endpoint moved to
     // TenantsPlatformController under the PlatformAdmin role gate. The
     // Owner-self-set path is intentionally removed (Owners cannot adjust

@@ -234,6 +234,25 @@ internal sealed class StripeGateway : IStripeGateway, VrBook.Contracts.Interface
         return new VrBook.Contracts.Interfaces.StripeAccountLink(link.Url, expiresAt);
     }
 
+    public async Task<VrBook.Contracts.Interfaces.StripeAccountReadiness> GetAccountReadinessAsync(
+        string stripeAccountId, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stripeAccountId);
+        RequireConfigured();
+        // Slice OPS.M.10.2 F11.4 — manual reconcile when the
+        // account.updated webhook is delayed. Read-only; no idempotency
+        // key needed (GET is naturally idempotent).
+        var service = new AccountService();
+        var account = await StripeRetryPipeline.Build().ExecuteAsync(
+            async token => await service.GetAsync(stripeAccountId, cancellationToken: token),
+            ct);
+        logger.LogInformation(
+            "Stripe Connect account readiness fetched stripe_account_id={AccountId} charges_enabled={Charges} payouts_enabled={Payouts}",
+            stripeAccountId, account.ChargesEnabled, account.PayoutsEnabled);
+        return new VrBook.Contracts.Interfaces.StripeAccountReadiness(
+            account.Id, account.ChargesEnabled, account.PayoutsEnabled);
+    }
+
     public async Task<string> CreateLoginLinkAsync(string stripeAccountId, CancellationToken ct = default)
     {
         RequireConfigured();
