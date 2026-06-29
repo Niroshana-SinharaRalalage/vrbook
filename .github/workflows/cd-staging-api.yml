@@ -524,16 +524,12 @@ jobs:
           assert "GET  /api/v1/bookings" 401 "$(curl_status "$API/api/v1/bookings")"
 
           echo "=== Pricing (A3) ==="
-          # GET /pricing on a property with no plan -> 404 (expected for staging seed).
-          # We test the route exists by asserting it returns 4xx not 5xx.
-          # Use a known property id from search results.
+          # OPS.M.10.2 ops-fix — Entra-only on staging. /pricing is
+          # [Authorize(Owner)] so unauth callers get 401. Asserting 401
+          # confirms the route is wired + the auth gate fires.
           KNOWN=$(curl -sS --max-time 15 "$API/api/v1/properties" | jq -r '.items[0].id // empty')
           if [ -n "$KNOWN" ]; then
-            STATUS=$(curl_status "$API/api/v1/properties/$KNOWN/pricing")
-            case "$STATUS" in
-              200|404) echo "  GET  /pricing -> $STATUS  OK" ;;
-              *)       echo "::error::/pricing expected 200/404, got $STATUS"; exit 1 ;;
-            esac
+            assert "GET  /pricing" 401 "$(curl_status "$API/api/v1/properties/$KNOWN/pricing")"
           else
             echo "  (no seeded property to test pricing route; skipping)"
           fi
@@ -545,12 +541,11 @@ jobs:
           fi
 
           echo "=== Payment (A5) ==="
-          # /intents/by-booking returns 404 for a random GUID (no PI yet) - 404 = healthy route.
-          STATUS=$(curl_status "$API/api/v1/payments/intents/by-booking/00000000-0000-0000-0000-000000000001")
-          case "$STATUS" in
-            404) echo "  GET /intents/by-booking -> 404 OK" ;;
-            *)   echo "::error::/intents/by-booking expected 404, got $STATUS"; exit 1 ;;
-          esac
+          # OPS.M.10.2 ops-fix — Entra-only on staging. /intents/by-booking
+          # is [Authorize] so unauth → 401 (not 404). 401 still confirms
+          # the route exists and the auth gate fires.
+          assert "GET /intents/by-booking" 401 \
+            "$(curl_status "$API/api/v1/payments/intents/by-booking/00000000-0000-0000-0000-000000000001")"
           # Webhook returns 400 without a valid signature - 400 = handler running, signature check engaged.
           STATUS=$(curl -sS -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" \
             --max-time 15 --data "{}" "$API/api/v1/payments/webhooks/stripe")
