@@ -164,7 +164,57 @@ public sealed class Property : AggregateRoot
         }
     }
 
+    /// <summary>
+    /// Slice OPS.M.10.2 F11.1 — Property publishing precondition.
+    /// A property can only go live when its tenant has completed Stripe
+    /// Connect onboarding (Status = "Active" AND ChargesEnabled AND
+    /// PayoutsEnabled). Pre-F11.1 the no-arg <see cref="Activate()"/>
+    /// had ZERO preconditions and let properties go live without a
+    /// payment-ready tenant — the booking flow then 422'd at
+    /// `CreatePaymentIntentForBookingHandler` with the
+    /// <c>payment.connect_account_missing</c> error message that the
+    /// audit's #2 finding flagged.
+    ///
+    /// <para>Pass primitive booleans (NOT a Tenant reference) because
+    /// Catalog cannot reference the Identity module — proper layering.
+    /// Callers project the tenant snapshot at the controller / handler
+    /// boundary.</para>
+    /// </summary>
+    public void Activate(string tenantStatus, bool tenantChargesEnabled, bool tenantPayoutsEnabled)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantStatus);
+        if (!string.Equals(tenantStatus, "Active", StringComparison.Ordinal))
+        {
+            throw new BusinessRuleViolationException(
+                "property.tenant_not_payment_ready",
+                $"Property cannot be activated while tenant status is '{tenantStatus}'. " +
+                "Complete Stripe Connect onboarding first.");
+        }
+        if (!tenantChargesEnabled || !tenantPayoutsEnabled)
+        {
+            throw new BusinessRuleViolationException(
+                "property.tenant_not_payment_ready",
+                "Property cannot be activated until the tenant's Stripe Connect account " +
+                $"has charges_enabled (currently {tenantChargesEnabled}) AND payouts_enabled " +
+                $"(currently {tenantPayoutsEnabled}).");
+        }
+        IsActive = true;
+    }
+
+#pragma warning disable S1133 // F11.1 bridge intentionally deprecated; OPS.M.11 deletes it.
+    /// <summary>
+    /// Pre-F11.1 no-arg activation. Retained for the in-flight migration
+    /// path — existing seed properties have <c>is_active = true</c> via
+    /// direct DB writes from earlier slices; flipping the gate retroactively
+    /// would mark them inactive. The OPS.M.11 properties-lifecycle slice
+    /// will (a) wire a controller publish endpoint that uses the new
+    /// gated overload, and (b) DELETE this one.
+    /// </summary>
+    [System.Obsolete("Slice OPS.M.10.2 F11.1 — use Activate(tenantStatus, chargesEnabled, payoutsEnabled). " +
+        "This no-arg overload is retained only for the in-flight migration; new call sites must use the gated form. " +
+        "Tracked for deletion in Slice OPS.M.11 properties-lifecycle.")]
     public void Activate() => IsActive = true;
+#pragma warning restore S1133
     public void Deactivate(string reason)
     {
         IsActive = false;

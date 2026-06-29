@@ -1,6 +1,7 @@
 using FluentAssertions;
 using VrBook.Contracts.Enums;
 using VrBook.Contracts.Events;
+using VrBook.Domain.Common;
 using VrBook.Modules.Catalog.Domain;
 using Xunit;
 
@@ -142,7 +143,9 @@ public sealed class PropertyAggregateTests
     public void Activate_makes_property_active()
     {
         var p = Create();
+#pragma warning disable CS0618 // intentional: exercises the F11.1 obsolete-bridge contract.
         p.Activate();
+#pragma warning restore CS0618
         p.IsActive.Should().BeTrue();
     }
 
@@ -150,13 +153,51 @@ public sealed class PropertyAggregateTests
     public void Deactivate_clears_active_and_raises_event()
     {
         var p = Create();
+#pragma warning disable CS0618
         p.Activate();
+#pragma warning restore CS0618
         p.DequeueEvents();
 
         p.Deactivate("low quality");
 
         p.IsActive.Should().BeFalse();
         p.DequeueEvents().Should().ContainSingle().Which.Should().BeOfType<PropertyDeactivated>();
+    }
+
+    // ---- Slice OPS.M.10.2 F11.1 — gated Activate(tenant payment-readiness) ----
+
+    [Fact]
+    public void Activate_gated_succeeds_when_tenant_is_payment_ready()
+    {
+        var p = Create();
+        p.Activate(tenantStatus: "Active", tenantChargesEnabled: true, tenantPayoutsEnabled: true);
+        p.IsActive.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("PendingOnboarding")]
+    [InlineData("Suspended")]
+    [InlineData("Closed")]
+    public void Activate_gated_throws_when_tenant_status_is_not_active(string status)
+    {
+        var p = Create();
+        var act = () => p.Activate(tenantStatus: status, tenantChargesEnabled: true, tenantPayoutsEnabled: true);
+        act.Should().Throw<BusinessRuleViolationException>()
+            .Where(e => e.Rule == "property.tenant_not_payment_ready");
+        p.IsActive.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    public void Activate_gated_throws_when_stripe_capability_not_enabled(bool charges, bool payouts)
+    {
+        var p = Create();
+        var act = () => p.Activate(tenantStatus: "Active", tenantChargesEnabled: charges, tenantPayoutsEnabled: payouts);
+        act.Should().Throw<BusinessRuleViolationException>()
+            .Where(e => e.Rule == "property.tenant_not_payment_ready");
+        p.IsActive.Should().BeFalse();
     }
 
     // ---- Images ----
