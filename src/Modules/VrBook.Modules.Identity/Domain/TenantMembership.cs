@@ -85,6 +85,24 @@ public sealed class TenantMembership : AggregateRoot
         Raise(new TenantMembershipRevoked(Id, UserId, TenantId));
     }
 
+    /// <summary>
+    /// Slice OPS.M.10.2 F11.3 — un-soft-delete a previously-revoked
+    /// membership so the M.1 partial unique index on
+    /// <c>(user_id, tenant_id) WHERE deleted_at IS NULL</c> doesn't 23505
+    /// when the same operator pair is re-seeded. No-op if the row is
+    /// already active.
+    /// </summary>
+    public void Revive()
+    {
+        if (!IsDeleted)
+        {
+            return;
+        }
+        DeletedAt = null;
+        DeletedBy = null;
+        Raise(new TenantMembershipCreated(Id, UserId, TenantId, Role));
+    }
+
     private static void EnsureRoleAllowed(string role)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(role);

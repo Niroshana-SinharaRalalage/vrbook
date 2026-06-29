@@ -79,8 +79,48 @@ public sealed class TenantsPlatformController(IMediator mediator) : ControllerBa
             cancellationToken);
         return NoContent();
     }
+
+    /// <summary>
+    /// Slice OPS.M.10.2 F11.3 — PlatformAdmin bootstrap: seed a
+    /// <c>tenant_memberships</c> row for an Entra-signed user against
+    /// this tenant. Used in staging when the Entra account exists but
+    /// no membership row was created during onboarding (the OPS.M.7
+    /// owner-onboarding wizard normally handles this).
+    ///
+    /// <para>Idempotent on <c>(userId, tenantId)</c>: if an active row
+    /// exists, returns its id with <c>created=false</c>. Soft-deleted
+    /// rows are revived rather than re-inserted (the M.1 partial unique
+    /// index would otherwise 23505).</para>
+    /// </summary>
+    [HttpPost("{tenantId:guid}/memberships")]
+    [SwaggerOperation(Summary = "Seed a tenant_memberships row for an Entra user (PlatformAdmin only).")]
+    [ProducesResponseType(typeof(SeedTenantMembershipResult), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(SeedTenantMembershipResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SeedTenantMembershipResult>> SeedMembership(
+        Guid tenantId,
+        [FromBody] SeedTenantMembershipRequest body,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new SeedTenantMembershipCommand(
+                tenantId,
+                body.EntraOid,
+                string.IsNullOrWhiteSpace(body.Role) ? "tenant_admin" : body.Role,
+                body.IsPrimary),
+            cancellationToken);
+        return result.Created
+            ? StatusCode(StatusCodes.Status201Created, result)
+            : Ok(result);
+    }
 }
 
 /// <summary>OPS.M.8 §4.1 — Suspend request body. Reason is required.</summary>
 public sealed record SuspendTenantRequest(
     [property: System.Text.Json.Serialization.JsonRequired] string Reason);
+
+/// <summary>Slice OPS.M.10.2 F11.3 — body for seeding a tenant_memberships row.</summary>
+public sealed record SeedTenantMembershipRequest(
+    [property: System.Text.Json.Serialization.JsonRequired] string EntraOid,
+    string? Role = null,
+    bool IsPrimary = true);
