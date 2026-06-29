@@ -1,14 +1,17 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Swashbuckle.AspNetCore.Annotations;
 using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Interfaces;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Identity.Application.Tenants.Queries;
 using VrBook.Modules.Identity.Application.Users.Commands;
 using VrBook.Modules.Identity.Application.Users.Queries;
 using VrBook.Modules.Identity.Infrastructure.Auth;
+using VrBook.Modules.Identity.Infrastructure.Persistence;
 
 namespace VrBook.Api.Controllers;
 
@@ -251,4 +254,107 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
         await mediator.Send(new SetPersonaEmailCommand(snapshot.Oid, email.Trim()), ct);
         return Ok(new { persona = parsed.ToString(), email = email.Trim() });
     }
+
+    /// <summary>
+    /// Slice OPS.M.10.2 F11.2 dev bridge — stub a tenant's Stripe Connect
+    /// readiness without running the real sandbox onboarding flow. Used by
+    /// staging operators when the Stripe-hosted form flakes OR when an
+    /// air-gapped local dev environment needs a payment-ready tenant.
+    ///
+    /// <para><b>THREE GUARDS</b> (each must pass; any missing = 404):</para>
+    /// <list type="number">
+    ///   <item><c>IHostEnvironment.IsProduction()</c> false.</item>
+    ///   <item><c>DevAuth:AllowAnonymous = true</c> (the wider DevAuth gate).</item>
+    ///   <item><c>DevAuth:AllowStripeStub = true</c> (opt-in per-call flag;
+    ///         defaults <c>false</c>, never set via Bicep, only set by
+    ///         <c>az containerapp update --set-env-vars</c> for the duration
+    ///         of an operator walk).</item>
+    /// </list>
+    ///
+    /// <para>What it does: looks up the tenant under
+    /// <c>RlsBypassScope.Enter()</c> (dev-bridge has no caller-tenant
+    /// claim), calls <c>Tenant.SetStripeAccount</c> with a stub id of the
+    /// form <c>acct_stub_{tenantId:N}</c> if no real account is present,
+    /// then invokes <c>IConnectAccountReadinessUpdater.UpdateAsync</c>
+    /// (the same surface the Stripe <c>account.updated</c> webhook
+    /// invokes — see <c>HandleStripeWebhookCommand.cs:20</c>) so the
+    /// tenant transitions <c>PendingOnboarding → Active</c> via the
+    /// domain state machine.</para>
+    /// </summary>
+    [HttpPost("stub-stripe-readiness")]
+    public async Task<IActionResult> StubStripeReadiness(
+        [FromBody] StubStripeReadinessRequest body,
+        [FromServices] IdentityDbContext db,
+        [FromServices] IConnectAccountReadinessUpdater readinessUpdater,
+        [FromServices] Microsoft.Extensions.Hosting.IHostEnvironment hostEnv,
+        CancellationToken ct)
+    {
+        if (hostEnv.IsProduction())
+        {
+            return NotFound();
+        }
+        if (!configuration.GetValue<bool>("DevAuth:AllowAnonymous"))
+        {
+            return NotFound();
+        }
+        if (!configuration.GetValue<bool>("DevAuth:AllowStripeStub"))
+        {
+            return NotFound();
+        }
+        if (body is null || body.TenantId == Guid.Empty)
+        {
+            return BadRequest(new { detail = "tenantId required." });
+        }
+
+        // The dev-bridge has no caller-tenant claim; open the bypass
+        // scope inline. RlsBypassCallSiteAllowlistTests is constructor-
+        // injection-scoped and is unaffected by static AsyncLocal entry.
+        using var bypass = RlsBypassScope.Enter();
+
+        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == body.TenantId, ct);
+        if (tenant is null)
+        {
+            return NotFound(new { detail = $"Tenant '{body.TenantId}' not found." });
+        }
+
+        var stripeAccountId = body.StripeAccountId is { Length: > 0 } supplied
+            ? supplied.Trim()
+            : $"acct_stub_{body.TenantId:N}";
+
+        if (string.IsNullOrEmpty(tenant.StripeAccountId))
+        {
+            tenant.SetStripeAccount(stripeAccountId);
+            await db.SaveChangesAsync(ct);
+        }
+        else
+        {
+            // Tenant already has an account (real or prior stub). Use the
+            // existing one for the readiness update so the lookup matches.
+            stripeAccountId = tenant.StripeAccountId;
+        }
+
+        var matched = await readinessUpdater.UpdateAsync(
+            stripeAccountId,
+            chargesEnabled: body.ChargesEnabled,
+            payoutsEnabled: body.PayoutsEnabled,
+            ct);
+
+        return Ok(new
+        {
+            tenantId = body.TenantId,
+            stripeAccountId,
+            chargesEnabled = body.ChargesEnabled,
+            payoutsEnabled = body.PayoutsEnabled,
+            readinessUpdated = matched,
+        });
+    }
 }
+
+/// <summary>
+/// Slice OPS.M.10.2 F11.2 — request body for <c>POST /api/v1/dev-auth/stub-stripe-readiness</c>.
+/// </summary>
+public sealed record StubStripeReadinessRequest(
+    [property: System.Text.Json.Serialization.JsonRequired] Guid TenantId,
+    string? StripeAccountId,
+    bool ChargesEnabled = true,
+    bool PayoutsEnabled = true);
