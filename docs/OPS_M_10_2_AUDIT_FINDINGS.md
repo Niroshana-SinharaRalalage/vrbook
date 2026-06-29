@@ -87,9 +87,9 @@ Severity scale:
 | 22 (ReleaseHold ownership stamp) | **CLOSED** | OPS.M.10.2 F9 _this commit_ |
 | 23 (GetPricingPlan + Reviews moderation tenant equality) | **CLOSED** | OPS.M.10.2 F9 _this commit_ |
 | 24 (Doc drift in ListMyProperties + ListAdminBookings) | **CLOSED** | OPS.M.10.2 F9 _this commit_ |
-| 25 (Outbox-relay verify) | **Open** | OPS.M.10.2 F10 (next) |
+| 25 (Outbox-relay verify) | **CLOSED — verified, no code change** | OPS.M.10.2 F10 _this commit_ (see `docs/OPS_M_10_2_F10_OUTBOX_RELAY_VERIFICATION.md`) |
 
-Critical + all 12 High + 4 Medium + 5 Low + 1 Info **closed**. Remaining 1 Verify ships under F10.
+**All 25 audit findings CLOSED.** The OPS.M.10.2 audit is fully discharged. Slice 4 (Notifications) is unblocked.
 
 ---
 
