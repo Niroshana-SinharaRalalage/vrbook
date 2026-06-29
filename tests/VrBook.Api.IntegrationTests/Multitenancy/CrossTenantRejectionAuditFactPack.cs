@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Identity.Infrastructure.Persistence;
 using Xunit;
 
@@ -73,8 +74,18 @@ public sealed class CrossTenantRejectionAuditFactPack(TwoTenantApiFixture fixtur
             "every IAuditable command writes an audit row regardless of outcome.");
     }
 
+    // OPS.M.10.2 F-residual — wrap the count queries in RlsBypassScope.
+    // M.9 enabled tenant RLS on identity.audit_log (nullable variant). The
+    // .failed row inserted by AuditLogBehavior carries OwnerA's tenant_id
+    // (stamped by the per-statement interceptor under OwnerA's request
+    // context). This test runs the count from the fixture's seed-side
+    // scope which has no ICurrentUser → app.tenant_id GUC is empty → the
+    // RLS policy filters the row out and the count stays at zero.
+    // Counting under bypass restores visibility for the test invariant.
+
     private async Task<int> CountFailedAuditRowsAsync()
     {
+        using var _ = RlsBypassScope.Enter();
         await using var scope = fixture.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
         return await db.AuditLog
@@ -84,6 +95,7 @@ public sealed class CrossTenantRejectionAuditFactPack(TwoTenantApiFixture fixtur
 
     private async Task<int> CountAllAuditRowsAsync()
     {
+        using var _ = RlsBypassScope.Enter();
         await using var scope = fixture.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
         return await db.AuditLog.CountAsync();
