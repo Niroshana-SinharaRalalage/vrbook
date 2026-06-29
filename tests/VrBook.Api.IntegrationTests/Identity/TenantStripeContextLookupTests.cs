@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using VrBook.Contracts.Interfaces;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Identity.Domain;
 using VrBook.Modules.Identity.Infrastructure.Persistence;
 using Xunit;
@@ -33,7 +34,7 @@ public sealed class TenantStripeContextLookupTests
     public async Task Returns_null_when_tenant_absent()
     {
         await using var ctx = NewIdentityDb();
-        var lookup = NewLookup(ctx);
+        var lookup = NewLookup();
 
         var result = await lookup.GetAsync(Guid.NewGuid());
 
@@ -49,7 +50,7 @@ public sealed class TenantStripeContextLookupTests
             stripeAccountId: "acct_seedtest1",
             platformFeeBps: 1500,
             currency: "USD");
-        var lookup = NewLookup(ctx);
+        var lookup = NewLookup();
 
         var result = await lookup.GetAsync(tenant.Id);
 
@@ -69,7 +70,7 @@ public sealed class TenantStripeContextLookupTests
             stripeAccountId: "acct_override",
             platformFeeBps: 2000,   // overrides the 1500 default
             currency: "USD");
-        var lookup = NewLookup(ctx);
+        var lookup = NewLookup();
 
         var result = await lookup.GetAsync(tenant.Id);
 
@@ -86,7 +87,7 @@ public sealed class TenantStripeContextLookupTests
             stripeAccountId: null,   // tenant hasn't onboarded Stripe yet
             platformFeeBps: 1500,
             currency: "EUR");
-        var lookup = NewLookup(ctx);
+        var lookup = NewLookup();
 
         var result = await lookup.GetAsync(tenant.Id);
 
@@ -95,30 +96,48 @@ public sealed class TenantStripeContextLookupTests
         result.DefaultCurrency.Should().Be("EUR");
     }
 
-    private IdentityDbContext NewIdentityDb()
+    // OPS.M.10.2 F1-followup — M.9 changed TenantStripeContextLookup's ctor
+    // from `(IdentityDbContext db)` to `(IRlsBypassDbContextFactory<IdentityDbContext>
+    // bypassFactory)` because the lookup is called from the Stripe webhook
+    // handler which runs without ICurrentUser and needs the bypass scope
+    // explicitly per call. The previous `Activator.CreateInstance(type, db)`
+    // path threw MissingMethodException because no ctor takes a DbContext.
+    //
+    // BuildSp() now sets up a full DI graph:
+    //   - ICurrentUser + IDateTimeProvider (M.9 BaseDbContext deps)
+    //   - AddDbContextFactory<IdentityDbContext> (Scoped per RLS ext)
+    //   - AddRlsBypassFactory<IdentityDbContext> (the factory the lookup expects)
+    // NewLookup then resolves the ITenantStripeContextLookup directly from DI
+    // (registered against the internal impl via IdentityModule extension).
+    private ServiceProvider BuildSp()
     {
-        // OPS.M.10.2 F1 — see StripeOnboardingCommandsTests.NewDb for context.
-        // M.9 Step 4 added ICurrentUser + IDateTimeProvider to BaseDbContext's
-        // ctor; the hand-rolled DI here had to be updated to register them.
         var services = new ServiceCollection();
         services.AddSingleton<IDateTimeProvider, VrBook.Infrastructure.Common.SystemClock>();
         services.AddSingleton<ICurrentUser, VrBook.Infrastructure.Common.AnonymousCurrentUser>();
+        services.AddLogging();
         services.AddDbContext<IdentityDbContext>(opts =>
             opts.UseNpgsql(_fixture.ConnectionString));
-        var sp = services.BuildServiceProvider();
-        return sp.GetRequiredService<IdentityDbContext>();
+        services.AddDbContextFactory<IdentityDbContext>(
+            opts => opts.UseNpgsql(_fixture.ConnectionString),
+            ServiceLifetime.Scoped);
+        services.AddRlsBypassFactory<IdentityDbContext>();
+        return services.BuildServiceProvider();
     }
 
-    private static ITenantStripeContextLookup NewLookup(IdentityDbContext db)
+    private IdentityDbContext NewIdentityDb() =>
+        BuildSp().GetRequiredService<IdentityDbContext>();
+
+    private ITenantStripeContextLookup NewLookup()
     {
-        // Reach into the Identity module to find the concrete implementation by
-        // reflection — the type is internal in the module. Step 4 GREEN ships the
-        // implementation; until then this throws and the tests Red.
+        // Reflection construct against the internal impl with the production
+        // bypass-factory ctor signature.
+        var sp = BuildSp();
         var asm = typeof(IdentityDbContext).Assembly;
         var type = asm.GetType("VrBook.Modules.Identity.Infrastructure.TenantStripeContextLookup")
             ?? throw new InvalidOperationException(
-                "TenantStripeContextLookup not found. Wire in Step 4 GREEN.");
-        return (ITenantStripeContextLookup)Activator.CreateInstance(type, db)!;
+                "TenantStripeContextLookup not found.");
+        var bypassFactory = sp.GetRequiredService<IRlsBypassDbContextFactory<IdentityDbContext>>();
+        return (ITenantStripeContextLookup)Activator.CreateInstance(type, bypassFactory)!;
     }
 
     private static async Task<Tenant> SeedTenantAsync(

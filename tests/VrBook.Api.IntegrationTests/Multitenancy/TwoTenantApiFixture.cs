@@ -128,72 +128,20 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
         migratorServices.AddNotificationsDbContextForMigrator(migratorConfig);
         await using (var sp = migratorServices.BuildServiceProvider())
         {
-            // OPS.M.10.2 F0' DIAGNOSTIC (per docs/OPS_M_10_2_CI_ROOT_CAUSE.md §5.4).
-            // F0 (commit 0ed16f9) replaced `sp.GetServices<DbContext>()` with
-            // explicit per-context resolutions on the theory that the iteration
-            // was last-wins. CI run 28333634153 against the F0 fix closed
-            // ZERO Cluster A failures (catalog.outbox_messages still missing),
-            // proving the diagnosis wrong. Static analysis says migrations
-            // should apply. Need ground truth from CI.
-            //
-            // Console.WriteLine survives xUnit output capture and lands in
-            // the GH Actions log. After this commit ships, the
-            // `[OPS.M.10.2 F0']` lines tell us:
-            //  - which migrations EF thinks are pending pre-Migrate,
-            //  - which migrations EF thinks are applied post-Migrate,
-            //  - the runtime connection string each context binds to,
-            //  - whether catalog.outbox_messages actually exists at the end
-            //    of migration AND immediately before the seed insert.
-            async Task MigrateWithDiag<TContext>() where TContext : DbContext
-            {
-                var ctx = sp.GetRequiredService<TContext>();
-                var name = typeof(TContext).Name;
-                var conn = ctx.Database.GetDbConnection().ConnectionString;
-                var pending = (await ctx.Database.GetPendingMigrationsAsync()).ToArray();
-                Console.WriteLine(
-                    $"[OPS.M.10.2 F0'] {name} conn={conn} pending=[{string.Join(",", pending)}]");
-                await ctx.Database.MigrateAsync();
-                var applied = (await ctx.Database.GetAppliedMigrationsAsync()).ToArray();
-                Console.WriteLine(
-                    $"[OPS.M.10.2 F0'] {name} applied=[{string.Join(",", applied)}]");
-            }
-            await MigrateWithDiag<IdentityDbContext>();
-            await MigrateWithDiag<CatalogDbContext>();
-            await MigrateWithDiag<PricingDbContext>();
-            await MigrateWithDiag<BookingDbContext>();
-            await MigrateWithDiag<PaymentDbContext>();
-            await MigrateWithDiag<ReviewsDbContext>();
-            await MigrateWithDiag<SyncDbContext>();
-            await MigrateWithDiag<MessagingDbContext>();
-            await MigrateWithDiag<LoyaltyDbContext>();
-            await MigrateWithDiag<NotificationsDbContext>();
-        }
-
-        // OPS.M.10.2 F0' DIAGNOSTIC — Console.WriteLine in InitializeAsync
-        // is silenced by xUnit's fixture-init output capture (no stdout).
-        // Switching to exception-based delivery: if the seed-side connection
-        // string differs from the Testcontainer URL OR if the table is
-        // missing on the seed-side, throw with the captured strings so
-        // xUnit surfaces them as the test failure message — the only
-        // reliable transport to the GH Actions log.
-        using (var scope0 = Services.CreateScope())
-        {
-            var ctx0 = scope0.ServiceProvider.GetRequiredService<CatalogDbContext>();
-            var seedConn = ctx0.Database.GetDbConnection().ConnectionString;
-            var fixtureConn = ConnectionString;
-            var exists = await ctx0.Database.SqlQueryRaw<int>(
-                "SELECT COUNT(*)::int AS \"Value\" FROM information_schema.tables WHERE table_schema='catalog' AND table_name='outbox_messages'")
-                .FirstAsync();
-            if (exists == 0)
-            {
-                throw new InvalidOperationException(
-                    "[OPS.M.10.2 F0' DIAGNOSTIC] catalog.outbox_messages MISSING on seed-side.\n" +
-                    $"  fixture (Testcontainer) ConnectionString = {fixtureConn}\n" +
-                    $"  seed-side CatalogDbContext.Connection    = {seedConn}\n" +
-                    $"  match = {string.Equals(fixtureConn, seedConn, StringComparison.Ordinal)}\n" +
-                    "If match=False, the WebApplicationFactory's in-memory cfg LOST to " +
-                    "env var ConnectionStrings__Postgres (set by cd-staging-api.yml:78).");
-            }
+            // OPS.M.10.2 F0''' shipped the real fix — connection string
+            // alignment via UseSetting. Migrations apply per concrete type
+            // in production-migrator order (Identity first because M.4 + M.9
+            // schema deps reference identity.tenants).
+            await sp.GetRequiredService<IdentityDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<CatalogDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<PricingDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<BookingDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<PaymentDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<ReviewsDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<SyncDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<MessagingDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<LoyaltyDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<NotificationsDbContext>().Database.MigrateAsync();
         }
 
         // Trigger initial WebApplicationFactory build so we can seed via DI.
@@ -263,10 +211,21 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
 
         // One property per tenant — use the real Property.Create surface
         // with minimal valid value-objects.
-        var address = new Address("1 Test Lane", "Honolulu", "HI", "96801", "US", 21.3m, -157.85m);
-        var capacity = new Capacity(maxGuests: 4, bedrooms: 2, bathrooms: 1, beds: 2);
-        var checkIn = new CheckInWindow(
-            new TimeOnly(15, 0), new TimeOnly(20, 0), new TimeOnly(11, 0));
+        //
+        // OPS.M.10.2 F0-followup (architect-prescribed) — EF Core OwnsOne
+        // requires a UNIQUE value-object instance per principal. Sharing
+        // one Address/Capacity/CheckInWindow across propertyA and propertyB
+        // makes EF re-stamp the owned entry's PropertyId FK to the LAST
+        // principal visited, leaving the FIRST principal's owned slot with
+        // no tracked entry. The first row then INSERTs with NULL street,
+        // city, country → `23502: null value in column "street"`. Closes
+        // ~58 of the 70 post-F0''' failures.
+        static Address NewAddress() =>
+            new("1 Test Lane", "Honolulu", "HI", "96801", "US", 21.3m, -157.85m);
+        static Capacity NewCapacity() =>
+            new(maxGuests: 4, bedrooms: 2, bathrooms: 1, beds: 2);
+        static CheckInWindow NewCheckIn() =>
+            new(new TimeOnly(15, 0), new TimeOnly(20, 0), new TimeOnly(11, 0));
 
         var propertyA = Property.Create(
             tenantId: tenantA.Id,
@@ -274,9 +233,9 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
             title: "Tenant A's Villa",
             description: "Seed property for OPS.M.10 Wave 2.",
             type: PropertyType.Villa,
-            address: address,
-            capacity: capacity,
-            checkIn: checkIn,
+            address: NewAddress(),
+            capacity: NewCapacity(),
+            checkIn: NewCheckIn(),
             houseRules: Array.Empty<string>(),
             amenityIds: Array.Empty<Guid>(),
             slug: "tenant-a-villa");
@@ -287,9 +246,9 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
             title: "Tenant B's Villa",
             description: "Seed property for OPS.M.10 Wave 2.",
             type: PropertyType.Villa,
-            address: address,
-            capacity: capacity,
-            checkIn: checkIn,
+            address: NewAddress(),
+            capacity: NewCapacity(),
+            checkIn: NewCheckIn(),
             houseRules: Array.Empty<string>(),
             amenityIds: Array.Empty<Guid>(),
             slug: "tenant-b-villa");
