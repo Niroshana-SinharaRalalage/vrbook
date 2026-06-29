@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
+using VrBook.Modules.Identity.Application.Behaviors;
 using VrBook.Modules.Identity.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Identity.Application.Tenants.Commands;
@@ -13,20 +14,46 @@ namespace VrBook.Modules.Identity.Application.Tenants.Commands;
 // Plus SetTenantPlatformFeeBpsCommand for Super Admin per OPS_M_5_PLAN §3.16,
 // dormant until Slice OPS.M.8 lights up IsPlatformAdmin.
 
+// OPS.M.10.2 F-final — these tenant-Stripe ops are now IAuditable so the
+// M.4 §3.4 cross-tenant audit pipeline fires the .failed row when
+// TenantAuthorizationBehavior throws. Previously only commands tagged
+// IAuditable were captured; Stripe onboarding/link operations should
+// have been auditable from M.5 but were missed. The wire-level fact pack
+// CrossTenantRejectionAuditFactPack pins this invariant.
 public sealed record OnboardTenantStripeCommand(Guid TenantId, string Country)
-    : IRequest<OnboardTenantStripeResult>, ITenantScoped;
+    : IRequest<OnboardTenantStripeResult>, ITenantScoped, IAuditable
+{
+    public string AuditAction => "tenant.stripe.onboard";
+    public string? AuditTargetType => "Tenant";
+    public string? AuditTargetId => TenantId.ToString();
+}
 public sealed record OnboardTenantStripeResult(string StripeAccountId);
 
 public sealed record GenerateStripeAccountLinkCommand(Guid TenantId)
-    : IRequest<GenerateStripeAccountLinkResult>, ITenantScoped;
+    : IRequest<GenerateStripeAccountLinkResult>, ITenantScoped, IAuditable
+{
+    public string AuditAction => "tenant.stripe.account-link";
+    public string? AuditTargetType => "Tenant";
+    public string? AuditTargetId => TenantId.ToString();
+}
 public sealed record GenerateStripeAccountLinkResult(string Url, DateTimeOffset ExpiresAt);
 
 public sealed record OpenStripeLoginLinkCommand(Guid TenantId)
-    : IRequest<OpenStripeLoginLinkResult>, ITenantScoped;
+    : IRequest<OpenStripeLoginLinkResult>, ITenantScoped, IAuditable
+{
+    public string AuditAction => "tenant.stripe.login-link";
+    public string? AuditTargetType => "Tenant";
+    public string? AuditTargetId => TenantId.ToString();
+}
 public sealed record OpenStripeLoginLinkResult(string Url);
 
 public sealed record SetTenantPlatformFeeBpsCommand(Guid TenantId, int Bps)
-    : IRequest<Unit>, ITenantScoped;
+    : IRequest<Unit>, ITenantScoped, IAuditable
+{
+    public string AuditAction => "tenant.set-platform-fee-bps";
+    public string? AuditTargetType => "Tenant";
+    public string? AuditTargetId => TenantId.ToString();
+}
 
 internal sealed class OnboardTenantStripeHandler(
     IdentityDbContext db, IStripeConnectGateway gateway)
