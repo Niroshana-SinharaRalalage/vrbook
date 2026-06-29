@@ -2,6 +2,7 @@ using MediatR;
 using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Booking.Application.Common;
 using VrBook.Modules.Booking.Infrastructure.Persistence;
 using VrBook.Modules.Catalog.Application.Properties.Queries;
@@ -11,6 +12,7 @@ namespace VrBook.Modules.Booking.Application.Commands;
 
 internal sealed class CancelBookingHandler(
     ICurrentUser currentUser,
+    IGuestTenantResolver guestTenant,
     IMediator mediator,
     IBookingRepository bookings,
     BookingDbContext db) : IRequestHandler<CancelBookingCommand, BookingDto>
@@ -21,6 +23,17 @@ internal sealed class CancelBookingHandler(
         {
             throw new ForbiddenException("Sign-in required.");
         }
+
+        // Slice OPS.M.9.1 F6d — closes audit #11 (Cancel sub-path). Guest
+        // persona has no ICurrentUser.TenantId; without a scope, RLS denies
+        // the booking lookup AND the CancelByGuest UPDATE. Resolve tenant
+        // from BookingId, then run the rest of the handler under the
+        // scope. The dispatched RefundForBookingCommand carries
+        // booking.TenantId so the M.4 gate fires against the booking's
+        // tenant (unchanged from F4).
+        var tenantId = await guestTenant.ResolveFromBookingIdAsync(request.Id, cancellationToken)
+            ?? throw new NotFoundException("Booking", request.Id);
+        using var tenantScope = BackgroundTenantScope.Enter(tenantId);
 
         var booking = await bookings.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new NotFoundException("Booking", request.Id);

@@ -8,6 +8,7 @@ using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Enums;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Booking.Application.Common;
 using VrBook.Modules.Booking.Domain;
 using VrBook.Modules.Booking.Infrastructure.Persistence;
@@ -20,6 +21,7 @@ namespace VrBook.Modules.Booking.Application.Commands;
 
 internal sealed class PlaceBookingHandler(
     ICurrentUser currentUser,
+    IGuestTenantResolver guestTenant,
     IMediator mediator,
     IBookingRepository bookings,
     IHoldStore holds,
@@ -39,6 +41,26 @@ internal sealed class PlaceBookingHandler(
                 "booking.house_rules",
                 "You must agree to the property's house rules before booking.");
         }
+
+        // Slice OPS.M.9.1 F6d — closes audit #11 (Place sub-path). Guests
+        // have no ICurrentUser.TenantId; without a tenant scope, M.9 RLS
+        // denies the GetPropertyByIdQuery handler's read (covered by the
+        // F6b carve-out for active properties — but Place ALSO touches
+        // booking.bookings + availability_blocks via the FOR UPDATE
+        // probes + the INSERT). Resolve tenant from property id and open
+        // a BackgroundTenantScope around the ENTIRE handler so the
+        // serializable transaction's SET LOCAL fires per-statement with
+        // the right tenant.
+        //
+        // Per OPS.M.9.1 §6.1 risk #4: per-statement GUC binding inside
+        // an explicit transaction works correctly. The using scope opens
+        // BEFORE BeginTransactionAsync so every command in the txn
+        // (including the FOR UPDATE probes + INSERT + cross-module
+        // CreatePaymentIntentForBookingCommand at the end) gets the
+        // stamp.
+        var tenantId = await guestTenant.ResolveFromPropertyIdAsync(r.PropertyId, cancellationToken)
+            ?? throw new NotFoundException("Property", r.PropertyId);
+        using var tenantScope = BackgroundTenantScope.Enter(tenantId);
 
         // Cross-module read into Catalog for property basics.
         var property = await mediator.Send(new GetPropertyByIdQuery(r.PropertyId), cancellationToken)
