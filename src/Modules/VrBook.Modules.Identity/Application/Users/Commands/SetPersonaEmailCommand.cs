@@ -1,5 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
@@ -14,17 +16,36 @@ namespace VrBook.Modules.Identity.Application.Users.Commands;
 /// resolved at queue time by <see cref="IUserEmailLookup"/>) reach a real
 /// mailbox on next-booking. Intended for staging walk-throughs only;
 /// the controller checks <c>DevAuth:AllowAnonymous</c> before invoking
-/// the command.
+/// the command. <b>OPS.M.10.2 F8</b> adds a handler-side prod-environment
+/// guard so a config flip alone cannot expose this in Production.
 /// </summary>
 public sealed record SetPersonaEmailCommand(string B2CObjectId, string NewEmail) : IRequest<Unit>;
 
 internal sealed class SetPersonaEmailHandler(
     IdentityDbContext db,
+    IHostEnvironment hostEnv,
+    IConfiguration configuration,
     ILogger<SetPersonaEmailHandler> logger)
     : IRequestHandler<SetPersonaEmailCommand, Unit>
 {
     public async Task<Unit> Handle(SetPersonaEmailCommand request, CancellationToken cancellationToken)
     {
+        // Slice OPS.M.10.2 F8 (audit #20) — defense-in-depth prod guard.
+        // Pre-fix: only the controller-side DevAuth:AllowAnonymous flag
+        // gated this. If that flag were ever true in Production (config
+        // mistake, env-var typo), any caller could rewrite any user's
+        // email by B2CObjectId — full account takeover via email change.
+        // Post-fix: refuse in Production regardless of the flag; AND
+        // belt-and-braces re-verify the flag at the handler.
+        if (hostEnv.IsProduction())
+        {
+            throw new ForbiddenException("Dev bridge endpoints are disabled in Production.");
+        }
+        if (!configuration.GetValue<bool>("DevAuth:AllowAnonymous"))
+        {
+            throw new ForbiddenException("DevAuth bridge is disabled.");
+        }
+
         ArgumentException.ThrowIfNullOrWhiteSpace(request.B2CObjectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.NewEmail);
 

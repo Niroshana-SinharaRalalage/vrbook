@@ -178,9 +178,18 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
         [FromQuery] Guid bookingId,
         [FromQuery] int hoursAgo,
         [FromServices] IConfiguration cfg,
+        [FromServices] Microsoft.Extensions.Hosting.IHostEnvironment hostEnv,
         [FromServices] Npgsql.NpgsqlDataSource? dataSource,
         CancellationToken ct)
     {
+        // Slice OPS.M.10.2 F8 (audit #21) — defense-in-depth prod guard.
+        // This raw-SQL UPDATE on booking.bookings bypasses EF entirely
+        // (no GUC, no domain events). Same risk class as #20: a Production
+        // config flip on DevAuth:AllowAnonymous would expose it.
+        if (hostEnv.IsProduction())
+        {
+            return NotFound();
+        }
         if (!configuration.GetValue<bool>("DevAuth:AllowAnonymous"))
         {
             return NotFound();
