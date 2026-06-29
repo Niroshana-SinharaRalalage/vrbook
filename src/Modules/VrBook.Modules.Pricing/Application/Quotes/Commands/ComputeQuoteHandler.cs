@@ -4,12 +4,16 @@ using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Enums;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Pricing.Infrastructure.Persistence;
 using PricingRule = VrBook.Modules.Pricing.Domain.PricingRule;
 
 namespace VrBook.Modules.Pricing.Application.Quotes.Commands;
 
-internal sealed class ComputeQuoteHandler(IPricingPlanRepository plans, IDateTimeProvider clock)
+internal sealed class ComputeQuoteHandler(
+    IPricingPlanRepository plans,
+    IGuestTenantResolver guestTenant,
+    IDateTimeProvider clock)
     : IRequestHandler<ComputeQuoteCommand, QuoteDto>
 {
     public async Task<QuoteDto> Handle(ComputeQuoteCommand request, CancellationToken cancellationToken)
@@ -23,6 +27,19 @@ internal sealed class ComputeQuoteHandler(IPricingPlanRepository plans, IDateTim
         {
             throw new BusinessRuleViolationException("quote.guests", "Guests must be at least 1.");
         }
+
+        // Slice OPS.M.9.1 F6c — closes audit #4. The handler is
+        // [AllowAnonymous]; without a tenant scope, M.9 RLS denies every
+        // read of pricing.pricing_plans + pricing.pricing_rules, so the
+        // public quote endpoint returns 404 for every property in
+        // production. Resolve the tenant from the property id (via the
+        // catalog.properties public-read carve-out shipped in F6b), then
+        // open a BackgroundTenantScope so the per-statement interceptor
+        // stamps app.tenant_id for the plan + rule reads inside the
+        // repository call.
+        var tenantId = await guestTenant.ResolveFromPropertyIdAsync(request.PropertyId, cancellationToken)
+            ?? throw new NotFoundException("Property", request.PropertyId);
+        using var tenantScope = BackgroundTenantScope.Enter(tenantId);
 
         var plan = await plans.GetByPropertyIdAsync(request.PropertyId, cancellationToken)
             ?? throw new NotFoundException("PricingPlan", request.PropertyId);

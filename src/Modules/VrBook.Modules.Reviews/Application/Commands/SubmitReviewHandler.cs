@@ -4,6 +4,7 @@ using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Enums;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Booking.Infrastructure.Persistence;
 using VrBook.Modules.Catalog.Infrastructure.Persistence;
 using VrBook.Modules.Reviews.Application.Common;
@@ -14,6 +15,7 @@ namespace VrBook.Modules.Reviews.Application.Commands;
 
 internal sealed class SubmitReviewHandler(
     ICurrentUser currentUser,
+    IGuestTenantResolver guestTenant,
     IReviewRepository reviews,
     IBookingRepository bookings,
     ReviewsDbContext reviewsDb,
@@ -25,6 +27,22 @@ internal sealed class SubmitReviewHandler(
         {
             throw new ForbiddenException("Sign-in required to leave a review.");
         }
+
+        // Slice OPS.M.9.1 F6c — closes audit #6. The handler is called from
+        // the guest persona which has no ICurrentUser.TenantId; M.9 RLS
+        // would deny the booking lookup AND the catalog tenant probe AND
+        // the reviews INSERT. Resolve tenant from BookingId first (the
+        // resolver opens its own scoped bypass for the lookup) and then
+        // run the rest of the handler under a single BackgroundTenantScope.
+        // Both Reviews + Catalog DbContexts read app.tenant_id via the
+        // shared AsyncLocal, so the cross-context UPDATE inherits the
+        // same scope without re-resolving.
+        //
+        // Removes the M.3-era '...0001' fallback Guid that the audit
+        // (#6 footgun) flagged.
+        var tenantId = await guestTenant.ResolveFromBookingIdAsync(cmd.BookingId, cancellationToken)
+            ?? throw new NotFoundException("Booking", cmd.BookingId);
+        using var tenantScope = BackgroundTenantScope.Enter(tenantId);
 
         var booking = await bookings.GetByIdAsync(cmd.BookingId, cancellationToken)
             ?? throw new NotFoundException("Booking", cmd.BookingId);
@@ -48,17 +66,6 @@ internal sealed class SubmitReviewHandler(
         {
             return existing.ToDto();
         }
-
-        // OPS.M.3 — review inherits tenancy from the booking's property
-        // (guests are tenant-less; the review belongs to the property's tenant).
-        // Use SqlQuery (parameterised FormattableString) to avoid the EF1002
-        // injection warning. Once Catalog 3c flips to NOT NULL we can switch
-        // to property.TenantId.Value via a normal load.
-        var propertyId = booking.PropertyId;
-        var tenantIdRaw = await catalogDb.Database
-            .SqlQuery<Guid?>($"SELECT tenant_id AS \"Value\" FROM catalog.properties WHERE \"Id\" = {propertyId}")
-            .FirstOrDefaultAsync(cancellationToken);
-        var tenantId = tenantIdRaw ?? new Guid("00000000-0000-0000-0000-000000000001");
 
         var review = Review.Submit(
             tenantId: tenantId,

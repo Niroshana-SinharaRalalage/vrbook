@@ -38,10 +38,16 @@ public sealed class ComputeQuoteHandlerTests
         var repo = Substitute.For<IPricingPlanRepository>();
         repo.GetByPropertyIdAsync(plan.PropertyId, Arg.Any<CancellationToken>())
             .Returns(plan);
+        // Slice OPS.M.9.1 F6c — the handler now resolves a tenant id from the
+        // property id before reading the plan. Stub returns the plan's own
+        // TenantId so the test exercises the same single-tenant path.
+        var guestTenant = Substitute.For<VrBook.Contracts.Interfaces.IGuestTenantResolver>();
+        guestTenant.ResolveFromPropertyIdAsync(plan.PropertyId, Arg.Any<CancellationToken>())
+            .Returns(plan.TenantId);
         var clock = Substitute.For<VrBook.Contracts.Interfaces.IDateTimeProvider>();
         clock.UtcNow.Returns(new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero));
         clock.Today.Returns(new DateOnly(2026, 8, 1));
-        return new ComputeQuoteHandler(repo, clock);
+        return new ComputeQuoteHandler(repo, guestTenant, clock);
     }
 
     [Fact]
@@ -222,10 +228,17 @@ public sealed class ComputeQuoteHandlerTests
         var repo = Substitute.For<IPricingPlanRepository>();
         repo.GetByPropertyIdAsync(propertyId, Arg.Any<CancellationToken>())
             .Returns((PricingPlan?)null);
+        // OPS.M.9.1 F6c — resolver returns null for an unknown property; the
+        // handler now 404s on the RESOLVER step (audit #4), not on the plan
+        // lookup. We exercise the resolver-null path to mirror the
+        // [AllowAnonymous] production behavior.
+        var guestTenant = Substitute.For<VrBook.Contracts.Interfaces.IGuestTenantResolver>();
+        guestTenant.ResolveFromPropertyIdAsync(propertyId, Arg.Any<CancellationToken>())
+            .Returns((Guid?)null);
         var clock = Substitute.For<VrBook.Contracts.Interfaces.IDateTimeProvider>();
         clock.UtcNow.Returns(new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero));
         clock.Today.Returns(new DateOnly(2026, 8, 1));
-        var handler = new ComputeQuoteHandler(repo, clock);
+        var handler = new ComputeQuoteHandler(repo, guestTenant, clock);
         var cmd = new ComputeQuoteCommand(propertyId,
             new QuoteRequest(new DateOnly(2026, 8, 4), new DateOnly(2026, 8, 7), 2, false));
 

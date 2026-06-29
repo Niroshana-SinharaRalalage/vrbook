@@ -33,10 +33,15 @@ public sealed class ComputeQuoteWithRulesTests
         var repo = Substitute.For<IPricingPlanRepository>();
         repo.GetByPropertyIdAsync(plan.PropertyId, Arg.Any<CancellationToken>())
             .Returns(plan);
+        // OPS.M.9.1 F6c — stub the resolver to return the plan's tenant so
+        // the single-tenant test path is unchanged.
+        var guestTenant = Substitute.For<IGuestTenantResolver>();
+        guestTenant.ResolveFromPropertyIdAsync(plan.PropertyId, Arg.Any<CancellationToken>())
+            .Returns(plan.TenantId);
         var clock = Substitute.For<IDateTimeProvider>();
         clock.UtcNow.Returns(new DateTimeOffset(today.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero));
         clock.Today.Returns(today);
-        return new ComputeQuoteHandler(repo, clock);
+        return new ComputeQuoteHandler(repo, guestTenant, clock);
     }
 
     private static ComputeQuoteCommand Cmd(Guid propertyId, DateOnly checkin, DateOnly checkout, int guests = 2) =>
