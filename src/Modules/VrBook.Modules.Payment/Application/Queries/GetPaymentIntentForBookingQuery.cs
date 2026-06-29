@@ -1,6 +1,7 @@
 using MediatR;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
+using VrBook.Contracts.Interfaces;
 using VrBook.Modules.Payment.Infrastructure.Persistence;
 using VrBook.Modules.Payment.Infrastructure.Stripe;
 
@@ -15,12 +16,27 @@ public sealed record GetPaymentIntentForBookingQuery(Guid BookingId) : IRequest<
 
 internal sealed class GetPaymentIntentForBookingHandler(
     IPaymentIntentRepository repo,
+    ICurrentUser currentUser,
     IStripeGateway stripe) : IRequestHandler<GetPaymentIntentForBookingQuery, CreatePaymentIntentResponse?>
 {
     public async Task<CreatePaymentIntentResponse?> Handle(GetPaymentIntentForBookingQuery request, CancellationToken cancellationToken)
     {
         var pi = await repo.GetByBookingIdAsync(request.BookingId, cancellationToken);
         if (pi is null)
+        {
+            return null;
+        }
+        // Slice OPS.M.10.2 F7 (audit #17) — defense-in-depth post-load
+        // tenant equality. Today RLS already filters cross-tenant PIs
+        // (the SELECT returns null, the controller surfaces 404). If RLS
+        // regressed, an Owner/Admin in one tenant could harvest a PI's
+        // ClientSecret by guessing the bookingId. The post-load check
+        // is the safety net.
+        //
+        // Guest persona (no TenantId, signed in via DevAuth/Entra) is
+        // unaffected — the check only fires for callers with a tenant
+        // membership.
+        if (currentUser.TenantId is { } tid && pi.TenantId != tid)
         {
             return null;
         }

@@ -43,6 +43,15 @@ internal sealed class UpdateChannelFeedHandler(SyncDbContext db, IFeedUrlBuilder
     {
         var feed = await db.ChannelFeeds.FirstOrDefaultAsync(f => f.Id == cmd.Id, cancellationToken)
             ?? throw new NotFoundException("ChannelFeed", cmd.Id);
+        // Slice OPS.M.10.2 F7 (audit #19) — defense-in-depth row-level
+        // tenant equality. M.4 already gated cmd.TenantId == caller via
+        // the ITenantScoped pipeline; this check binds the loaded row
+        // back to the command. If RLS regressed, an Admin in tenant A
+        // could mutate tenant B's feed by id; this is the safety net.
+        if (feed.TenantId != cmd.TenantId)
+        {
+            throw new NotFoundException("ChannelFeed", cmd.Id);
+        }
         feed.UpdateConfig(cmd.InboundUrl, cmd.PollIntervalMinutes, cmd.IsEnabled);
         await db.SaveChangesAsync(cancellationToken);
         return feed.ToDto(urls.OutboundFeedUrl(feed.OutboundToken), propertyTitle: string.Empty);
@@ -55,6 +64,12 @@ internal sealed class DeleteChannelFeedHandler(SyncDbContext db) : IRequestHandl
     {
         var feed = await db.ChannelFeeds.FirstOrDefaultAsync(f => f.Id == cmd.Id, cancellationToken)
             ?? throw new NotFoundException("ChannelFeed", cmd.Id);
+        // Slice OPS.M.10.2 F7 (audit #19) — same defense-in-depth as
+        // UpdateChannelFeedHandler above.
+        if (feed.TenantId != cmd.TenantId)
+        {
+            throw new NotFoundException("ChannelFeed", cmd.Id);
+        }
         // Soft delete via the BaseDbContext interceptor (DeletedAt is set on Remove).
         db.ChannelFeeds.Remove(feed);
         await db.SaveChangesAsync(cancellationToken);

@@ -24,6 +24,7 @@ public sealed record RetryNotificationCommand(Guid Id, Guid TenantId) : IRequest
 
 internal sealed class RetryNotificationHandler(
     NotificationsDbContext db,
+    ICurrentUser currentUser,
     ILogger<RetryNotificationHandler> logger)
     : IRequestHandler<RetryNotificationCommand, Unit>
 {
@@ -31,6 +32,32 @@ internal sealed class RetryNotificationHandler(
     {
         var row = await db.Logs.FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
             ?? throw new NotFoundException("NotificationLog", request.Id);
+
+        // Slice OPS.M.10.2 F7 (audit #15) — explicit row-level tenant
+        // equality. The M.4 behavior gated cmd.TenantId == caller; that
+        // bound the COMMAND's tenant. But the notification_log RLS policy
+        // is the nullable variant (tenant_id IS NULL allowed), so a tenant
+        // Admin could retry a guest's booking-confirmation/cancellation
+        // email (which has tenant_id = NULL) and force a re-send to the
+        // guest's inbox.
+        //
+        // Post-fix policy:
+        //   * Tenant-stamped row (TenantId set): must equal cmd.TenantId.
+        //   * NULL-tenant row (guest booking emails): PlatformAdmin only.
+        if (row.TenantId is { } rowTenant)
+        {
+            if (rowTenant != request.TenantId)
+            {
+                throw new NotFoundException("NotificationLog", request.Id);
+            }
+        }
+        else if (!currentUser.IsPlatformAdmin)
+        {
+            // NULL-tenant rows are platform-emitted (guest-flow emails); a
+            // tenant Admin has no business retrying them.
+            throw new ForbiddenException("Only PlatformAdmin may retry guest-flow notifications.");
+        }
+
         try
         {
             row.Reset();

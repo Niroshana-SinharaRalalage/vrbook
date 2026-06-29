@@ -24,6 +24,15 @@ internal sealed class SendMessageHandler(MessagingDbContext db, ICurrentUser cur
         var me = currentUser.UserId.Value;
         var thread = await db.Threads.FirstOrDefaultAsync(t => t.Id == cmd.ThreadId, cancellationToken)
             ?? throw new NotFoundException("MessageThread", cmd.ThreadId);
+        // Slice OPS.M.10.2 F7 (audit #14) — same-tenant non-participants
+        // (a second guest sharing the tenant, a tenant Admin not on the
+        // thread) would otherwise be able to spoof messages because RLS
+        // gates cross-tenant, NOT cross-participant. Sibling MarkReadHandler
+        // already has this check (line 57-60); SendMessage was missed.
+        if (!thread.IsParticipant(me))
+        {
+            throw new ForbiddenException("Not a participant in this thread.");
+        }
         // Sender display name — pulled from whichever side me is.
         var displayName = me == thread.GuestUserId ? thread.GuestDisplayName : thread.OwnerDisplayName;
 

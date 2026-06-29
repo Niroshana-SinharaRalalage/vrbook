@@ -41,11 +41,25 @@ internal sealed class UpdatePropertyHandler(
         // pipeline; the controller stamps TenantId server-side so tenant-A users
         // cannot edit a tenant-B property. RBAC (Owner/Admin role) is on the
         // controller. Existence is still validated for the 404 contract.
-        _ = await db.Properties.AsNoTracking()
+        //
+        // Slice OPS.M.10.2 F7 (audit #18) — defense-in-depth: also verify
+        // the loaded property's TenantId matches the command's TenantId
+        // BEFORE the raw-SQL UPDATE/DELETE on the child tables
+        // (catalog.house_rules, catalog.property_amenities) runs. M.4's
+        // tenant gate compares caller==command; this check compares
+        // command==row, closing the (today RLS-protected) gap where a
+        // future RLS regression on catalog.properties would let a
+        // cross-tenant property's children get mutated. Throws as
+        // NotFoundException to preserve the existing 404 contract.
+        var existing = await db.Properties.AsNoTracking()
             .Where(p => p.Id == request.Id)
-            .Select(p => new { p.Id, p.Slug })
+            .Select(p => new { p.Id, p.Slug, p.TenantId })
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Property", request.Id);
+        if (existing.TenantId != request.TenantId)
+        {
+            throw new NotFoundException("Property", request.Id);
+        }
 
         // Validate domain VOs by constructing them - throws if invariants violated.
         var address = new Address(
