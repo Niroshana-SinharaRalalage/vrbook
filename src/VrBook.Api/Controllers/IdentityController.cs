@@ -256,6 +256,157 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
     }
 
     /// <summary>
+    /// Slice OPS.M.10.2 F11.6.1 dev bridge — operator bootstrap. ONE
+    /// idempotent call that promotes a user to PlatformAdmin, seeds their
+    /// tenant_memberships row, and seeds a default PricingPlan for every
+    /// active property in that tenant. Lets the engineering lead unblock
+    /// staging UI verification WITHOUT needing direct Postgres access
+    /// (the staging server is VNet-only).
+    ///
+    /// <para>Same THREE GUARDS as F11.2 (Production + DevAuth +
+    /// AllowStripeStub) — defaults dormant; flip env vars temporarily
+    /// to use.</para>
+    /// </summary>
+    [HttpPost("bootstrap-operator")]
+    public async Task<IActionResult> BootstrapOperator(
+        [FromBody] BootstrapOperatorRequest body,
+        [FromServices] VrBook.Modules.Identity.Infrastructure.Persistence.IdentityDbContext idDb,
+        [FromServices] VrBook.Modules.Pricing.Infrastructure.Persistence.PricingDbContext pricingDb,
+        [FromServices] VrBook.Modules.Catalog.Infrastructure.Persistence.CatalogDbContext catalogDb,
+        [FromServices] Microsoft.Extensions.Hosting.IHostEnvironment hostEnv,
+        CancellationToken ct)
+    {
+        if (hostEnv.IsProduction())
+        {
+            return NotFound();
+        }
+        if (!configuration.GetValue<bool>("DevAuth:AllowAnonymous"))
+        {
+            return NotFound();
+        }
+        if (!configuration.GetValue<bool>("DevAuth:AllowStripeStub"))
+        {
+            return NotFound();
+        }
+        if (body is null || string.IsNullOrWhiteSpace(body.Email) || body.TenantId == Guid.Empty)
+        {
+            return BadRequest(new { detail = "email + tenantId required." });
+        }
+
+        using var bypass = RlsBypassScope.Enter();
+
+        // 1) Promote the user to PlatformAdmin (idempotent — domain method
+        //    no-ops on already-granted).
+        var user = await idDb.Users.FirstOrDefaultAsync(
+            u => ((string)(object)u.Email) == body.Email, ct);
+        if (user is null)
+        {
+            return NotFound(new { detail = $"No user with email '{body.Email}' has signed in to staging yet." });
+        }
+        var alreadyPA = user.IsPlatformAdmin;
+        if (!alreadyPA)
+        {
+            user.GrantPlatformAdmin(actorId: user.Id);
+        }
+
+        // 2) Seed tenant_memberships row (idempotent).
+        var tenantExists = await idDb.Tenants.AnyAsync(t => t.Id == body.TenantId, ct);
+        if (!tenantExists)
+        {
+            return NotFound(new { detail = $"Tenant '{body.TenantId}' not found." });
+        }
+
+        var existingActive = await idDb.TenantMemberships.FirstOrDefaultAsync(
+            m => m.UserId == user.Id && m.TenantId == body.TenantId && m.DeletedAt == null, ct);
+        Guid membershipId;
+        bool membershipCreated;
+        if (existingActive is not null)
+        {
+            membershipId = existingActive.Id;
+            membershipCreated = false;
+        }
+        else
+        {
+            var softDeleted = await idDb.TenantMemberships.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(m => m.UserId == user.Id && m.TenantId == body.TenantId && m.DeletedAt != null, ct);
+            if (softDeleted is not null)
+            {
+                softDeleted.Revive();
+                if (softDeleted.Role != VrBook.Modules.Identity.Domain.TenantMembership.RoleTenantAdmin)
+                {
+                    softDeleted.ChangeRole(VrBook.Modules.Identity.Domain.TenantMembership.RoleTenantAdmin);
+                }
+                if (!softDeleted.IsPrimary)
+                {
+                    softDeleted.MakePrimary();
+                }
+                membershipId = softDeleted.Id;
+                membershipCreated = false;
+            }
+            else
+            {
+                var fresh = VrBook.Modules.Identity.Domain.TenantMembership.Create(
+                    user.Id, body.TenantId,
+                    VrBook.Modules.Identity.Domain.TenantMembership.RoleTenantAdmin,
+                    isPrimary: true);
+                idDb.TenantMemberships.Add(fresh);
+                membershipId = fresh.Id;
+                membershipCreated = true;
+            }
+        }
+        await idDb.SaveChangesAsync(ct);
+
+        // 3) Seed default PricingPlan for every active, undeleted property
+        //    in this tenant that doesn't already have one. Idempotent on
+        //    (TenantId, PropertyId).
+        var propertyIds = await catalogDb.Properties
+            .AsNoTracking()
+            .Where(p => p.TenantId == body.TenantId && p.IsActive && p.DeletedAt == null)
+            .Select(p => p.Id)
+            .ToListAsync(ct);
+
+        var existingPlanPropertyIds = await pricingDb.PricingPlans
+            .AsNoTracking()
+            .Where(p => p.TenantId == body.TenantId && propertyIds.Contains(p.PropertyId))
+            .Select(p => p.PropertyId)
+            .ToListAsync(ct);
+
+        var plansCreated = 0;
+        foreach (var pid in propertyIds.Except(existingPlanPropertyIds))
+        {
+            var plan = VrBook.Modules.Pricing.Domain.PricingPlan.Create(
+                tenantId: body.TenantId,
+                propertyId: pid,
+                baseRate: body.DefaultBaseNightlyRate,
+                currency: body.DefaultCurrency);
+            plan.Replace(
+                baseRate: body.DefaultBaseNightlyRate,
+                weekendRate: body.DefaultBaseNightlyRate * 1.25m,
+                currency: body.DefaultCurrency,
+                minStay: 1, maxStay: 30, dynamicEnabled: false,
+                fees: Array.Empty<(VrBook.Contracts.Enums.FeeKind, decimal, VrBook.Contracts.Enums.FeeBasis, int?, string)>());
+            pricingDb.PricingPlans.Add(plan);
+            plansCreated++;
+        }
+        if (plansCreated > 0)
+        {
+            await pricingDb.SaveChangesAsync(ct);
+        }
+
+        return Ok(new
+        {
+            userId = user.Id,
+            email = body.Email,
+            platformAdminGranted = !alreadyPA,
+            tenantId = body.TenantId,
+            membershipId,
+            membershipCreated,
+            propertyCount = propertyIds.Count,
+            pricingPlansCreated = plansCreated,
+        });
+    }
+
+    /// <summary>
     /// Slice OPS.M.10.2 F11.2 dev bridge — stub a tenant's Stripe Connect
     /// readiness without running the real sandbox onboarding flow. Used by
     /// staging operators when the Stripe-hosted form flakes OR when an
@@ -358,3 +509,12 @@ public sealed record StubStripeReadinessRequest(
     string? StripeAccountId,
     bool ChargesEnabled = true,
     bool PayoutsEnabled = true);
+
+/// <summary>
+/// Slice OPS.M.10.2 F11.6.1 — body for the one-shot operator bootstrap.
+/// </summary>
+public sealed record BootstrapOperatorRequest(
+    [property: System.Text.Json.Serialization.JsonRequired] string Email,
+    [property: System.Text.Json.Serialization.JsonRequired] Guid TenantId,
+    decimal DefaultBaseNightlyRate = 200m,
+    string DefaultCurrency = "USD");
