@@ -499,18 +499,15 @@ jobs:
           # it still returns 200 so we accept that. Tighten when Redis lands.
           assert "/health/ready" 200 "$(curl_status "$API/health/ready")"
 
-          echo "=== Identity (DevAuth path) ==="
-          # DevAuth__AllowAnonymous=true on staging - GET /me must succeed with no header.
-          assert "GET  /api/v1/me"            200 "$(curl_status "$API/api/v1/me")"
-          assert "GET  /api/v1/admin/users"   200 "$(curl_status "$API/api/v1/admin/users")"
-
-          # Verify the body of /me actually has an id - guards against the
-          # API returning a stub or empty object even if the status is 200.
-          BODY=$(curl -sS --max-time 15 "$API/api/v1/me")
-          echo "  /me body: $BODY"
-          echo "$BODY" | jq -e '.id and (.email | length > 0)' > /dev/null \
-            || { echo "::error::/api/v1/me did not return a valid user object"; exit 1; }
-          echo "  /me body shape  OK"
+          echo "=== Identity (Entra-only — DevAuth disabled on staging) ==="
+          # OPS.M.10.2 ops-fix — Entra sign-in landed (commits 63cd52a +
+          # b21afc7) and DevAuth__AllowAnonymous was flipped to false on
+          # staging. Unauthenticated callers MUST get 401 now. The legacy
+          # 200-shape smoke (DevAuth path) is removed; an Entra-token
+          # smoke is tracked as a follow-up ops slice (needs client-creds
+          # wiring into workflow secrets).
+          assert "GET  /api/v1/me"            401 "$(curl_status "$API/api/v1/me")"
+          assert "GET  /api/v1/admin/users"   401 "$(curl_status "$API/api/v1/admin/users")"
 
           echo "=== Swagger (enabled via Swagger__EnableInProduction) ==="
           assert "GET  /swagger/v1/swagger.json" 200 "$(curl_status "$API/swagger/v1/swagger.json")"
@@ -521,9 +518,10 @@ jobs:
           assert "GET  /api/v1/amenities"         200 "$(curl_status "$API/api/v1/amenities")"
 
           echo "=== Booking (A4) ==="
-          # DevAuth user is Dev Owner - they own all properties so cannot
-          # book their own. Just sanity-check the GET-list endpoint exists.
-          assert "GET  /api/v1/bookings" 200 "$(curl_status "$API/api/v1/bookings")"
+          # OPS.M.10.2 ops-fix — Entra-only on staging. Unauth /bookings
+          # returns 401 (the endpoint is [Authorize]). Asserting 401
+          # confirms (a) the route is wired, (b) the auth gate fires.
+          assert "GET  /api/v1/bookings" 401 "$(curl_status "$API/api/v1/bookings")"
 
           echo "=== Pricing (A3) ==="
           # GET /pricing on a property with no plan -> 404 (expected for staging seed).
