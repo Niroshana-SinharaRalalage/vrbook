@@ -59,6 +59,28 @@ Severity scale:
 
 **Counts**: 25 findings — **1 Critical, 12 High, 4 Medium, 5 Low, 1 Info, 2 Verify**.
 
+**Slice OPS.M.10.2 close-out (2026-06-29)**: status by finding —
+
+| # | Status | Closed by |
+|---|---|---|
+| 1 (Critical SearchUsersHandler) | **CLOSED** | OPS.M.10.2 C1 `f9c64bd` |
+| 2 (RefundForBookingCommand tenant scoping) | **CLOSED** | OPS.M.10.2 F4 `dc96a2e` |
+| 3 (HandleStripeWebhook bypass narrowing) | **CLOSED** | OPS.M.10.2 F4 `dc96a2e` |
+| 4 (ComputeQuoteHandler) | **CLOSED** | OPS.M.9.1 F6c `1997e77` |
+| 5 (GetReviewsForPropertyHandler) | **CLOSED** | OPS.M.9.1 F6c `1997e77` |
+| 6 (SubmitReviewHandler + fallback foot-gun) | **CLOSED** | OPS.M.9.1 F6c `1997e77` |
+| 7 (GetOutboundFeedHandler) | **CLOSED** | OPS.M.9.1 F6e _this commit_ |
+| 8 (SearchPropertiesHandler) | **CLOSED** | OPS.M.9.1 F6b `ac34534` (public-read carve-out) |
+| 9 (GetPropertyBySlugHandler) | **CLOSED** | OPS.M.9.1 F6b `ac34534` (public-read carve-out) |
+| 10 (GetPropertyAvailabilityHandler) | **CLOSED** | OPS.M.9.1 F6d `42ef3b2` |
+| 11 (Guest booking flow: Place/Get/MyBookings/Cancel) | **CLOSED** | OPS.M.9.1 F6d `42ef3b2` |
+| 12 (GetPropertyCalendar auth gate) | **CLOSED** | OPS.M.10.2 C2 `9542c74` |
+| 13 (Reports authorization tenant check) | **CLOSED** | OPS.M.10.2 C3 `4f7ff20` |
+| 14–24 (Mediums + Lows) | **Open** | OPS.M.10.2 F7-F9 (next) |
+| 25 (Outbox-relay verify) | **Open** | OPS.M.10.2 F10 (next) |
+
+Critical + all 12 High **closed**. Remaining 4 Medium + 5 Low + 1 Verify ship under F7-F10.
+
 ---
 
 ## 2. The big-picture root cause behind 8 of the 12 High findings

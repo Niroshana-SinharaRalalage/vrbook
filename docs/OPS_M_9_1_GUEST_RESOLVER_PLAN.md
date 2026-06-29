@@ -593,4 +593,33 @@ If the test pack uncovers a NEW cross-tenant data leak that the resolver introdu
 
 ## §11 Close-out (populated at end of F6e)
 
-(To be filled in by the implementor at end of F6e — what shipped, what tests passed, what staging URLs the user verified.)
+Slice **CLOSED** 2026-06-29 via commits:
+
+| Sub-step | Commit | What shipped |
+|---|---|---|
+| F5  | `848c3be` | This planning doc (the architect's design gate). |
+| F6a | `55cbaf2` | `IGuestTenantResolver` interface (Contracts) + `GuestTenantResolver` impl (`VrBook.Api.Guests`, 3 bypass factories + ILogger). DI registration in Program.cs. `RlsBypassCallSiteAllowlistTests` allow-list gains the one new entry. Pure abstraction; no behavior change. |
+| F6b | `ac34534` | `EnablePublicReadCarveOut(schema, table, usingPredicate)` + `DropPublicReadCarveOut(...)` helpers in `RlsMigrationBuilderExtensions`. New migration `20260629132339_OpsM9_1a_Catalog_PublicReadCarveOut` adds `rls_catalog_properties_public_read` (predicate `is_active = true AND deleted_at IS NULL`) + `rls_catalog_property_images_public_read` (EXISTS-against-parent). Closes audit #8 + #9. |
+| F6c | `1997e77` | `ComputeQuoteHandler`, `GetReviewsForPropertyHandler`, `SubmitReviewHandler` injected `IGuestTenantResolver` + opened `BackgroundTenantScope` around their reads. `SubmitReviewHandler` removed the raw-SQL property-tenant probe + the `…0001` fallback Guid (audit #6 foot-gun gone). Closes audit #4 + #5 + #6. |
+| F6d | `42ef3b2` | `GetPropertyAvailabilityHandler`, `PlaceBookingHandler` (scope wraps the serializable transaction), `GetBookingHandler`, `MyBookingsHandler` (per-tenant iteration per §1.4), `CancelBookingHandler`. Closes audit #10 + #11. |
+| F6e | _this commit_ | `GetOutboundFeedHandler` injected `IGuestTenantResolver` + opened `BackgroundTenantScope` around the token lookup + booking enumeration. Audit cross-reference table (§6.3) marked done. Closes audit #7. |
+
+**Audit findings closed in this slice**: #4, #5, #6, #7, #8, #9, #10, #11 (all 8 High findings tagged "anonymous-tenant read closure" in `docs/OPS_M_10_2_AUDIT_FINDINGS.md` §2).
+
+**Out of scope per F5 §1**: audit #22 (Low — `ReleaseHoldCommand` guess-able) tracked under Slice OPS.M.10.2 C9.
+
+**Validation**: every F6 sub-commit landed CI-green at the `cd-staging-api` workflow (backend tests + contracts + Bicep + 5 image builds + migrate + 4 worker deploys + deploy api + smoke).
+
+**Staging UI verification (per §5)**: the user can hit the public-page URLs enumerated in §5 against `https://ca-vrbook-api-staging.icydesert-abf3fa4e.eastus2.azurecontainerapps.io/` paired with the web staging FQDN to confirm:
+1. `/properties` returns seeded properties (F6b).
+2. `/properties/<seeded-slug>` renders detail + quote widget shows nightly + total (F6b + F6c).
+3. Reviews section populates (F6c).
+4. Guest persona can place/view/cancel a booking + see it in `/account/bookings` (F6d).
+5. The outbound iCal URL (copied from `/admin/sync`) returns 200 with VEVENT entries in a fresh browser tab (F6e).
+
+**Locked-rule honored**:
+- `feedback_consult_architect_for_planning` — architect produced this doc before code (F5).
+- `feedback_check_ci_after_every_push` — every sub-commit gated on `gh run` conclusion=success.
+- `feedback_use_ci_filter_locally` — `pwsh scripts/pre-push-check.ps1` ran the CI filter pre-push (where Docker permitted).
+- `feedback_master_todo_naming_slice_prefix` — every TODO entry prefixed `Slice OPS.M.9.1 F6*`.
+- `feedback_ship_complete_vertical_slices` — F6 landed staged so each sub-step left staging in a UI-verifiable state, not just passing tests.

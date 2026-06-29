@@ -1,6 +1,7 @@
 using MediatR;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Sync.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Sync.Application.Feeds.Queries;
@@ -18,10 +19,27 @@ public sealed record GetOutboundFeedQuery(string OutboundToken) : IRequest<strin
 internal sealed class GetOutboundFeedHandler(
     IChannelFeedRepository feeds,
     IConfirmedBookingLookup bookings,
+    IGuestTenantResolver guestTenant,
     IEnumerable<IExternalChannel> channels) : IRequestHandler<GetOutboundFeedQuery, string>
 {
     public async Task<string> Handle(GetOutboundFeedQuery request, CancellationToken cancellationToken)
     {
+        // Slice OPS.M.9.1 F6e — closes audit #7. [AllowAnonymous] endpoint;
+        // the outbound token IS the credential. M.9 RLS denied every read
+        // of sync.channel_feeds AND booking.bookings, so every iCal
+        // subscriber (Airbnb, VRBO, Google Calendar) got empty feeds.
+        // CarveOutAppLayerTests.Outbound_iCal_feed_with_unknown_token_returns_404
+        // false-passed because all tokens 404'd — that test now needs a
+        // valid-token-200 partner (added in this commit's test pack).
+        //
+        // Resolve tenant from the token first (the resolver opens its own
+        // scoped bypass against sync.channel_feeds), then open a
+        // BackgroundTenantScope so the feed metadata reload + booking
+        // lookup inside the handler run under the right tenant.
+        var tenantId = await guestTenant.ResolveFromOutboundTokenAsync(request.OutboundToken, cancellationToken)
+            ?? throw new NotFoundException("OutboundFeed", request.OutboundToken);
+        using var tenantScope = BackgroundTenantScope.Enter(tenantId);
+
         var feed = await feeds.GetByOutboundTokenAsync(request.OutboundToken, cancellationToken)
             ?? throw new NotFoundException("OutboundFeed", request.OutboundToken);
 
