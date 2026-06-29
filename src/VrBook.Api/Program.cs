@@ -123,6 +123,14 @@ builder.Services
     .AddAdminModule(builder.Configuration)
     .AddReportsModule(builder.Configuration);
 
+// ---- Slice OPS.M.9.1 F6a — IGuestTenantResolver (closes audit #4-#7, #10, #11).
+// Registered AFTER the modules because the impl injects bypass factories
+// for Catalog + Booking + Sync, which the modules' AddTenantScopedDbContext
+// wires via AddRlsBypassFactory<TContext>. Scoped lifetime — matches the
+// bypass factory lifetime (OPS.M.9 §4.4).
+builder.Services.AddScoped<VrBook.Contracts.Interfaces.IGuestTenantResolver,
+                           VrBook.Api.Guests.GuestTenantResolver>();
+
 // ---- Health probes (Container Apps Liveness + Readiness; see proposal §23.5) ----
 builder.Services.AddHealthChecks()
     .AddCheck<LivenessHealthCheck>("self", tags: new[] { "live" })

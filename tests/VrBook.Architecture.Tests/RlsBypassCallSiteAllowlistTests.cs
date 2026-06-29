@@ -35,6 +35,17 @@ public sealed class RlsBypassCallSiteAllowlistTests
         // GetRequiredService, not constructor. Detected by absence of
         // constructor injection in the worker assembly; allow-list documents
         // the intent.
+
+        // Slice OPS.M.9.1 §2.4 — the guest-tenant resolver is the sole
+        // bypass site for anonymous-read tenant resolution. Consumer
+        // handlers (ComputeQuote, GetReviewsForProperty, SubmitReview,
+        // GetOutboundFeed, GetPropertyAvailability, PlaceBooking,
+        // GetBooking, MyBookings, CancelBooking) DO NOT inject
+        // IRlsBypassDbContextFactory<>; they inject IGuestTenantResolver.
+        // Lives in VrBook.Api (host-level) because it injects concrete
+        // DbContexts from Catalog/Booking/Sync — VrBook.Infrastructure
+        // doesn't reference module assemblies (layering).
+        "VrBook.Api.Guests.GuestTenantResolver",
     };
 
     private static IEnumerable<Assembly> EnumerateModuleAssemblies()
@@ -51,6 +62,9 @@ public sealed class RlsBypassCallSiteAllowlistTests
             typeof(VrBook.Modules.Reviews.Application.Commands.SubmitReviewCommand).Assembly,
             typeof(VrBook.Modules.Notifications.Application.Commands.RetryNotificationCommand).Assembly,
             typeof(VrBook.Modules.Sync.Application.ChannelFeeds.Commands.CreateChannelFeedCommand).Assembly,
+            // Slice OPS.M.9.1 F6a — VrBook.Api hosts the
+            // IGuestTenantResolver impl (the new allow-listed bypass site).
+            typeof(VrBook.Api.Guests.GuestTenantResolver).Assembly,
         };
     }
 
