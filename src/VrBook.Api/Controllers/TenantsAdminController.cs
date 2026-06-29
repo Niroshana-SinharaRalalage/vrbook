@@ -2,8 +2,6 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
-using VrBook.Contracts.Interfaces;
-using VrBook.Domain.Common;
 using VrBook.Modules.Identity.Application.Tenants.Commands;
 
 namespace VrBook.Api.Controllers;
@@ -23,10 +21,16 @@ namespace VrBook.Api.Controllers;
 [Route("api/v1/admin/tenants/{tenantId:guid}")]
 [Tags("Tenant — Admin")]
 [Authorize(Roles = "Owner,Admin")]
-public sealed class TenantsAdminController(IMediator mediator, ICurrentUser currentUser) : ControllerBase
+public sealed class TenantsAdminController(IMediator mediator) : ControllerBase
 {
-    private Guid CallerTenantId() => currentUser.TenantId
-        ?? throw new ForbiddenException("Tenant admin action requires a tenant membership.");
+    // OPS.M.10.2 F-residual (audit follow-up): pass the ROUTE tenantId into
+    // the command instead of `CallerTenantId()`. Previously the controller
+    // substituted the caller's own tenant — so when OwnerB POSTed to
+    // /api/v1/admin/tenants/{tenantA}/stripe/onboard, the dispatched command
+    // carried tenantId = B, the M.4 TenantAuthorizationBehavior compared
+    // currentUser.TenantId (B) == cmd.TenantId (B) and PASSED, allowing the
+    // handler to operate against the wrong tenant. Latent cross-tenant
+    // write hole, not just a test-shape gap.
 
     [HttpPost("stripe/onboard")]
     [SwaggerOperation(Summary = "Create the tenant's Stripe Connect Express account (idempotent on tenant id).")]
@@ -34,9 +38,8 @@ public sealed class TenantsAdminController(IMediator mediator, ICurrentUser curr
     public async Task<ActionResult<OnboardTenantStripeResult>> Onboard(
         Guid tenantId, [FromBody] OnboardTenantStripeRequest body, CancellationToken cancellationToken)
     {
-        _ = tenantId; // route value; the behavior gates the caller's tenant scope.
         var result = await mediator.Send(
-            new OnboardTenantStripeCommand(CallerTenantId(), body.Country ?? "US"),
+            new OnboardTenantStripeCommand(tenantId, body.Country ?? "US"),
             cancellationToken);
         return Ok(result);
     }
@@ -47,9 +50,8 @@ public sealed class TenantsAdminController(IMediator mediator, ICurrentUser curr
     public async Task<ActionResult<GenerateStripeAccountLinkResult>> AccountLink(
         Guid tenantId, CancellationToken cancellationToken)
     {
-        _ = tenantId;
         var result = await mediator.Send(
-            new GenerateStripeAccountLinkCommand(CallerTenantId()),
+            new GenerateStripeAccountLinkCommand(tenantId),
             cancellationToken);
         return Ok(result);
     }
@@ -60,9 +62,8 @@ public sealed class TenantsAdminController(IMediator mediator, ICurrentUser curr
     public async Task<ActionResult<OpenStripeLoginLinkResult>> LoginLink(
         Guid tenantId, CancellationToken cancellationToken)
     {
-        _ = tenantId;
         var result = await mediator.Send(
-            new OpenStripeLoginLinkCommand(CallerTenantId()),
+            new OpenStripeLoginLinkCommand(tenantId),
             cancellationToken);
         return Ok(result);
     }

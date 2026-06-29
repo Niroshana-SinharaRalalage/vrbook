@@ -40,7 +40,9 @@ public sealed class PlatformAdminPromoteRevokeSmokeTest(TwoTenantApiFixture fixt
             "baseline — OwnerA has is_platform_admin = false (seeded).");
 
         // Operator runs the OPS_M_8_PROMOTE_PLATFORM_ADMIN.md SQL.
-        await ExecuteAsync("UPDATE identity.users SET is_platform_admin = true WHERE id = @id;",
+        // OPS.M.10.2 F-residual — `id` (unquoted) resolves PG-lowercase but EF
+        // created the column as `"Id"` (quoted PascalCase). Use the quoted form.
+        await ExecuteAsync("UPDATE identity.users SET is_platform_admin = true WHERE \"Id\" = @id;",
             new { id = fixture.OwnerAUserId });
 
         // OwnerA refresh: now reaches the platform endpoint.
@@ -51,7 +53,7 @@ public sealed class PlatformAdminPromoteRevokeSmokeTest(TwoTenantApiFixture fixt
             "which re-reads is_platform_admin = true and adds the PlatformAdmin role claim.");
 
         // Revoke.
-        await ExecuteAsync("UPDATE identity.users SET is_platform_admin = false WHERE id = @id;",
+        await ExecuteAsync("UPDATE identity.users SET is_platform_admin = false WHERE \"Id\" = @id;",
             new { id = fixture.OwnerAUserId });
 
         // OwnerA is rejected again.
