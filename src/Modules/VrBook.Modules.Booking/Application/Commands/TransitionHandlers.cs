@@ -33,7 +33,12 @@ internal sealed class CancelBookingHandler(
 
         // Issue Stripe refund (cancels uncaptured PI; full refund if captured).
         // v1: full refund only. Cancellation-policy partial refunds land in A5.1.
-        await mediator.Send(new RefundForBookingCommand(booking.Id, null, request.Reason), cancellationToken);
+        // OPS.M.10.2 C4 (#2 High) — pass booking.TenantId so the refund
+        // command's M.4 gate fires against the booking's tenant (the guest
+        // may have no tenant; the booking's tenant is the authoritative scope).
+        await mediator.Send(
+            new RefundForBookingCommand(booking.Id, null, request.Reason, booking.TenantId),
+            cancellationToken);
         return booking.ToDto();
     }
 }
@@ -89,7 +94,12 @@ internal sealed class RejectBookingHandler(
     {
         var dto = await TransitionAsync(request.Id, b => b.Reject(request.Reason), cancellationToken);
         // Release the auth-hold (or refund if already captured).
-        await Mediator.Send(new RefundForBookingCommand(request.Id, null, request.Reason), cancellationToken);
+        // OPS.M.10.2 C4 (#2 High) — RejectBookingCommand is itself ITenantScoped
+        // so request.TenantId is the caller's verified tenant id, same as the
+        // booking's tenant id (M.4 already enforced equality).
+        await Mediator.Send(
+            new RefundForBookingCommand(request.Id, null, request.Reason, request.TenantId),
+            cancellationToken);
         return dto;
     }
 }

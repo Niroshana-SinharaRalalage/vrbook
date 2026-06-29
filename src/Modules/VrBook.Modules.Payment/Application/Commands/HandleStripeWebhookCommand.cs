@@ -48,16 +48,6 @@ internal sealed class HandleStripeWebhookHandler : IRequestHandler<HandleStripeW
             return false;
         }
 
-        // OPS.M.9 §4.6 (D6) — the webhook arrives without an authenticated
-        // ICurrentUser; the per-statement interceptor would stamp empty
-        // app.tenant_id and every RLS-protected SELECT/INSERT would deny.
-        // Open the bypass scope around the entire handler body. The
-        // injected PaymentDbContext + IPaymentIntentRepository pick up the
-        // AsyncLocal flag automatically via the interceptor.
-        logger.LogInformation(
-            "RLS bypass open reason=stripe-webhook caller=HandleStripeWebhookHandler");
-        using var bypass = RlsBypassScope.Enter();
-
         var doc = JsonDocument.Parse(rawJson!);
         var stripeEventId = doc.RootElement.GetProperty("id").GetString()!;
 
@@ -68,10 +58,72 @@ internal sealed class HandleStripeWebhookHandler : IRequestHandler<HandleStripeW
             ? acct.GetString()
             : null;
 
-        // OPS.M.5 §3.7 — idempotency check is composite on
-        // (stripe_event_id, stripe_account_id). A single Stripe event ID can be
-        // delivered both as platform AND as connected; we treat them as
-        // distinct rows.
+        // OPS.M.10.2 C4 (#3 High) — narrow the RlsBypassScope from
+        // "whole handler" (M.9 ship shape) to two explicit phases:
+        //   (a) PRE-RESOLUTION: idempotency check + tenant lookup. We don't
+        //       know the tenant yet, so bypass is required.
+        //   (b) POST-RESOLUTION: dispatch + WebhookEvent INSERT. Run under
+        //       BackgroundTenantScope.Enter(resolvedTenantId) so subsequent
+        //       writes stamp app.tenant_id correctly. The nullable-tenant
+        //       webhook_events policy accepts NULL on the orphan path.
+        //
+        // The previous shape (one big bypass around everything) was brittle:
+        // any new DbContext call inserted inside the handler would silently
+        // run as bypass. The narrowing makes the bypass scope obvious from
+        // the line count.
+
+        Guid? resolvedTenantId;
+        bool processed;
+        (processed, resolvedTenantId) = await PreResolveAsync(
+            stripeEventId, stripeAccountId, cancellationToken);
+        if (processed)
+        {
+            return true;
+        }
+
+        // Phase (b) — write + dispatch under the resolved tenant scope
+        // (or under bypass if the row will be NULL-tenant orphan).
+        IDisposable scope = resolvedTenantId is { } tid
+            ? BackgroundTenantScope.Enter(tid)
+            : RlsBypassScope.Enter();
+        using (scope)
+        {
+            var wh = new WebhookEvent(stripeEventId, eventType!, rawJson!, stripeAccountId);
+            if (resolvedTenantId is { } setId)
+            {
+                wh.SetTenantId(setId);
+            }
+            db.WebhookEvents.Add(wh);
+
+            try
+            {
+                await DispatchAsync(eventType!, doc, stripeAccountId, cancellationToken);
+                wh.MarkProcessed();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Webhook dispatch failed for {EventType}", eventType);
+                // Persist the event row even on failure — we don't want a poison
+                // message to loop. Manual reprocessing happens via Slice OPS.M.8.
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// OPS.M.10.2 C4 (#3 High) — narrow-bypass phase (a). Returns
+    /// <c>(processed, resolvedTenantId)</c>: when <c>processed = true</c> the
+    /// event was already in the log and the caller should short-circuit.
+    /// </summary>
+    private async Task<(bool Processed, Guid? ResolvedTenantId)> PreResolveAsync(
+        string stripeEventId, string? stripeAccountId, CancellationToken cancellationToken)
+    {
+        logger.LogInformation(
+            "RLS bypass open reason=stripe-webhook-pre-resolution caller=HandleStripeWebhookHandler");
+        using var bypass = RlsBypassScope.Enter();
+
         var seen = await db.WebhookEvents
             .AnyAsync(
                 w => w.StripeEventId == stripeEventId && w.StripeAccountId == stripeAccountId,
@@ -81,45 +133,21 @@ internal sealed class HandleStripeWebhookHandler : IRequestHandler<HandleStripeW
             logger.LogDebug(
                 "Stripe webhook {EventId} (account={AccountId}) already processed.",
                 stripeEventId, stripeAccountId);
-            return true;
+            return (Processed: true, ResolvedTenantId: null);
         }
 
-        var wh = new WebhookEvent(stripeEventId, eventType!, rawJson!, stripeAccountId);
-
-        // OPS.M.5 §3.7 — resolve account → tenant and stamp the row before
-        // dispatching. Unknown account = null tenant (typical for fresh
-        // onboarding pre-Active or for platform-scope events).
         if (stripeAccountId is not null)
         {
             var ctx = await tenantStripe.GetByStripeAccountAsync(stripeAccountId, cancellationToken);
             if (ctx is not null)
             {
-                wh.SetTenantId(ctx.TenantId);
+                return (Processed: false, ResolvedTenantId: ctx.TenantId);
             }
-            else
-            {
-                logger.LogWarning(
-                    "Stripe webhook {EventId} arrived for unknown account {AccountId}; persisting as orphan.",
-                    stripeEventId, stripeAccountId);
-            }
+            logger.LogWarning(
+                "Stripe webhook {EventId} arrived for unknown account {AccountId}; persisting as orphan.",
+                stripeEventId, stripeAccountId);
         }
-
-        db.WebhookEvents.Add(wh);
-
-        try
-        {
-            await DispatchAsync(eventType!, doc, stripeAccountId, cancellationToken);
-            wh.MarkProcessed();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Webhook dispatch failed for {EventType}", eventType);
-            // Persist the event row even on failure — we don't want a poison
-            // message to loop. Manual reprocessing happens via Slice OPS.M.8.
-        }
-
-        await db.SaveChangesAsync(cancellationToken);
-        return true;
+        return (Processed: false, ResolvedTenantId: null);
     }
 
     // OPS.M.5 §3.7 (D7) — the dispatch table. A static dictionary forces every

@@ -61,8 +61,11 @@ internal sealed class ExpirySweepHandler(
                     booking.AutoExpire("External reservation overlaps these dates; tentative window elapsed.");
                     await db.SaveChangesAsync(cancellationToken);
                     // Release the uncaptured PaymentIntent so the guest sees no charge.
+                    // OPS.M.10.2 C4 (#2 High) — background-worker path; stamp
+                    // booking.TenantId so the M.4 gate passes (the sweep worker
+                    // has no ICurrentUser; the booking is the authoritative scope).
                     await mediator.Send(
-                        new RefundForBookingCommand(booking.Id, null, "sla_expired_with_conflict"),
+                        new RefundForBookingCommand(booking.Id, null, "sla_expired_with_conflict", booking.TenantId),
                         cancellationToken);
                     autoExpired++;
                     logger.LogInformation(

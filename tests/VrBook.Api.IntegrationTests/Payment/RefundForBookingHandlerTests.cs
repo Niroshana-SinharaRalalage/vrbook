@@ -33,7 +33,7 @@ public sealed class RefundForBookingHandlerTests
         var (handler, _, _) = NewHandler(pi);
 
         Func<Task> act = () => handler.Handle(
-            new RefundForBookingCommand(BookingX, Amount: 50m, "any"), CancellationToken.None);
+            new RefundForBookingCommand(BookingX, 50m, "any", TenantA), CancellationToken.None);
 
         var ex = await act.Should().ThrowAsync<BusinessRuleViolationException>();
         ex.Which.Rule.Should().Be("payment.over_refund");
@@ -52,7 +52,7 @@ public sealed class RefundForBookingHandlerTests
             .Returns(new TenantStripeContext(TenantA, "acct_seed", 1500, "USD"));
 
         Func<Task> act = () => handler.Handle(
-            new RefundForBookingCommand(BookingX, Amount: 50m, "any"), CancellationToken.None);
+            new RefundForBookingCommand(BookingX, 50m, "any", TenantA), CancellationToken.None);
 
         // Over-refund guard fires first (80 + 50 > 100); negative-balance is the
         // sufficient guard for the same family of failures. Either rule is correct.
@@ -73,7 +73,7 @@ public sealed class RefundForBookingHandlerTests
             .Returns(new StripeRefundCreated("re_new", 100m, RefundStatus.Succeeded));
 
         await handler.Handle(
-            new RefundForBookingCommand(BookingX, Amount: 100m, "guest_cancel"),
+            new RefundForBookingCommand(BookingX, 100m, "guest_cancel", TenantA),
             CancellationToken.None);
 
         await gateway.Received(1).RefundAsync(
@@ -99,7 +99,7 @@ public sealed class RefundForBookingHandlerTests
             .Returns(new StripeRefundCreated("re_new", 25m, RefundStatus.Succeeded));
 
         await handler.Handle(
-            new RefundForBookingCommand(BookingX, Amount: 25m, "policy"),
+            new RefundForBookingCommand(BookingX, 25m, "policy", TenantA),
             CancellationToken.None);
 
         // 25 × 1500 / 10000 = 3.75 → 375 cents (banker's).
@@ -120,7 +120,7 @@ public sealed class RefundForBookingHandlerTests
         gateway.IsConfigured.Returns(false);
 
         var result = await handler.Handle(
-            new RefundForBookingCommand(BookingX, 50m, "any"), CancellationToken.None);
+            new RefundForBookingCommand(BookingX, 50m, "any", TenantA), CancellationToken.None);
 
         result.Should().BeFalse();
     }

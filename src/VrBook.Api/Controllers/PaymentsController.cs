@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using VrBook.Contracts.Dtos;
+using VrBook.Contracts.Interfaces;
+using VrBook.Domain.Common;
 using VrBook.Modules.Payment.Application.Commands;
 using VrBook.Modules.Payment.Application.Queries;
 
@@ -12,8 +14,11 @@ namespace VrBook.Api.Controllers;
 [Route("api/v1/payments")]
 [Tags("Payment")]
 [Authorize]
-public sealed class PaymentsController(IMediator mediator) : ControllerBase
+public sealed class PaymentsController(IMediator mediator, ICurrentUser currentUser) : ControllerBase
 {
+    private Guid CallerTenantId() => currentUser.TenantId
+        ?? throw new ForbiddenException("Payment action requires a tenant membership.");
+
     /// <summary>
     /// Return the PaymentIntent already created for a booking (Booking module creates it
     /// on Place automatically). Returns 404 if no PI exists yet — i.e. Stripe is unconfigured
@@ -33,7 +38,10 @@ public sealed class PaymentsController(IMediator mediator) : ControllerBase
     [SwaggerOperation(Summary = "Issue a refund. v1 = full refund only; amount param is ignored.")]
     public async Task<IActionResult> IssueRefund([FromBody] IssueRefundRequest request, CancellationToken cancellationToken)
     {
-        await mediator.Send(new RefundForBookingCommand(request.BookingId, null, request.Reason), cancellationToken);
+        // OPS.M.10.2 C4 (#2 High) — stamp caller's tenant id so M.4 gates.
+        await mediator.Send(
+            new RefundForBookingCommand(request.BookingId, null, request.Reason, CallerTenantId()),
+            cancellationToken);
         return NoContent();
     }
 }

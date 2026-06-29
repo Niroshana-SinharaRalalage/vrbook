@@ -20,7 +20,18 @@ namespace VrBook.Modules.Payment.Application.Commands;
 /// is routed with proportional application-fee reversal; the negative-balance
 /// guard prevents pushing the connected balance below zero.</para>
 /// </summary>
-public sealed record RefundForBookingCommand(Guid BookingId, decimal? Amount, string Reason) : IRequest<bool>;
+/// <summary>
+/// OPS.M.10.2 C4 (#2 High) — implements <see cref="ITenantScoped"/> so the
+/// M.4 <c>TenantAuthorizationBehavior</c> gates the command BEFORE the
+/// handler runs. Sole defense pre-fix was M.9 RLS on
+/// <c>payment.payment_intents</c>; if RLS regressed, OwnerA could refund
+/// OwnerB's booking by guessing the bookingId.
+/// </summary>
+public sealed record RefundForBookingCommand(
+    Guid BookingId,
+    decimal? Amount,
+    string Reason,
+    Guid TenantId) : IRequest<bool>, ITenantScoped;
 
 internal sealed class RefundForBookingHandler(
     IStripeGateway stripe,
@@ -46,6 +57,14 @@ internal sealed class RefundForBookingHandler(
         if (pi is null)
         {
             return false; // No payment was taken; nothing to refund.
+        }
+        // OPS.M.10.2 C4 (#2 High) — defense-in-depth row-level tenant check.
+        // The M.4 behavior already gated the command via ITenantScoped; if
+        // RLS lets a row through (e.g. a future bypass-scope leak) this
+        // belt-and-braces check still prevents a cross-tenant refund.
+        if (pi.TenantId != cmd.TenantId)
+        {
+            return false;
         }
         if (pi.Status != PaymentStatus.Succeeded)
         {
