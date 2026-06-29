@@ -30,8 +30,12 @@ internal sealed class CreateHoldHandler(IHoldStore holds, ICurrentUser currentUs
             ct: cancellationToken);
 }
 
-internal sealed class ReleaseHoldHandler(IHoldStore holds) : IRequestHandler<ReleaseHoldCommand>
+internal sealed class ReleaseHoldHandler(IHoldStore holds, ICurrentUser currentUser)
+    : IRequestHandler<ReleaseHoldCommand>
 {
+    // Slice OPS.M.10.2 F9 (audit #22) — pass the caller's UserId as the
+    // expected hold owner. The hold store no-ops on mismatch, defending
+    // against a guess of another guest's HoldId.
     public Task Handle(ReleaseHoldCommand cmd, CancellationToken cancellationToken) =>
-        holds.ReleaseAsync(cmd.HoldId, cancellationToken);
+        holds.ReleaseAsync(cmd.HoldId, currentUser.UserId, cancellationToken);
 }

@@ -14,7 +14,21 @@ namespace VrBook.Modules.Catalog.Application.Properties.Queries;
 /// Slice 1 — admin list of the caller's properties. Unlike <see cref="SearchPropertiesQuery"/>
 /// which only returns active listings to the public, this query returns the
 /// owner's drafts AND published listings so the admin UI can show "isActive"
-/// state. Admins (IsAdmin claim) see all properties across all owners.
+/// state.
+///
+/// <para>Visibility:</para>
+/// <list type="bullet">
+///   <item>Owner (IsAdmin = false): only properties they own.</item>
+///   <item>Tenant Admin (IsAdmin = true): all properties **within their own
+///   tenant** — RLS scopes the read by <c>app.tenant_id</c>. Slice
+///   OPS.M.10.2 F9 (audit #24) updated this comment to match reality;
+///   the previous "all properties across all owners" phrasing was
+///   pre-M.9 and implied cross-tenant visibility that doesn't exist.</item>
+///   <item>PlatformAdmin: a real cross-tenant bypass is not wired here.
+///   PlatformAdmin lands on <c>TenantsPlatformController</c> + the
+///   M.8 <c>is_platform_admin</c> GUC for the few endpoints that need
+///   it. Not this endpoint.</item>
+/// </list>
 /// </summary>
 public sealed record ListMyPropertiesQuery() : IRequest<IReadOnlyList<AdminPropertySummaryDto>>;
 

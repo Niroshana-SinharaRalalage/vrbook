@@ -11,8 +11,12 @@ namespace VrBook.Modules.Booking.Application.Queries;
 
 /// <summary>
 /// Slice 2 — admin/owner bookings list.
-///   * Admins see all bookings.
-///   * Owners see bookings on properties they own (via IPropertyOwnerLookup).
+///   * Tenant Admin: all bookings <b>within their own tenant</b> (RLS
+///     scopes by <c>app.tenant_id</c>). Slice OPS.M.10.2 F9 (audit #24)
+///     updated this comment from the pre-M.9 "all bookings" phrasing
+///     which implied cross-tenant visibility that doesn't exist.
+///   * Owner: bookings on properties they own (via IPropertyOwnerLookup) —
+///     also implicitly tenant-scoped.
 /// Optional status filter for the dashboard's "pending tentative" pill and the
 /// admin queue's status tabs.
 /// </summary>

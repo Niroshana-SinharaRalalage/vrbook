@@ -76,10 +76,20 @@ Severity scale:
 | 11 (Guest booking flow: Place/Get/MyBookings/Cancel) | **CLOSED** | OPS.M.9.1 F6d `42ef3b2` |
 | 12 (GetPropertyCalendar auth gate) | **CLOSED** | OPS.M.10.2 C2 `9542c74` |
 | 13 (Reports authorization tenant check) | **CLOSED** | OPS.M.10.2 C3 `4f7ff20` |
-| 14–24 (Mediums + Lows) | **Open** | OPS.M.10.2 F7-F9 (next) |
+| 14 (SendMessage same-tenant participant gate) | **CLOSED** | OPS.M.10.2 F7 `b5c6a7a` |
+| 15 (RetryNotification NULL-tenant gate) | **CLOSED** | OPS.M.10.2 F7 `b5c6a7a` |
+| 16 (ListNotificationLog tenant filter) | **CLOSED** | OPS.M.10.2 F7 `b5c6a7a` |
+| 17 (GetPaymentIntentForBooking defense-in-depth) | **CLOSED** | OPS.M.10.2 F7 `b5c6a7a` |
+| 18 (UpdateProperty raw-SQL tenant gate) | **CLOSED** | OPS.M.10.2 F7 `b5c6a7a` |
+| 19 (Update/DeleteChannelFeed row-tenant gate) | **CLOSED** | OPS.M.10.2 F7 `b5c6a7a` |
+| 20 (SetPersonaEmail prod guard) | **CLOSED** | OPS.M.10.2 F8 `e251bf7` |
+| 21 (backdate-checked-out-at prod guard) | **CLOSED** | OPS.M.10.2 F8 `e251bf7` |
+| 22 (ReleaseHold ownership stamp) | **CLOSED** | OPS.M.10.2 F9 _this commit_ |
+| 23 (GetPricingPlan + Reviews moderation tenant equality) | **CLOSED** | OPS.M.10.2 F9 _this commit_ |
+| 24 (Doc drift in ListMyProperties + ListAdminBookings) | **CLOSED** | OPS.M.10.2 F9 _this commit_ |
 | 25 (Outbox-relay verify) | **Open** | OPS.M.10.2 F10 (next) |
 
-Critical + all 12 High **closed**. Remaining 4 Medium + 5 Low + 1 Verify ship under F7-F10.
+Critical + all 12 High + 4 Medium + 5 Low + 1 Info **closed**. Remaining 1 Verify ships under F10.
 
 ---
 

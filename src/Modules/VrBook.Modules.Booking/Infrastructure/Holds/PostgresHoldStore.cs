@@ -144,14 +144,24 @@ internal sealed class PostgresHoldStore(
         return true;
     }
 
-    public async Task ReleaseAsync(Guid holdId, CancellationToken ct = default)
+    public async Task ReleaseAsync(Guid holdId, Guid? expectedSessionId, CancellationToken ct = default)
     {
         var hold = await db.Set<BookingHold>().FirstOrDefaultAsync(h => h.Id == holdId, ct);
-        if (hold is not null && hold.Status == HoldStatus.Active)
+        if (hold is null || hold.Status != HoldStatus.Active)
         {
-            hold.MarkReleased(DateTimeOffset.UtcNow);
-            await db.SaveChangesAsync(ct);
+            return;
         }
+        // Slice OPS.M.10.2 F9 (audit #22) — verify the caller owns the hold
+        // before releasing it. Null expectedSessionId preserves the
+        // unconditional-release semantics for the background sweep / admin
+        // cleanup paths. The check is silent (no-op) rather than throwing
+        // to avoid leaking hold existence to a guessing attacker.
+        if (expectedSessionId is not null && hold.SessionId != expectedSessionId)
+        {
+            return;
+        }
+        hold.MarkReleased(DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync(ct);
     }
 
     private static void AddParam(System.Data.Common.DbCommand cmd, string name, object value)

@@ -24,5 +24,13 @@ public interface IHoldStore
         DateOnly checkout,
         CancellationToken ct = default);
 
-    Task ReleaseAsync(Guid holdId, CancellationToken ct = default);
+    /// <summary>
+    /// Releases the hold. If <paramref name="expectedSessionId"/> is non-null,
+    /// the stored sessionId on the hold must match — otherwise the call is a
+    /// no-op (defense against an attacker guessing another user's HoldId).
+    /// Slice OPS.M.10.2 F9 (audit #22). A null <paramref name="expectedSessionId"/>
+    /// preserves the prior unconditional-release semantics, used by the
+    /// background sweep and admin cleanup paths.
+    /// </summary>
+    Task ReleaseAsync(Guid holdId, Guid? expectedSessionId, CancellationToken ct = default);
 }

@@ -115,8 +115,22 @@ internal sealed class RedisHoldStore(
         return true;
     }
 
-    public async Task ReleaseAsync(Guid holdId, CancellationToken ct = default)
+    public async Task ReleaseAsync(Guid holdId, Guid? expectedSessionId, CancellationToken ct = default)
     {
+        // Slice OPS.M.10.2 F9 (audit #22) — verify ownership against the
+        // mirrored DB row before deleting the Redis keys. Null
+        // expectedSessionId preserves unconditional release for sweep /
+        // admin cleanup paths.
+        var row = await db.Set<BookingHold>().FirstOrDefaultAsync(h => h.Id == holdId, ct);
+        if (row is null)
+        {
+            return;
+        }
+        if (expectedSessionId is not null && row.SessionId != expectedSessionId)
+        {
+            return;
+        }
+
         var redisDb = redis.GetDatabase();
         var rangeKey = await redisDb.StringGetAsync(IdKey(holdId));
         if (!rangeKey.IsNullOrEmpty)
@@ -125,8 +139,7 @@ internal sealed class RedisHoldStore(
         }
         await redisDb.KeyDeleteAsync(IdKey(holdId));
 
-        var row = await db.Set<BookingHold>().FirstOrDefaultAsync(h => h.Id == holdId, ct);
-        if (row is not null && row.Status == HoldStatus.Active)
+        if (row.Status == HoldStatus.Active)
         {
             row.MarkReleased(DateTimeOffset.UtcNow);
             await db.SaveChangesAsync(ct);
