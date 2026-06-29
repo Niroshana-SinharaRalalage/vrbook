@@ -48,12 +48,21 @@ public sealed class IdentityModule : IModuleRegistration
         // MediatR handlers + FluentValidation validators (assembly scan).
         services.AddModuleAssembly(typeof(IdentityModule).Assembly);
 
-        // Pipeline order: Validation (Common) → TenantAuthorization → AuditLog → handler.
-        // Per OPS_M_4_PLAN section 3.4: tenant gate runs BEFORE audit so cross-tenant
-        // attempts become "<action>.failed" audit rows via AuditLogBehavior's
-        // exception path. Registration order = pipeline order in MediatR.
-        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(TenantAuthorizationBehavior<,>));
+        // Pipeline order (OPS.M.10.2 F-final-3 — bug fix):
+        //   AuditLogBehavior (OUTER) → TenantAuthorizationBehavior (INNER) → handler
+        //
+        // MediatR runs the FIRST-registered behavior as the OUTER wrapper —
+        // it enters first and its `await next()` invokes the second-registered
+        // behavior. For AuditLogBehavior's try/catch to capture the
+        // CrossTenantAccessException thrown by TenantAuthorizationBehavior
+        // (and write the '.failed' row promised by M.4 §3.4), AuditLog MUST
+        // be registered FIRST.
+        //
+        // Pre-fix: TenantAuth was first → it threw BEFORE AuditLog's next()
+        // was ever called → audit row silently dropped. The fact pack
+        // CrossTenantRejectionAuditFactPack caught this in CI.
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(AuditLogBehavior<,>));
+        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(TenantAuthorizationBehavior<,>));
 
         return services;
     }
