@@ -46,9 +46,15 @@ internal sealed class CancelBookingHandler(
 
         // Issue Stripe refund (cancels uncaptured PI; full refund if captured).
         // v1: full refund only. Cancellation-policy partial refunds land in A5.1.
-        // OPS.M.10.2 C4 (#2 High) — pass booking.TenantId so the refund
-        // command's M.4 gate fires against the booking's tenant (the guest
-        // may have no tenant; the booking's tenant is the authoritative scope).
+        // OPS.M.10.2 F11.7.5.1 — RefundForBookingCommand is ITenantScoped with
+        // booking.TenantId. The guest has no ICurrentUser.TenantId; the M.4
+        // gate's new BackgroundTenantScope fallback (added in F11.7.5.1)
+        // consults the AsyncLocal scope opened above on line 36 with the
+        // booking's tenant id. command.TenantId == scope.TenantId, so the
+        // gate authorizes the refund. The C4 (#2 High) comment that previously
+        // lived here mis-stated the gate's behavior — it compares against the
+        // CALLER's tenant, not the command's — and the bug surfaced as a 403
+        // on every guest cancel during the F11.7 walk.
         await mediator.Send(
             new RefundForBookingCommand(booking.Id, null, request.Reason, booking.TenantId),
             cancellationToken);

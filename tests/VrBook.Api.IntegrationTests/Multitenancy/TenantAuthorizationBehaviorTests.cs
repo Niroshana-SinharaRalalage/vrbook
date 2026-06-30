@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
+using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Identity.Application.Behaviors;
 using Xunit;
 
@@ -102,5 +103,51 @@ public sealed class TenantAuthorizationBehaviorTests
         var ex = new CrossTenantAccessException(TenantA, TenantB);
         ex.Message.Should().Contain(TenantA.ToString("D"));
         ex.Message.Should().Contain(TenantB.ToString("D"));
+    }
+
+    // ---- Slice OPS.M.10.2 F11.7.5.1 — BackgroundTenantScope fallback ----
+    //
+    // Scenario: a tenant-less caller (e.g. a guest cancelling their own
+    // booking) needs to dispatch a sub-command that IS ITenantScoped (the
+    // refund) without their own TenantId. The handler opens a
+    // BackgroundTenantScope with the row-resolved booking tenant; the
+    // behavior must consult the scope when ICurrentUser.TenantId is null.
+    //
+    // The guest-cancel flow is the canonical case (CancelBookingHandler
+    // line 36 opens the scope before dispatching RefundForBookingCommand)
+    // — without this bypass the F11.7 walk hit a 403 panel on every
+    // guest cancel + a half-success state where the booking row had been
+    // marked Cancelled but the refund had been rejected upstream.
+
+    [Fact]
+    public async Task Tenant_less_caller_with_scope_matching_command_tenant_passes()
+    {
+        var sut = NewBehavior<ScopedCommand>(FakeUser(authenticated: true, tenantId: null));
+        using var scope = BackgroundTenantScope.Enter(TenantA);
+        var result = await sut.Handle(new ScopedCommand(TenantA), OkDelegate(), default);
+        result.Should().Be("ok");
+    }
+
+    [Fact]
+    public async Task Tenant_less_caller_with_scope_mismatching_command_tenant_is_rejected()
+    {
+        var sut = NewBehavior<ScopedCommand>(FakeUser(authenticated: true, tenantId: null));
+        using var scope = BackgroundTenantScope.Enter(TenantA);
+        var act = () => sut.Handle(new ScopedCommand(TenantB), OkDelegate(), default);
+        await act.Should().ThrowAsync<CrossTenantAccessException>()
+            .Where(ex => ex.AttemptedTenantId == TenantB && ex.ActualTenantId == TenantA);
+    }
+
+    [Fact]
+    public async Task Tenant_less_caller_with_no_scope_active_is_still_rejected()
+    {
+        // Regression net for the no-scope case — guard against the bypass
+        // accidentally promoting null-tenant + no-scope into a free pass.
+        var sut = NewBehavior<ScopedCommand>(FakeUser(authenticated: true, tenantId: null));
+        BackgroundTenantScope.CurrentTenantId.Should().BeNull(
+            because: "no scope is active at the test entry point.");
+        var act = () => sut.Handle(new ScopedCommand(TenantA), OkDelegate(), default);
+        await act.Should().ThrowAsync<CrossTenantAccessException>()
+            .Where(ex => ex.AttemptedTenantId == TenantA && ex.ActualTenantId == null);
     }
 }

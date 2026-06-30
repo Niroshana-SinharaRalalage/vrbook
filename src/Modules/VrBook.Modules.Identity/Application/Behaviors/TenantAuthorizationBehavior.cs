@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
+using VrBook.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Identity.Application.Behaviors;
 
@@ -60,6 +61,34 @@ public sealed class TenantAuthorizationBehavior<TRequest, TResponse>(
         {
             logger.LogInformation(
                 "PlatformAdmin bypass for {RequestType} on tenant {TenantId}",
+                typeof(TRequest).Name, scoped.TenantId);
+            return await next();
+        }
+
+        // Slice OPS.M.10.2 F11.7.5.1 — BackgroundTenantScope fallback.
+        // Some handlers (notably CancelBookingHandler at TransitionHandlers.cs)
+        // open a BackgroundTenantScope with the row-resolved tenant id BEFORE
+        // dispatching sub-commands. The classic case: a guest cancels their
+        // booking. The guest is tenant-less (ICurrentUser.TenantId is null),
+        // but the booking has a tenant. Without this bypass the sub-dispatch
+        // of RefundForBookingCommand (ITenantScoped, stamped with
+        // booking.TenantId) is rejected by the equality check below, even
+        // though the handler has already declared the scope it's operating
+        // in. The scope is the authoritative answer to "what tenant is this
+        // operation against" and matches the M.4 gate's intent without
+        // widening to anonymous bypass.
+        var bgScope = BackgroundTenantScope.CurrentTenantId;
+        if (currentUser.TenantId is null && bgScope is not null)
+        {
+            if (bgScope.Value != scoped.TenantId)
+            {
+                logger.LogWarning(
+                    "Cross-tenant write rejected for {RequestType} (background scope): attempted={Attempted} scope={Scope}",
+                    typeof(TRequest).Name, scoped.TenantId, bgScope);
+                throw new CrossTenantAccessException(scoped.TenantId, bgScope);
+            }
+            logger.LogInformation(
+                "BackgroundTenantScope bypass for {RequestType} on tenant {TenantId}",
                 typeof(TRequest).Name, scoped.TenantId);
             return await next();
         }
