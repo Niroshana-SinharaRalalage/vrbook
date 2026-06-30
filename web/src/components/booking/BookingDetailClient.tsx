@@ -1,12 +1,12 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, CheckCircle2, Clock, XCircle, LogIn } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Clock, XCircle } from 'lucide-react';
 
-import { useAuth } from '@/lib/auth/useAuth';
 import { ApiProblemError } from '@/lib/api/client';
 import { getBooking, type Booking, type BookingStatus } from '@/lib/api/booking';
 import { formatCurrency } from '@/lib/utils/currency';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
 import { BookingAutoRefresh } from './BookingAutoRefresh';
 import { CancelBookingButton } from './CancelBookingButton';
 import { ReviewSubmitForm } from './ReviewSubmitForm';
@@ -86,66 +86,33 @@ const Skeleton = () => (
 );
 
 /**
- * Slice OPS.M.10.2 F11.7.3 — client-rendered booking detail.
- *
- * Pre-fix: page.tsx was a Next.js server component that called
- * getBooking(id) server-side. The /api/v1/bookings/{id} endpoint is
- * [Authorize] but the SSR fetch from the Next.js container doesn't
- * carry the user's MSAL token (the token lives in the browser).
- * Result: 401 from the API, swallowed-only-for-404/403 by safeFetch,
- * exception propagated up and Next.js rendered "Application error:
- * server-side exception" with a digest. The booking itself was
- * always durably saved in the DB.
- *
- * Post-fix: detail render moves to this client component using
- * react-query. The shared apiFetch tokenProvider (Providers.tsx:60-78)
- * injects the bearer token on the client. Until MSAL is ready,
- * react-query shows the skeleton. After the user signs in if not
- * already, the query fires correctly.
+ * Slice OPS.M.10.2 F11.7.4.2 — Booking detail, on useAuthedQuery.
+ * Replaces the F11.7.3-era bare useQuery wiring. The wrapper now
+ * handles MSAL-readiness gating, the 403/404 -> null collapse, and
+ * the 401-no-retry policy in one place; this component is now just
+ * the render tree.
  */
 export const BookingDetailClient = ({ id }: Props) => {
-  const { isAuthenticated, isBusy, signIn } = useAuth();
-
-  const { data: booking, isLoading, isError, error, refetch } = useQuery<Booking | null>({
+  const { data: booking, isLoading, isError, error, refetch, needsSignIn } = useAuthedQuery<Booking>({
     queryKey: ['booking', id],
-    queryFn: async () => {
-      try {
-        return await getBooking(id);
-      } catch (err) {
-        if (err instanceof ApiProblemError && (err.status === 404 || err.status === 403)) {
-          return null;
-        }
-        throw err;
-      }
-    },
-    enabled: isAuthenticated && !isBusy,
-    retry: false,
+    queryFn: () => getBooking(id),
   });
 
-  if (!isAuthenticated && !isBusy) {
+  if (needsSignIn) {
     return (
-      <div className="mx-auto max-w-md py-12 text-center">
-        <h1 className="text-xl font-semibold">Sign in to view this booking</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Your booking is saved. Sign in to view its status, cancel, or pay.
-        </p>
-        <button
-          type="button"
-          onClick={signIn}
-          className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-brand-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-orange-700"
-        >
-          <LogIn className="h-4 w-4" aria-hidden /> Sign in
-        </button>
-      </div>
+      <SignInGate
+        title="Sign in to view this booking"
+        description="Your booking is saved. Sign in to view its status, cancel, or pay."
+      />
     );
   }
 
-  if (isBusy || isLoading) {
+  if (isLoading) {
     return <Skeleton />;
   }
 
   if (isError) {
-    const status = (error as { status?: number } | null | undefined)?.status;
+    const status = error instanceof ApiProblemError ? error.status : undefined;
     return (
       <div className="mx-auto max-w-md py-12 text-center">
         <h1 className="text-xl font-semibold">We couldn&apos;t load this booking.</h1>

@@ -1,7 +1,12 @@
 'use client';
 
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { PublicClientApplication, EventType, type AuthenticationResult } from '@azure/msal-browser';
+import {
+  PublicClientApplication,
+  EventType,
+  InteractionRequiredAuthError,
+  type AuthenticationResult,
+} from '@azure/msal-browser';
 import { MsalProvider } from '@azure/msal-react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
@@ -72,7 +77,26 @@ export const Providers = ({ children }: ProvidersProps) => {
           account,
         });
         return result.accessToken;
-      } catch {
+      } catch (err) {
+        // Slice OPS.M.10.2 F11.7.4.1 — don't silently return null.
+        // Pre-fix any failure (consent needed, expired refresh token,
+        // session expired) returned null AND let apiFetch proceed
+        // without Authorization. Every authed call then 401'd
+        // permanently and the user saw "Unauthorized" with no way out
+        // short of manual sign-out / sign-in. InteractionRequiredAuthError
+        // is the canonical signal that interactive re-auth is needed —
+        // bounce to redirect so MSAL re-issues the token and brings the
+        // user back to the current route.
+        if (err instanceof InteractionRequiredAuthError) {
+          try {
+            await msalInstance.acquireTokenRedirect({
+              scopes: apiScopes,
+              account,
+            });
+          } catch {
+            // Redirect kicks off a navigation; nothing else to do.
+          }
+        }
         return null;
       }
     });

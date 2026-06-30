@@ -1,13 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, LogIn } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 
-import { useAuth } from '@/lib/auth/useAuth';
 import { ApiProblemError } from '@/lib/api/client';
-import { myBookings, type BookingSummary } from '@/lib/api/booking';
+import { myBookings, type BookingSummary, type PagedResult } from '@/lib/api/booking';
 import { formatCurrency } from '@/lib/utils/currency';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
 
 const StatusBadge = ({ status }: { status: BookingSummary['status'] }) => {
   const colorByStatus: Partial<Record<BookingSummary['status'], string>> = {
@@ -34,37 +34,27 @@ const Skeleton = () => (
 );
 
 /**
- * Slice OPS.M.10.2 F11.7.3 — client-rendered My bookings list.
- * Same fix as BookingDetailClient: the page was a server component
- * calling myBookings() server-side without the user's MSAL token.
- * Result: 401 propagated up the SSR pipeline and crashed the page.
+ * Slice OPS.M.10.2 F11.7.4.2 — My bookings list, on useAuthedQuery.
+ *
+ * Pre-F11.7.4 (the F11.7.3 client conversion) this used a bare
+ * `useQuery({ enabled: isAuthenticated && !isBusy, queryFn: myBookings })`.
+ * Even after the F11.7.3 SSR-conversion shipped, the user still saw
+ * "Unauthorized" because the silent-null bug in Providers.tsx's token
+ * provider (now fixed in 7.4.1) let apiFetch proceed with no
+ * Authorization header. `useAuthedQuery` plus the unswallowed token
+ * provider closes both halves.
  */
 export const MyBookingsClient = () => {
-  const { isAuthenticated, isBusy, signIn } = useAuth();
-
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error, needsSignIn } = useAuthedQuery<PagedResult<BookingSummary>>({
     queryKey: ['my-bookings'],
     queryFn: () => myBookings(),
-    enabled: isAuthenticated && !isBusy,
-    retry: false,
   });
 
-  if (!isAuthenticated && !isBusy) {
-    return (
-      <div className="mx-auto max-w-md py-12 text-center">
-        <h1 className="text-xl font-semibold">Sign in to see your bookings</h1>
-        <button
-          type="button"
-          onClick={signIn}
-          className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-brand-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-orange-700"
-        >
-          <LogIn className="h-4 w-4" aria-hidden /> Sign in
-        </button>
-      </div>
-    );
+  if (needsSignIn) {
+    return <SignInGate title="Sign in to see your bookings" />;
   }
 
-  if (isBusy || isLoading) {
+  if (isLoading) {
     return <Skeleton />;
   }
 
