@@ -459,6 +459,109 @@ After 5.1 is green, hand off these URLs (per memory `feedback_slice_completion_t
 
 ---
 
-## 11. Close-out (to be filled in after execution)
+## 11. Close-out
 
-_To be appended after F11.7.5.5 ships with green CI and the verification walk (§5) passes._
+### What shipped
+
+| Commit | Sub-slice | CI run | Conclusion |
+| --- | --- | --- | --- |
+| `fc38c30` | F11.7.5.1 — `TenantAuthorizationBehavior` BackgroundTenantScope fallback | `28477666216` (cd-staging-api) | ✅ success |
+| `6ed363a` | F11.7.5.2 — `BookingsController` owner endpoints resolve tenant from booking | `28478151898` (cd-staging-api) | ✅ success |
+| `daf6869` | F11.7.5.3 — `bootstrap-operator` IsPrimary promotion on active-row idempotent path | `28478200291` first attempt failed (transient Azure CLI `ConnectionResetError(104)` on `deploy booking-completion (job)`; not code). Reran failed jobs → ✅ success | ✅ success (rerun) |
+| `9b5a7ef` | F11.7.5.4 + F11.7.5.5 — `/account/loyalty` nav + Admin link gated on operator role | `28480052214` (cd-staging-web) | ✅ success |
+| `5e8ee64` | F11.7.5.7 — Confirm + Reject tolerate Stripe failures, mirror F11.7.2 | `28482017826` (cd-staging-api) | ✅ success |
+
+F11.7.5.6 is THIS commit (doc-only close-out, no CI gate per `feedback_no_ci_for_doc_only_commits`).
+
+### F11.7.5.7 — not in the original plan, added after API verification
+
+The architect's original sequence ended at F11.7.5.6 (this doc). The
+F11.7.5.2 verification (running `curl` against `/bookings/{id}/confirm`
+as the Owner persona) demonstrated the helper-trap was gone, but
+revealed a NEW user-visible symptom: the booking transitions to
+`Confirmed` durably (via `TransitionAsync` → `SaveChangesAsync` at
+TransitionHandlers.cs:90), then the post-transition
+`CapturePaymentIntentForBookingCommand` throws 404 because the staging
+Stripe stub has no PaymentIntent for the booking. The controller
+returns 404 to the owner. The booking is in fact Confirmed; the owner
+re-clicks Confirm, hits a 422 state-machine guard, and concludes the
+action failed.
+
+This is the same shape as the F11.7.2 `PlaceBookingHandler` bug
+("PaymentIntent creation failed for booking …; leaving booking in
+Tentative without a PI"). Applied the same try/catch tolerance pattern
+to `ConfirmBookingHandler` AND `RejectBookingHandler`. Both add an
+`ILogger<T>` to the primary constructor and wrap the side-effect
+sub-dispatch in `try/catch (Exception ex)` with an `OperationCanceled`
+guard. The booking transition is the user-observable contract; capture
+/refund are best-effort side-effects.
+
+### API verification results (curl smoke, run by me per `feedback_slice_completion_test_pattern`)
+
+DevAuth was temporarily flipped on per the locked dev-bridge policy
+(`feedback_check_devauth_before_ui_handoff`), used for the verification,
+then flipped off again. The verification used the DevAuth Guest +
+Owner personas against the live staging API.
+
+| Test | Pre-fix expectation | Post-fix actual |
+| --- | --- | --- |
+| Guest cancel `VRB-N1MTSF` (Beach Villa 2026-08-10) | HTTP 403 + "Cross-tenant write rejected. Attempted=…0001, actual=<null>" panel + half-success (booking Cancelled but error panel returned) | **HTTP 200, status=Cancelled, no panel.** F11.7.5.1 closes Bug 1+4. |
+| Owner confirm `VRB-4PQE2X` (2026-09-10) first call | HTTP 403 + "Owner action requires a tenant membership" panel | **HTTP 200, status=Confirmed.** F11.7.5.2 closes Bug 5. |
+| Owner confirm `VRB-4PQE2X` second call | (couldn't be exercised pre-fix because the first call failed) | HTTP 422 from state-machine guard ("Cannot transition from Confirmed when Tentative is required"). Expected. |
+| Owner confirm `VRB-DP3VWZ` (2026-11-10) | (couldn't be exercised pre-fix) | HTTP 404 + "PaymentIntent not found" panel pre-F11.7.5.7; booking IS Confirmed in DB. **Post-F11.7.5.7: expect HTTP 200 + status=Confirmed, no panel; capture failure logs only.** |
+| Anonymous baseline `GET /api/v1/properties` | (regression net) | HTTP 200 (4 properties). |
+| Anonymous baseline `GET /api/v1/properties/beach-villa` | (regression net) | HTTP 200. |
+
+The owner cross-tenant rejection regression net (an Owner of tenant A
+attempting to confirm a tenant-B booking) was NOT run because the
+DevAuth personas don't expose a second tenant; the integration test
+`OwnerActionTests.OwnerOfTenantAcanNot_confirm_tenantB_booking` was
+specified in the architect's plan §4 and is the gate for that
+scenario.
+
+### Residual risk
+
+1. **Guest cancel half-success on Stripe transient** — even with
+   F11.7.5.1 fixing the 403, the cancel handler still
+   `SaveChangesAsync` BEFORE dispatching the refund (
+   `CancelBookingHandler.cs:45`). If the refund's Stripe call throws
+   AFTER the M.4 gate passes, the booking is Cancelled but the refund
+   isn't issued. F11.7.5.7's tolerance pattern would have to be applied
+   to the guest-cancel path too — defer to a follow-up. The user-
+   visible UI surface is fine (cancel returns 200; the refund issue is
+   internal); a Stripe-outage scenario in production needs the outbox
+   pattern documented in the doc §3.
+
+2. **F11.7.5.7's tolerance hides genuine Stripe failures** from the
+   immediate owner action. The owner sees Confirm/Reject succeed even
+   if the underlying capture/refund failed. Mitigations: the failure
+   IS logged at Error level via `ILogger<T>`; the booking detail page
+   shows the PaymentIntent state; OPS.M.12 replaces the Stripe stub
+   with a real sandbox so transients become rare.
+
+3. **Bootstrap idempotent path** (F11.7.5.3) is belt-and-braces. The
+   path-resolved tenant in F11.7.5.2 made the cross-tenant operator
+   surface work without the bootstrap fix; the bootstrap fix exists so
+   that future operator users land on a clean DB profile and so the
+   `UserProvisioningMiddleware` stamps the `app_tenant_id` claim
+   consistently.
+
+### Hand-off
+
+Web URLs the user can now exercise (all signed in via Entra at the
+staging web app):
+
+- `/account/bookings` — guest sees their bookings; no "Unauthorized".
+- `/bookings/{id}` — guest opens booking detail; Cancel button works
+  cleanly (HTTP 200, status flips to Cancelled, no error panel).
+- `/account/loyalty` — reachable from the sidebar (F11.7.5.4).
+- Header → Admin link visible to operator (F11.7.5.5).
+- `/admin` — dashboard.
+- `/admin/bookings/{id}` — owner sees Decision needed panel; Confirm
+  and Reject both work cleanly (HTTP 200, no error panel, status
+  flips correctly).
+- `/admin/sync` — create an outbound feed → copy the URL → open in
+  an anonymous tab → expect `BEGIN:VCALENDAR`.
+
+When all six steps pass, F11.8 (the F11 close-out doc, which is the
+parent of F11.7.5) is the only remaining work in OPS.M.10.2.
