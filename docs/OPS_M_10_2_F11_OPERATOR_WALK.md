@@ -213,3 +213,29 @@ After the walk, tell me which steps passed and which failed. If a step fails:
 - **Step 6 (iCal):** likely a feed-create UX gap I'll patch.
 
 When all 11 steps pass, F11.8 closes the slice.
+
+---
+
+## §8 F11.7.4 web-side auth refactor (post-fix)
+
+The first staging walk surfaced a class of symptoms ("Unauthorized" on `/account/bookings`, "Application error" page crashes, silent empty admin lists) that all traced back to TWO distinct bugs collapsed under one shape — diagnosed in [OPS_M_10_2_F11_WEB_AUDIT.md](OPS_M_10_2_F11_WEB_AUDIT.md):
+
+1. **SSR-auth crash** — server components calling `[Authorize]` endpoints with no bearer token. Closed by F11.7.3 (server-shell + client component split).
+2. **Client-side MSAL race** — client components firing `useEffect → apiFetch` (or `useQuery({queryFn: helper})`) on mount before MSAL was ready. The Providers.tsx token provider silently returned `null` on failure, so `apiFetch` proceeded without `Authorization` and the API 401'd permanently. Closed by F11.7.4.
+
+The fix is a new wrapper hook `useAuthedQuery` (web/src/hooks/useAuthedQuery.ts) every authed call now goes through, plus a `<SignInGate>` empty state and an `auth-arch.test.ts` CI guardrail. The token provider in `Providers.tsx` now bounces to `acquireTokenRedirect` on `InteractionRequiredAuthError` instead of returning null silently.
+
+### Walk addendum — what each step proves after F11.7.4
+
+- **Step 5 (Guest checkout)**: signing in as a guest with no `tenant_memberships` row used to surface a 403 from `/me/tenant` that propagated as a fatal error. The wrapper's `treatAs404: [403, 404]` default now collapses both to "no tenant" empty state. Walk verification: opening `/account/bookings` should render either the booking list or the "no bookings yet" empty state, never "Unauthorized".
+- **Step 6 (owner persona)**: `/admin`, `/admin/bookings`, `/admin/bookings/{id}`, `/admin/sync`, `/admin/calendar`, `/admin/pricing`, `/admin/reviews`, `/admin/notifications`, `/admin/amenities`, `/admin/messages`, `/admin/reports`, `/admin/properties` (list + edit), `/admin/platform/tenants` all migrated onto `useAuthedQuery`. On cold-cache load, each shows a skeleton until MSAL is ready, then renders the data (or a SignInGate if you're not signed in).
+
+### Maintenance rule
+
+When you add a new authed API helper in `web/src/lib/api/*.ts`:
+
+1. Add the function name to the `authedHelpers` list in `web/src/lib/auth/auth-arch.test.ts`.
+2. Call it from a client component **only via `useAuthedQuery`**, not bare `useQuery({queryFn: helper})`. The arch test fails the build if you forget.
+3. Never import an authed helper into a server component (no `'use client'` directive). The second arch test fails the build if you do.
+
+If a new page needs a server-side render with auth, use the split pattern from `web/src/app/bookings/[id]/page.tsx` + `web/src/components/booking/BookingDetailClient.tsx`: a thin server shell that mounts a `'use client'` child.
