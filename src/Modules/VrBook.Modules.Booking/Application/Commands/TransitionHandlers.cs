@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
@@ -93,20 +94,48 @@ internal abstract class OwnerActionHandler(
 }
 
 internal sealed class ConfirmBookingHandler(
-    ICurrentUser currentUser, IMediator mediator, IBookingRepository bookings, BookingDbContext db)
+    ICurrentUser currentUser,
+    IMediator mediator,
+    IBookingRepository bookings,
+    BookingDbContext db,
+    ILogger<ConfirmBookingHandler> logger)
     : OwnerActionHandler(currentUser, mediator, bookings, db), IRequestHandler<ConfirmBookingCommand, BookingDto>
 {
     public async Task<BookingDto> Handle(ConfirmBookingCommand request, CancellationToken cancellationToken)
     {
         var dto = await TransitionAsync(request.Id, b => b.Confirm(), cancellationToken);
         // Capture the held funds. No-op when Stripe is unconfigured.
-        await Mediator.Send(new CapturePaymentIntentForBookingCommand(request.Id), cancellationToken);
+        // Slice OPS.M.10.2 F11.7.5.7 — mirror PlaceBookingHandler's F11.7.2
+        // pattern: the booking has already transitioned to Confirmed at this
+        // point (TransitionAsync's SaveChanges committed at line 90). If the
+        // PaymentIntent capture fails (Stripe transient, stub account not
+        // recognized, no PI yet on stubbed staging) we MUST NOT bubble the
+        // failure up — that would return 404/500 to the owner, who would
+        // re-click Confirm, hit a Confirmed-state-machine guard with 422,
+        // and conclude the action failed despite the booking being durably
+        // Confirmed. Owner can retry capture from the /admin/bookings/{id}
+        // detail page once Stripe state is healthy.
+        try
+        {
+            await Mediator.Send(new CapturePaymentIntentForBookingCommand(request.Id), cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "PaymentIntent capture failed for booking {BookingId} after Confirm transition; the booking is durably Confirmed. Owner can retry capture from /admin/bookings/<id>.",
+                request.Id);
+        }
         return dto;
     }
 }
 
 internal sealed class RejectBookingHandler(
-    ICurrentUser currentUser, IMediator mediator, IBookingRepository bookings, BookingDbContext db)
+    ICurrentUser currentUser,
+    IMediator mediator,
+    IBookingRepository bookings,
+    BookingDbContext db,
+    ILogger<RejectBookingHandler> logger)
     : OwnerActionHandler(currentUser, mediator, bookings, db), IRequestHandler<RejectBookingCommand, BookingDto>
 {
     public async Task<BookingDto> Handle(RejectBookingCommand request, CancellationToken cancellationToken)
@@ -116,9 +145,23 @@ internal sealed class RejectBookingHandler(
         // OPS.M.10.2 C4 (#2 High) — RejectBookingCommand is itself ITenantScoped
         // so request.TenantId is the caller's verified tenant id, same as the
         // booking's tenant id (M.4 already enforced equality).
-        await Mediator.Send(
-            new RefundForBookingCommand(request.Id, null, request.Reason, request.TenantId),
-            cancellationToken);
+        // OPS.M.10.2 F11.7.5.7 — same tolerance pattern as Confirm. The
+        // booking is durably Rejected after TransitionAsync's SaveChanges;
+        // a Stripe-side refund failure should NOT be surfaced as a 404/500
+        // on /reject.
+        try
+        {
+            await Mediator.Send(
+                new RefundForBookingCommand(request.Id, null, request.Reason, request.TenantId),
+                cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Refund dispatch failed for booking {BookingId} after Reject transition; the booking is durably Rejected. Owner can retry refund from /admin/bookings/<id>.",
+                request.Id);
+        }
         return dto;
     }
 }
