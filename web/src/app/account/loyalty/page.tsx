@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Award, Sparkles } from 'lucide-react';
 import { getMyLoyalty, type LoyaltyAccount, type LoyaltyTier } from '@/lib/api/loyalty';
-import { ApiProblemError } from '@/lib/api/client';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
 
 const TIER_STYLES: Record<LoyaltyTier, { className: string; label: string }> = {
   Bronze: { className: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200', label: 'Bronze' },
@@ -11,33 +11,28 @@ const TIER_STYLES: Record<LoyaltyTier, { className: string; label: string }> = {
   Gold:   { className: 'bg-yellow-200 text-yellow-900 dark:bg-yellow-900 dark:text-yellow-50', label: 'Gold' },
 };
 
+// Slice OPS.M.10.2 F11.7.4.5 — migrated onto useAuthedQuery. The
+// 404 ("no loyalty account yet") branch is now the wrapper's default
+// 404-as-null collapse, so the empty-state render is data === null.
 const LoyaltyPage = () => {
-  const [data, setData] = useState<LoyaltyAccount | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading, isError, error, needsSignIn } = useAuthedQuery<LoyaltyAccount>({
+    queryKey: ['me', 'loyalty'],
+    queryFn: getMyLoyalty,
+  });
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setData(await getMyLoyalty());
-      } catch (err) {
-        if (err instanceof ApiProblemError && err.status === 404) {
-          // No account yet — show the "complete a stay" empty state below.
-          setData(null);
-        } else {
-          setError(err instanceof Error ? err.message : 'Failed to load loyalty status.');
-        }
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  if (needsSignIn) {
+    return <SignInGate title="Sign in to view your loyalty status" />;
+  }
 
-  if (loading) {
+  if (isLoading) {
     return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
   }
-  if (error) {
-    return <p className="p-6 text-sm text-destructive">{error}</p>;
+  if (isError) {
+    return (
+      <p className="p-6 text-sm text-destructive">
+        {error instanceof Error ? error.message : 'Failed to load loyalty status.'}
+      </p>
+    );
   }
   if (!data) {
     return (

@@ -1,39 +1,34 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
 import { Plus, MapPin, Pencil, ExternalLink, Home } from 'lucide-react';
 
 import { adminListMyProperties, type AdminPropertySummary } from '@/lib/api/catalog';
 import { ApiProblemError } from '@/lib/api/client';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
 
-// Slice 1 — owner's property list. Empty-state CTA when no properties yet,
-// otherwise a table with status badges and per-row actions.
+// Slice 1 — owner's property list. Slice OPS.M.10.2 F11.7.4.7b — on
+// useAuthedQuery (MSAL-readiness gated).
 const AdminPropertiesPage = () => {
-  const [items, setItems] = useState<readonly AdminPropertySummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading, isError, error, needsSignIn } = useAuthedQuery<readonly AdminPropertySummary[]>({
+    queryKey: ['admin', 'properties', 'mine'],
+    queryFn: adminListMyProperties,
+  });
+  const items = data ?? [];
+  const errorMsg = isError
+    ? error instanceof ApiProblemError
+      ? error.problem.detail ?? error.message
+      : error instanceof Error
+        ? error.message
+        : 'Failed to load properties'
+    : null;
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const list = await adminListMyProperties();
-        setItems(list);
-      } catch (err) {
-        setError(
-          err instanceof ApiProblemError
-            ? err.problem.detail ?? err.message
-            : err instanceof Error
-              ? err.message
-              : 'Failed to load properties',
-        );
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  if (needsSignIn) {
+    return <SignInGate title="Sign in to view your properties" />;
+  }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold tracking-tight">Properties</h1>
@@ -42,12 +37,12 @@ const AdminPropertiesPage = () => {
     );
   }
 
-  if (error) {
+  if (errorMsg) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold tracking-tight">Properties</h1>
         <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
-          {error}
+          {errorMsg}
         </div>
       </div>
     );

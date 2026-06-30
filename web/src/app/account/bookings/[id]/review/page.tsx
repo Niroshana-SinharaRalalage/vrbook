@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Check, Star } from 'lucide-react';
 import { submitReview, type Review } from '@/lib/api/reviews';
 import { getBooking, type Booking } from '@/lib/api/booking';
 import { ApiProblemError } from '@/lib/api/client';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
 
 const StarPicker = ({ value, onChange, disabled }: { value: number; onChange: (v: number) => void; disabled?: boolean }) => (
   <div className="flex gap-1" aria-label="Rating">
@@ -27,63 +29,68 @@ const StarPicker = ({ value, onChange, disabled }: { value: number; onChange: (v
   </div>
 );
 
+const extractErr = (err: unknown, fallback: string): string => {
+  if (err instanceof ApiProblemError) return err.problem.detail ?? err.message;
+  if (err instanceof Error) return err.message;
+  return fallback;
+};
+
+// Slice OPS.M.10.2 F11.7.4.5 — booking fetch migrated onto
+// useAuthedQuery (gated). submitReview stays a manual call since
+// it's a mutation invoked from the submit handler, not a query.
 const ReviewBookingPage = () => {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const bookingId = params?.id ?? '';
-  const [booking, setBooking] = useState<Booking | null>(null);
+
+  const { data: booking, isLoading, isError, error: queryError, needsSignIn } = useAuthedQuery<Booking>({
+    queryKey: ['booking', bookingId],
+    queryFn: () => getBooking(bookingId),
+    enabled: !!bookingId,
+  });
+
   const [rating, setRating] = useState(0);
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState<Review | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!bookingId) return;
-    (async () => {
-      try {
-        const b = await getBooking(bookingId);
-        setBooking(b);
-      } catch (err) {
-        setError(extractErr(err, 'Could not load the booking.'));
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [bookingId]);
+  if (needsSignIn) {
+    return <SignInGate title="Sign in to review your stay" />;
+  }
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (rating < 1) {
-      setError('Pick a 1-5 star rating.');
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await submitReview(bookingId, { rating, body: body.trim() });
-      setSubmitted(result);
-    } catch (err) {
-      setError(extractErr(err, 'Failed to submit review.'));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (loading) {
+  if (isLoading) {
     return <p className="p-6 text-sm text-muted-foreground">Loading booking…</p>;
   }
   if (!booking) {
     return (
       <div className="space-y-4 p-6">
-        <p className="text-sm text-destructive">{error ?? 'Booking not found.'}</p>
+        <p className="text-sm text-destructive">
+          {isError ? extractErr(queryError, 'Could not load the booking.') : 'Booking not found.'}
+        </p>
         <Link href="/account/bookings" className="text-sm underline">
           Back to my trips
         </Link>
       </div>
     );
   }
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (rating < 1) {
+      setSubmitError('Pick a 1-5 star rating.');
+      return;
+    }
+    setBusy(true);
+    setSubmitError(null);
+    try {
+      const result = await submitReview(bookingId, { rating, body: body.trim() });
+      setSubmitted(result);
+    } catch (err) {
+      setSubmitError(extractErr(err, 'Failed to submit review.'));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (submitted) {
     return (
@@ -139,9 +146,9 @@ const ReviewBookingPage = () => {
           <div className="text-right text-xs text-muted-foreground">{body.length} / 4000</div>
         </div>
 
-        {error && (
+        {submitError && (
           <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
-            {error}
+            {submitError}
           </div>
         )}
 
@@ -164,11 +171,5 @@ const ReviewBookingPage = () => {
     </div>
   );
 };
-
-function extractErr(err: unknown, fallback: string): string {
-  if (err instanceof ApiProblemError) return err.problem.detail ?? err.message;
-  if (err instanceof Error) return err.message;
-  return fallback;
-}
 
 export default ReviewBookingPage;

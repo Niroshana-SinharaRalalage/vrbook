@@ -14,6 +14,8 @@ import {
   type UpdatePropertyBody,
 } from '@/lib/api/catalog';
 import { ApiProblemError } from '@/lib/api/client';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
 
 interface FormState {
   title: string;
@@ -70,33 +72,44 @@ const detailToForm = (p: PropertyDetail): FormState => ({
 const AdminPropertyEditPage = () => {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
-  const [detail, setDetail] = useState<PropertyDetail | null>(null);
+
+  // Slice OPS.M.10.2 F11.7.4.7b — fetches gated on useAuthedQuery.
+  // The form state is initialized from `detail` via the useEffect
+  // below; saving invalidates the query so the page rehydrates after
+  // a successful PATCH.
+  const detailQ = useAuthedQuery<PropertyDetail>({
+    queryKey: ['admin', 'property', id],
+    queryFn: () => adminGetPropertyById(id),
+  });
+  const amenitiesQ = useAuthedQuery<readonly Amenity[]>({
+    queryKey: ['amenities', 'all'],
+    queryFn: listAmenities,
+  });
+  const detail = detailQ.data ?? null;
+  const amenities = amenitiesQ.data ?? [];
+  const queryError = detailQ.isError
+    ? detailQ.error instanceof ApiProblemError
+      ? detailQ.error.problem.detail ?? detailQ.error.message
+      : detailQ.error instanceof Error
+        ? detailQ.error.message
+        : 'Failed to load'
+    : null;
+  const loading = detailQ.isLoading || amenitiesQ.isLoading;
+
   const [form, setForm] = useState<FormState | null>(null);
-  const [amenities, setAmenities] = useState<readonly Amenity[]>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(queryError);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const [p, am] = await Promise.all([adminGetPropertyById(id), listAmenities()]);
-        setDetail(p);
-        setForm(detailToForm(p));
-        setAmenities(am);
-      } catch (err) {
-        setError(
-          err instanceof ApiProblemError
-            ? err.problem.detail ?? err.message
-            : err instanceof Error
-              ? err.message
-              : 'Failed to load',
-        );
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [id]);
+    if (detail && !form) {
+      setForm(detailToForm(detail));
+    }
+    if (queryError) setError(queryError);
+  }, [detail, form, queryError]);
+
+  if (detailQ.needsSignIn) {
+    return <SignInGate title="Sign in to edit your property" />;
+  }
 
   if (loading || !form || !detail) {
     return (

@@ -34,7 +34,7 @@ import { ApiProblemError } from '@/lib/api/client';
  *     MSAL state checks.
  */
 export const useAuthedQuery = <T,>(
-  options: Omit<UseQueryOptions<T | null>, 'enabled' | 'retry'> & {
+  options: Omit<UseQueryOptions<T | null>, 'retry'> & {
     /**
      * API status codes that should resolve to `data === null` instead of
      * throwing. Defaults to `[403, 404]` (the "not found / not in scope"
