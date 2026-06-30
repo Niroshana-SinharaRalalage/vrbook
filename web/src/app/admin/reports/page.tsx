@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Download, RefreshCw } from 'lucide-react';
 import { adminListMyProperties, type AdminPropertySummary } from '@/lib/api/catalog';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
 import {
   getAdrReport,
   getOccupancyReport,
@@ -59,7 +61,11 @@ const AdminReportsBody = () => {
   const tabFromQuery = (searchParams.get('tab') as TabKey | null) ?? 'occupancy';
   const tabKey: TabKey = TABS.some((t) => t.key === tabFromQuery) ? tabFromQuery : 'occupancy';
 
-  const [properties, setProperties] = useState<readonly AdminPropertySummary[]>([]);
+  const propertiesQ = useAuthedQuery<readonly AdminPropertySummary[]>({
+    queryKey: ['admin', 'properties', 'mine'],
+    queryFn: adminListMyProperties,
+  });
+  const properties = propertiesQ.data ?? [];
   const [filters, setFilters] = useState<ReportFiltersValue>({
     from: daysAgo(30),
     to: today(),
@@ -74,16 +80,15 @@ const AdminReportsBody = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // properties moved to useAuthedQuery above; the per-tab report fetches
+  // below only fire after the user changes a filter, by which point MSAL
+  // is ready (the property dropdown only renders once properties arrive).
+  // We surface the propertiesQ error in the same banner as report errors.
   useEffect(() => {
-    (async () => {
-      try {
-        const props = await adminListMyProperties();
-        setProperties(props);
-      } catch (e) {
-        setError(extractErr(e, 'Failed to load properties.'));
-      }
-    })();
-  }, []);
+    if (propertiesQ.isError) {
+      setError(extractErr(propertiesQ.error, 'Failed to load properties.'));
+    }
+  }, [propertiesQ.isError, propertiesQ.error]);
 
   const params: ReportParams = useMemo(
     () => ({
@@ -120,6 +125,7 @@ const AdminReportsBody = () => {
   }, [tabKey, params]);
 
   useEffect(() => {
+    if (propertiesQ.needsSignIn) return;
     void fetchActive();
   }, [fetchActive]);
 
@@ -164,6 +170,10 @@ const AdminReportsBody = () => {
         return;
     }
   };
+
+  if (propertiesQ.needsSignIn) {
+    return <SignInGate title="Sign in to view reports" />;
+  }
 
   return (
     <div className="space-y-6">

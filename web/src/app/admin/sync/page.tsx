@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Copy, Pause, Play, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import {
   createChannelFeed,
@@ -14,40 +15,53 @@ import {
   type SyncConflictResolution,
 } from '@/lib/api/sync';
 import { ApiProblemError } from '@/lib/api/client';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
+
+// Slice OPS.M.10.2 F11.7.4.7b — feeds + conflicts on useAuthedQuery;
+// mutations invalidate.
+const FEEDS_QK = ['admin', 'channel-feeds'] as const;
+const CONFLICTS_QK = ['admin', 'sync-conflicts'] as const;
 
 const AdminSyncPage = () => {
-  const [feeds, setFeeds] = useState<ChannelFeed[]>([]);
-  const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
-  const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
+  const feedsQ = useAuthedQuery<readonly ChannelFeed[]>({
+    queryKey: [...FEEDS_QK],
+    queryFn: listChannelFeeds,
+  });
+  const conflictsQ = useAuthedQuery<readonly SyncConflict[]>({
+    queryKey: [...CONFLICTS_QK],
+    queryFn: listSyncConflicts,
+  });
+  const feeds = feedsQ.data ?? [];
+  const conflicts = conflictsQ.data ?? [];
+  const loading = feedsQ.isLoading || conflictsQ.isLoading;
+  const needsSignIn = feedsQ.needsSignIn || conflictsQ.needsSignIn;
   const [error, setError] = useState<string | null>(null);
+  const queryErrorMsg = feedsQ.isError
+    ? extractErr(feedsQ.error, 'Failed to load')
+    : conflictsQ.isError
+      ? extractErr(conflictsQ.error, 'Failed to load')
+      : null;
+  const displayError = error ?? queryErrorMsg;
+  const reload = async () => {
+    setError(null);
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: [...FEEDS_QK] }),
+      qc.invalidateQueries({ queryKey: [...CONFLICTS_QK] }),
+    ]);
+  };
   const [showCreate, setShowCreate] = useState(false);
   const [resolving, setResolving] = useState<SyncConflict | null>(null);
 
-  const reload = async () => {
-    setError(null);
-    try {
-      const [f, c] = await Promise.all([listChannelFeeds(), listSyncConflicts()]);
-      setFeeds([...f]);
-      setConflicts([...c]);
-    } catch (err) {
-      setError(extractErr(err, 'Failed to load'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void reload();
-  }, []);
-
   const onToggle = async (f: ChannelFeed) => {
     try {
-      const updated = await updateChannelFeed(f.id, {
+      await updateChannelFeed(f.id, {
         inboundUrl: f.inboundUrl,
         pollIntervalMinutes: f.pollIntervalMinutes,
         isEnabled: !f.isEnabled,
       });
-      setFeeds((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+      await reload();
     } catch (err) {
       setError(extractErr(err, 'Toggle failed'));
     }
@@ -59,16 +73,21 @@ const AdminSyncPage = () => {
     }
     try {
       await deleteChannelFeed(f.id);
-      setFeeds((prev) => prev.filter((x) => x.id !== f.id));
+      await reload();
     } catch (err) {
       setError(extractErr(err, 'Delete failed'));
     }
   };
 
+
   const pendingConflicts = useMemo(
     () => conflicts.filter((c) => c.resolution === 'Pending'),
     [conflicts],
   );
+
+  if (needsSignIn) {
+    return <SignInGate title="Sign in to manage sync" />;
+  }
 
   return (
     <div className="space-y-8">
@@ -90,9 +109,9 @@ const AdminSyncPage = () => {
         </button>
       </header>
 
-      {error && (
+      {displayError && (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          {error}
+          {displayError}
         </div>
       )}
 
@@ -162,9 +181,9 @@ const AdminSyncPage = () => {
         {showCreate && (
           <CreateFeedForm
             onClose={() => setShowCreate(false)}
-            onCreated={(f) => {
+            onCreated={() => {
               setShowCreate(false);
-              setFeeds((prev) => [...prev, f]);
+              void reload();
             }}
           />
         )}

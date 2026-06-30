@@ -25,6 +25,8 @@ import {
 } from '@/lib/api/pricing';
 import { ApiProblemError } from '@/lib/api/client';
 import { formatCurrency } from '@/lib/utils/currency';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
 import RuleEditorModal from '@/components/pricing/RuleEditorModal';
 import SortableRuleRow from '@/components/pricing/SortableRuleRow';
 import QuotePreviewPane from '@/components/pricing/QuotePreviewPane';
@@ -36,7 +38,14 @@ const extractErr = (e: unknown, fallback: string): string => {
 };
 
 const AdminPricingPage = () => {
-  const [properties, setProperties] = useState<readonly AdminPropertySummary[]>([]);
+  // Slice OPS.M.10.2 F11.7.4.7b — property list on useAuthedQuery; per-
+  // property plan fetch stays in its own useEffect (fires on selection
+  // change, after MSAL is already initialized).
+  const propertiesQ = useAuthedQuery<readonly AdminPropertySummary[]>({
+    queryKey: ['admin', 'properties', 'mine'],
+    queryFn: adminListMyProperties,
+  });
+  const properties = propertiesQ.data ?? [];
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const [plan, setPlan] = useState<PricingPlan | null>(null);
   const [rules, setRules] = useState<readonly PricingRule[]>([]);
@@ -48,23 +57,20 @@ const AdminPricingPage = () => {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
+  // Default the selected property to the first as soon as the list lands.
   useEffect(() => {
-    (async () => {
-      try {
-        const props = await adminListMyProperties();
-        setProperties(props);
-        const first = props[0];
-        if (first && !selectedPropertyId) {
-          setSelectedPropertyId(first.id);
-        }
-      } catch (e) {
-        setError(extractErr(e, 'Failed to load properties.'));
-      } finally {
-        setLoading(false);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!selectedPropertyId && properties.length > 0) {
+      const first = properties[0];
+      if (first) setSelectedPropertyId(first.id);
+    }
+  }, [properties, selectedPropertyId]);
+
+  useEffect(() => {
+    if (propertiesQ.isError) {
+      setError(extractErr(propertiesQ.error, 'Failed to load properties.'));
+    }
+    if (!propertiesQ.isLoading) setLoading(false);
+  }, [propertiesQ.isError, propertiesQ.error, propertiesQ.isLoading]);
 
   const reloadPlan = async (propertyId: string) => {
     setError(null);
@@ -156,6 +162,10 @@ const AdminPricingPage = () => {
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
+  }
+
+  if (propertiesQ.needsSignIn) {
+    return <SignInGate title="Sign in to manage pricing" />;
   }
 
   return (

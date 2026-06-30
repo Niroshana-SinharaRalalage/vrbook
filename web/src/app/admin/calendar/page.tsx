@@ -17,6 +17,8 @@ import {
   type CalendarHoldEntry,
 } from '@/lib/api/booking';
 import { listChannelFeeds, type ChannelFeed } from '@/lib/api/sync';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
 import { ApiProblemError } from '@/lib/api/client';
 
 // ---- Date helpers -------------------------------------------------------
@@ -131,36 +133,48 @@ const collectEntriesForDay = (cal: PropertyCalendar | null, day: Date): DayEntry
 // ---- Page ---------------------------------------------------------------
 
 const AdminCalendarPage = () => {
-  const [properties, setProperties] = useState<readonly AdminPropertySummary[]>([]);
+  // Slice OPS.M.10.2 F11.7.4.7b — initial property + feed lists on
+  // useAuthedQuery so the MSAL-readiness gate prevents the cold-mount
+  // 401 race. The per-property calendar fetch below stays in a
+  // useEffect: by the time the user picks a property, MSAL is ready.
+  const propertiesQ = useAuthedQuery<readonly AdminPropertySummary[]>({
+    queryKey: ['admin', 'properties', 'mine'],
+    queryFn: adminListMyProperties,
+  });
+  const feedsQ = useAuthedQuery<readonly ChannelFeed[]>({
+    queryKey: ['admin', 'channel-feeds'],
+    queryFn: listChannelFeeds,
+  });
+  const properties = propertiesQ.data ?? [];
+  const feeds = feedsQ.data ?? [];
   const [propertyId, setPropertyId] = useState<string>('');
   const [anchor, setAnchor] = useState<Date>(startOfMonth(new Date()));
   const [calendar, setCalendar] = useState<PropertyCalendar | null>(null);
-  const [feeds, setFeeds] = useState<readonly ChannelFeed[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [showBlockForm, setShowBlockForm] = useState(false);
 
-  // Initial load: property list + feeds.
+  // Default the picked property to the first one as soon as the list lands.
   useEffect(() => {
-    (async () => {
-      setError(null);
-      try {
-        const [props, fs] = await Promise.all([adminListMyProperties(), listChannelFeeds()]);
-        setProperties(props);
-        setFeeds(fs);
-        const first = props[0];
-        if (first) {
-          setPropertyId(first.id);
-        } else {
-          setLoading(false);
-        }
-      } catch (err) {
-        setError(extractErr(err, 'Failed to load properties'));
-        setLoading(false);
-      }
-    })();
-  }, []);
+    if (!propertyId && properties.length > 0) {
+      const first = properties[0];
+      if (first) setPropertyId(first.id);
+    }
+  }, [properties, propertyId]);
+
+  useEffect(() => {
+    if (propertiesQ.isError) {
+      setError(extractErr(propertiesQ.error, 'Failed to load properties'));
+      setLoading(false);
+    }
+    if (feedsQ.isError) {
+      setError(extractErr(feedsQ.error, 'Failed to load channel feeds'));
+    }
+    if (properties.length === 0 && !propertiesQ.isLoading) {
+      setLoading(false);
+    }
+  }, [propertiesQ.isError, propertiesQ.error, propertiesQ.isLoading, feedsQ.isError, feedsQ.error, properties.length]);
 
   // Calendar load when property or month changes.
   useEffect(() => {
@@ -182,6 +196,10 @@ const AdminCalendarPage = () => {
     () => feeds.find((f) => f.propertyId === propertyId),
     [feeds, propertyId],
   );
+
+  if (propertiesQ.needsSignIn) {
+    return <SignInGate title="Sign in to view your calendar" />;
+  }
 
   const reloadCalendar = async () => {
     if (!propertyId) return;
