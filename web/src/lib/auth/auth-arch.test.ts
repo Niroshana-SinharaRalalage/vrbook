@@ -48,17 +48,14 @@ const authedHelpers = [
 const WB = '\\b';
 
 // F11.7.4 migration scaffold: these client components are pre-existing
-// bug-class-2 offenders queued for migration in F11.7.4.3 + F11.7.4.4.
-// SHRINK THIS LIST as each migration lands; it MUST be empty by the
-// end of F11.7.4.7. Adding a file here for a NEW component is the
-// regression this test is designed to prevent — don't do it.
-const KNOWN_PENDING_CLIENT_OFFENDERS = new Set<string>([
-  // F11.7.4.3 — migrate useMyTenant onto useAuthedQuery
-  'src/hooks/useMyTenant.ts',
-  // F11.7.4.4 — migrate the platform tenants pages onto useMyTenant's new shape
-  'src/app/admin/platform/tenants/page.tsx',
-  'src/app/admin/platform/tenants/[tenantId]/page.tsx',
-]);
+// bug-class-2 offenders queued for migration in later sub-slices. SHRINK
+// THIS LIST as each migration lands; it MUST be empty by the end of
+// F11.7.4.7. Adding a file here for a NEW component is the regression
+// this test is designed to prevent — don't do it.
+//
+// F11.7.4.3 + F11.7.4.4 cleared the original 3 entries (useMyTenant +
+// the two platform tenants pages). Empty now.
+const KNOWN_PENDING_CLIENT_OFFENDERS = new Set<string>();
 
 // vitest's process.cwd() is the project that holds vitest.config —
 // here that's `web/`. fast-glob + readFileSync below are relative to

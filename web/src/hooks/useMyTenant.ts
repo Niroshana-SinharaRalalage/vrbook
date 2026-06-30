@@ -1,6 +1,8 @@
 /**
  * Slice OPS.M.7 §3.2 + §3.7 — `useMyTenant()` hook backing the onboarding
- * wizard's polling loop.
+ * wizard's polling loop. Slice OPS.M.10.2 F11.7.4.3 — rewritten on top of
+ * `useAuthedQuery` so the MSAL-readiness gating + 403/404-as-null + 401-
+ * no-retry policy live in one shared wrapper.
  *
  * Behavior:
  *   - One-shot fetch by default (pollIntervalMs undefined).
@@ -11,9 +13,15 @@
  *   - Hard cap at `pollMax` attempts (default 30) so a stuck Stripe state
  *     doesn't poll forever. Exposes `pollAttempts` + `isExhausted` so the
  *     wizard can show a "Refresh now" fallback per §3.7 (D7).
+ *
+ * The PUBLIC SHAPE is unchanged: `data: MeTenant | undefined`. The
+ * underlying useAuthedQuery returns `T | null` (with `null` being the
+ * collapsed 403/404 state, i.e. "no tenant"); we normalize back to
+ * `undefined` so the existing consumers (admin/onboarding/* +
+ * AdminSidebar) keep working without code changes.
  */
 import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
 import { getMyTenant, type MeTenant } from '@/lib/api/tenant';
 
 export interface UseMyTenantOptions {
@@ -41,14 +49,14 @@ export const useMyTenant = (opts: UseMyTenantOptions = {}): UseMyTenantResult =>
   const exhaustedRef = useRef(false);
   exhaustedRef.current = exhausted;
 
-  const query = useQuery({
+  const query = useAuthedQuery<MeTenant>({
     queryKey: ['me', 'tenant'],
     queryFn: getMyTenant,
     staleTime: 0,
     refetchInterval: (q) => {
       if (opts.pollIntervalMs === undefined) return false;
       if (exhaustedRef.current) return false;
-      const data = q.state.data as MeTenant | undefined;
+      const data = q.state.data as MeTenant | null | undefined;
       if (data && opts.stopWhen?.(data)) return false;
       return opts.pollIntervalMs;
     },
@@ -73,7 +81,10 @@ export const useMyTenant = (opts: UseMyTenantOptions = {}): UseMyTenantResult =>
   }, [query.dataUpdatedAt]);
 
   return {
-    data: query.data,
+    // Normalize null (no-tenant) back to undefined for the legacy public
+    // shape. Consumers that already check `data?.foo` work unchanged;
+    // null vs undefined is invisible to optional chaining.
+    data: query.data ?? undefined,
     isLoading: query.isPending,
     isError: query.isError,
     error: query.error,

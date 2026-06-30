@@ -7,8 +7,9 @@
  */
 import { useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
-import { listPlatformTenants } from '@/lib/api/platform';
+import { listPlatformTenants, type PlatformTenantListResponse } from '@/lib/api/platform';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
 import { cn } from '@/lib/utils/cn';
 
 const STATUSES = [
@@ -23,11 +24,15 @@ const PlatformTenantsPage = () => {
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error, needsSignIn } = useAuthedQuery<PlatformTenantListResponse>({
     queryKey: ['platform', 'tenants', { page, status, search }],
     queryFn: () =>
       listPlatformTenants({ page, pageSize: 25, status: status || undefined, search: search || undefined }),
   });
+
+  if (needsSignIn) {
+    return <SignInGate title="Sign in to view platform tenants" />;
+  }
 
   return (
     <div className="space-y-4 py-6">

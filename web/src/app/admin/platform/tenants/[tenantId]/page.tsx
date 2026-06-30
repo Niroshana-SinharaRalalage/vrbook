@@ -10,14 +10,17 @@
  */
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getPlatformTenant,
   suspendTenant,
   reactivateTenant,
   setPlatformFee,
+  type PlatformTenant,
 } from '@/lib/api/platform';
 import { ApiProblemError } from '@/lib/api/client';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
 import { cn } from '@/lib/utils/cn';
 
 const PlatformTenantDetailPage = () => {
@@ -26,9 +29,12 @@ const PlatformTenantDetailPage = () => {
   const tenantId = String(params.tenantId);
   const qc = useQueryClient();
 
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error, needsSignIn } = useAuthedQuery<PlatformTenant>({
     queryKey: ['platform', 'tenant', tenantId],
     queryFn: () => getPlatformTenant(tenantId),
+    // 404 here means "no such tenant" — handled below; surface 403 as error
+    // (i.e. a non-PlatformAdmin user opened the URL).
+    treatAs404: [404],
   });
 
   const [suspendReason, setSuspendReason] = useState('');
@@ -66,32 +72,37 @@ const PlatformTenantDetailPage = () => {
     onError: (e) => setActionError(e instanceof Error ? e.message : 'Set fee failed.'),
   });
 
+  if (needsSignIn) {
+    return <SignInGate title="Sign in to view tenant detail" />;
+  }
   if (isLoading) {
     return <p className="py-8 text-center text-muted-foreground">Loading tenant…</p>;
   }
   if (isError) {
-    const status = error instanceof ApiProblemError ? error.status : 0;
-    if (status === 404) {
-      return (
-        <div className="py-8">
-          <h1 className="text-xl font-semibold">Tenant not found</h1>
-          <button
-            type="button"
-            onClick={() => router.push('/admin/platform/tenants')}
-            className="mt-3 text-sm underline"
-          >
-            Back to list
-          </button>
-        </div>
-      );
-    }
     return (
       <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm">
-        {error instanceof Error ? error.message : 'Failed to load tenant.'}
+        {error instanceof ApiProblemError && error.status === 403
+          ? 'You do not have permission to view this tenant.'
+          : error instanceof Error
+            ? error.message
+            : 'Failed to load tenant.'}
       </div>
     );
   }
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="py-8">
+        <h1 className="text-xl font-semibold">Tenant not found</h1>
+        <button
+          type="button"
+          onClick={() => router.push('/admin/platform/tenants')}
+          className="mt-3 text-sm underline"
+        >
+          Back to list
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 py-6">
