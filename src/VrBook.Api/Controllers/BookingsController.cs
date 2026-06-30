@@ -16,10 +16,20 @@ namespace VrBook.Api.Controllers;
 [Route("api/v1/bookings")]
 [Tags("Booking")]
 [Authorize]
-public sealed class BookingsController(IMediator mediator, ICurrentUser currentUser) : ControllerBase
+public sealed class BookingsController(
+    IMediator mediator,
+    IGuestTenantResolver tenantResolver) : ControllerBase
 {
-    private Guid CallerTenantId() => currentUser.TenantId
-        ?? throw new ForbiddenException("Owner action requires a tenant membership.");
+    // Slice OPS.M.10.2 F11.7.5.2 — owner-action endpoints resolve tenant
+    // from the booking row (path-resolved) instead of from an
+    // ICurrentUser.TenantId claim. The previous controller-helper short-
+    // circuited PlatformAdmin's cross-tenant operator surface BEFORE the
+    // M.4 pipeline gate could apply its PlatformAdmin bypass. Routing the
+    // tenant id through IGuestTenantResolver moves the membership check
+    // back to the pipeline behavior, which is where ADR-0014 puts it.
+    private async Task<Guid> ResolveBookingTenantAsync(Guid bookingId, CancellationToken ct) =>
+        await tenantResolver.ResolveFromBookingIdAsync(bookingId, ct)
+            ?? throw new NotFoundException("Booking", bookingId);
 
     // ---- Slice 0.1: 15-minute checkout hold (§9.3) ----
     [HttpPost("holds")]
@@ -79,24 +89,36 @@ public sealed class BookingsController(IMediator mediator, ICurrentUser currentU
     [HttpPost("{id:guid}/confirm")]
     [Authorize(Roles = "Owner,Admin")]
     [SwaggerOperation(Summary = "Owner manual confirmation. Tentative -> Confirmed.")]
-    public async Task<ActionResult<BookingDto>> Confirm(Guid id, CancellationToken cancellationToken) =>
-        Ok(await mediator.Send(new ConfirmBookingCommand(id, CallerTenantId()), cancellationToken));
+    public async Task<ActionResult<BookingDto>> Confirm(Guid id, CancellationToken cancellationToken)
+    {
+        var tenantId = await ResolveBookingTenantAsync(id, cancellationToken);
+        return Ok(await mediator.Send(new ConfirmBookingCommand(id, tenantId), cancellationToken));
+    }
 
     [HttpPost("{id:guid}/reject")]
     [Authorize(Roles = "Owner,Admin")]
     [SwaggerOperation(Summary = "Owner rejection of a Tentative booking.")]
-    public async Task<ActionResult<BookingDto>> Reject(Guid id, [FromBody] RejectBookingRequest request, CancellationToken cancellationToken) =>
-        Ok(await mediator.Send(new RejectBookingCommand(id, request.Reason ?? string.Empty, CallerTenantId()), cancellationToken));
+    public async Task<ActionResult<BookingDto>> Reject(Guid id, [FromBody] RejectBookingRequest request, CancellationToken cancellationToken)
+    {
+        var tenantId = await ResolveBookingTenantAsync(id, cancellationToken);
+        return Ok(await mediator.Send(new RejectBookingCommand(id, request.Reason ?? string.Empty, tenantId), cancellationToken));
+    }
 
     [HttpPost("{id:guid}/check-in")]
     [Authorize(Roles = "Owner,Admin")]
-    public async Task<ActionResult<BookingDto>> CheckIn(Guid id, CancellationToken cancellationToken) =>
-        Ok(await mediator.Send(new CheckInBookingCommand(id, CallerTenantId()), cancellationToken));
+    public async Task<ActionResult<BookingDto>> CheckIn(Guid id, CancellationToken cancellationToken)
+    {
+        var tenantId = await ResolveBookingTenantAsync(id, cancellationToken);
+        return Ok(await mediator.Send(new CheckInBookingCommand(id, tenantId), cancellationToken));
+    }
 
     [HttpPost("{id:guid}/check-out")]
     [Authorize(Roles = "Owner,Admin")]
-    public async Task<ActionResult<BookingDto>> CheckOut(Guid id, CancellationToken cancellationToken) =>
-        Ok(await mediator.Send(new CheckOutBookingCommand(id, CallerTenantId()), cancellationToken));
+    public async Task<ActionResult<BookingDto>> CheckOut(Guid id, CancellationToken cancellationToken)
+    {
+        var tenantId = await ResolveBookingTenantAsync(id, cancellationToken);
+        return Ok(await mediator.Send(new CheckOutBookingCommand(id, tenantId), cancellationToken));
+    }
 
     [HttpPost("{id:guid}/review")]
     [SwaggerOperation(Summary = "Submit a post-stay review. Only after CheckedOut.")]
