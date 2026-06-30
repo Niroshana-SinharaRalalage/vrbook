@@ -1,15 +1,15 @@
 import Link from 'next/link';
-import { Search, User, Calendar } from 'lucide-react';
 
-import { cn } from '@/lib/utils/cn';
 import { SiteHeaderAuth } from './SiteHeaderAuth';
+import { SiteHeaderNav } from './SiteHeaderNav';
 
-const navLinks = [
-  { href: '/properties', label: 'Stays', icon: Search },
-  { href: '/account/bookings', label: 'My trips', icon: Calendar },
-  { href: '/account/profile', label: 'Account', icon: User },
-] as const;
-
+/**
+ * Server-rendered header shell. The nav row is delegated to
+ * {@link SiteHeaderNav} (a `'use client'` component) so we can gate
+ * an `Admin` link on the signed-in user's operator role via
+ * `useMe()`. The rest of the header — branding + sign-in/out
+ * button — stays in the server tree to minimize the JS bundle.
+ */
 export const SiteHeader = () => {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -20,21 +20,7 @@ export const SiteHeader = () => {
         </Link>
 
         <div className="flex items-center gap-6">
-          <nav className="hidden items-center gap-6 md:flex" aria-label="Primary">
-            {navLinks.map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                className={cn(
-                  'flex items-center gap-1.5 text-sm text-muted-foreground transition-colors',
-                  'hover:text-brand-orange-600 focus-visible:text-brand-orange-600',
-                )}
-              >
-                <Icon className="h-4 w-4" aria-hidden />
-                {label}
-              </Link>
-            ))}
-          </nav>
+          <SiteHeaderNav />
           <SiteHeaderAuth />
         </div>
       </div>
