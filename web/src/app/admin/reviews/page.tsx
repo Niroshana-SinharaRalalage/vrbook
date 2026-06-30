@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Eye, EyeOff, MessageSquare, RefreshCw, Star, X } from 'lucide-react';
 import {
   adminHideReview,
@@ -11,6 +12,8 @@ import {
   type Review,
 } from '@/lib/api/reviews';
 import { ApiProblemError } from '@/lib/api/client';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
 
 type StatusFilter = 'All' | Review['status'];
 
@@ -41,29 +44,26 @@ const StarRow = ({ rating }: { rating: number }) => (
 
 const AdminReviewsPage = () => {
   const [filter, setFilter] = useState<StatusFilter>('All');
-  const [rows, setRows] = useState<readonly Review[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [respondingTo, setRespondingTo] = useState<Review | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const QK = ['admin', 'reviews', filter] as const;
 
+  // Slice OPS.M.10.2 F11.7.4.7b — list on useAuthedQuery; mutations
+  // invalidate.
+  const { data, isLoading, isError, error: queryError, needsSignIn } = useAuthedQuery<readonly Review[]>({
+    queryKey: [...QK],
+    queryFn: () => adminListReviews(filter === 'All' ? undefined : filter),
+  });
+  const rows = data ?? [];
+  const loading = isLoading;
+  const [error, setError] = useState<string | null>(null);
+  const queryErrorMsg = isError ? extractErr(queryError, 'Failed to load reviews.') : null;
+  const displayError = error ?? queryErrorMsg;
   const reload = async () => {
     setError(null);
-    setLoading(true);
-    try {
-      const data = await adminListReviews(filter === 'All' ? undefined : filter);
-      setRows(data);
-    } catch (err) {
-      setError(extractErr(err, 'Failed to load reviews.'));
-    } finally {
-      setLoading(false);
-    }
+    await qc.invalidateQueries({ queryKey: [...QK] });
   };
-
-  useEffect(() => {
-    void reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter]);
+  const [respondingTo, setRespondingTo] = useState<Review | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const counts = useMemo(() => {
     const totals: Partial<Record<Review['status'], number>> = {};
@@ -90,6 +90,10 @@ const AdminReviewsPage = () => {
     }
   };
 
+  if (needsSignIn) {
+    return <SignInGate title="Sign in to manage reviews" />;
+  }
+
   return (
     <div className="space-y-6">
       <header className="flex items-start justify-between gap-4">
@@ -111,9 +115,9 @@ const AdminReviewsPage = () => {
         </button>
       </header>
 
-      {error && (
+      {displayError && (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          {error}
+          {displayError}
         </div>
       )}
 

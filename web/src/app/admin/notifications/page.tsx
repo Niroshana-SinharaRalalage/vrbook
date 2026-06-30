@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Clock, Mail, RefreshCw, RotateCcw, Skull, X } from 'lucide-react';
 import {
   adminListNotifications,
@@ -9,6 +10,8 @@ import {
   type NotificationStatus,
 } from '@/lib/api/notifications';
 import { ApiProblemError } from '@/lib/api/client';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
 
 const STATUS_FILTERS: { value: NotificationStatus | 'All'; label: string }[] = [
   { value: 'All', label: 'All' },
@@ -29,29 +32,25 @@ const STATUS_STYLES: Record<NotificationStatus, { className: string; Icon: React
 
 const AdminNotificationsPage = () => {
   const [filter, setFilter] = useState<NotificationStatus | 'All'>('All');
-  const [rows, setRows] = useState<readonly NotificationLog[]>([]);
-  const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
+  const QK = ['admin', 'notifications', filter] as const;
+
+  // Slice OPS.M.10.2 F11.7.4.7b — useAuthedQuery replaces the
+  // useEffect+useState+reload() pattern. Retry mutation invalidates
+  // the query to refetch fresh state.
+  const { data, isLoading, isError, error: queryError, needsSignIn } = useAuthedQuery<readonly NotificationLog[]>({
+    queryKey: [...QK],
+    queryFn: () => adminListNotifications(filter === 'All' ? undefined : filter),
+  });
+  const rows = data ?? [];
   const [error, setError] = useState<string | null>(null);
+  const loading = isLoading;
+  const reload = () => qc.invalidateQueries({ queryKey: [...QK] });
   const [selected, setSelected] = useState<NotificationLog | null>(null);
   const [busyRetryId, setBusyRetryId] = useState<string | null>(null);
 
-  const reload = async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      const data = await adminListNotifications(filter === 'All' ? undefined : filter);
-      setRows(data);
-    } catch (err) {
-      setError(extractErr(err, 'Failed to load notifications.'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter]);
+  const queryErrorMsg = isError ? extractErr(queryError, 'Failed to load notifications.') : null;
+  const displayError = error ?? queryErrorMsg;
 
   const counts = useMemo(() => {
     const totals: Partial<Record<NotificationStatus, number>> = {};
@@ -61,12 +60,16 @@ const AdminNotificationsPage = () => {
     return totals;
   }, [rows]);
 
+  if (needsSignIn) {
+    return <SignInGate title="Sign in to view notifications" />;
+  }
+
   const onRetry = async (row: NotificationLog) => {
     setBusyRetryId(row.id);
     setError(null);
     try {
       await adminRetryNotification(row.id);
-      await reload();
+      reload();
       if (selected?.id === row.id) {
         setSelected({ ...row, status: 'Queued', retryCount: 0, lastError: null });
       }
@@ -90,7 +93,7 @@ const AdminNotificationsPage = () => {
         </div>
         <button
           type="button"
-          onClick={() => void reload()}
+          onClick={() => reload()}
           className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-2 text-sm hover:bg-accent"
         >
           <RefreshCw className="h-4 w-4" />
@@ -98,9 +101,9 @@ const AdminNotificationsPage = () => {
         </button>
       </header>
 
-      {error && (
+      {displayError && (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          {error}
+          {displayError}
         </div>
       )}
 

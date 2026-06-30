@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Pencil, Plus, Trash2, X } from 'lucide-react';
 import {
   adminCreateAmenity,
@@ -12,34 +13,44 @@ import {
   type Amenity,
 } from '@/lib/api/catalog';
 import { ApiProblemError } from '@/lib/api/client';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
 
 // Client component — admin CRUD page for the amenity catalog (A2.2).
+// Slice OPS.M.10.2 F11.7.4.7b — list fetch on useAuthedQuery; mutations
+// invalidate the query.
+const QK = ['admin', 'amenities'] as const;
+
 const AdminAmenitiesPage = () => {
-  const [amenities, setAmenities] = useState<Amenity[]>([]);
-  const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
+  const { data, isLoading, isError, error: queryError, needsSignIn } = useAuthedQuery<readonly Amenity[]>({
+    queryKey: [...QK],
+    queryFn: adminListAmenities,
+  });
+  const amenities = useMemo(() => {
+    const list = data ?? [];
+    return [...list].sort((a, b) => {
+      const c = a.category.localeCompare(b.category);
+      return c !== 0 ? c : a.name.localeCompare(b.name);
+    });
+  }, [data]);
+  const loading = isLoading;
   const [error, setError] = useState<string | null>(null);
+  const queryErrorMsg = isError
+    ? queryError instanceof ApiProblemError
+      ? queryError.problem.detail ?? queryError.message
+      : queryError instanceof Error
+        ? queryError.message
+        : 'Failed to load'
+    : null;
+  const displayError = error ?? queryErrorMsg;
+  const reload = () => {
+    setError(null);
+    return qc.invalidateQueries({ queryKey: [...QK] });
+  };
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [filter, setFilter] = useState('');
-
-  const reload = async () => {
-    setError(null);
-    try {
-      const list = await adminListAmenities();
-      setAmenities([...list].sort((a, b) => {
-        const c = a.category.localeCompare(b.category);
-        return c !== 0 ? c : a.name.localeCompare(b.name);
-      }));
-    } catch (err) {
-      setError(err instanceof ApiProblemError ? err.problem.detail ?? err.message : err instanceof Error ? err.message : 'Failed to load');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void reload();
-  }, []);
 
   const filtered = useMemo(() => {
     if (!filter) return amenities;
@@ -64,8 +75,9 @@ const AdminAmenitiesPage = () => {
 
   const onToggle = async (a: Amenity) => {
     try {
-      const updated = a.isActive ? await adminDisableAmenity(a.id) : await adminEnableAmenity(a.id);
-      setAmenities((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+      if (a.isActive) await adminDisableAmenity(a.id);
+      else await adminEnableAmenity(a.id);
+      await reload();
     } catch (err) {
       setError(err instanceof ApiProblemError ? err.problem.detail ?? err.message : err instanceof Error ? err.message : 'Toggle failed');
     }
@@ -79,11 +91,15 @@ const AdminAmenitiesPage = () => {
     }
     try {
       await adminDeleteAmenity(a.id);
-      setAmenities((prev) => prev.filter((x) => x.id !== a.id));
+      await reload();
     } catch (err) {
       setError(err instanceof ApiProblemError ? err.problem.detail ?? err.message : err instanceof Error ? err.message : 'Delete failed');
     }
   };
+
+  if (needsSignIn) {
+    return <SignInGate title="Sign in to manage amenities" />;
+  }
 
   return (
     <div className="space-y-6">
@@ -113,21 +129,18 @@ const AdminAmenitiesPage = () => {
         className="w-full max-w-md rounded-md border border-border bg-background px-3 py-2 text-sm"
       />
 
-      {error && (
+      {displayError && (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          {error}
+          {displayError}
         </div>
       )}
 
       {showCreate && (
         <CreateAmenityForm
           onClose={() => setShowCreate(false)}
-          onCreated={(a) => {
+          onCreated={() => {
             setShowCreate(false);
-            setAmenities((prev) => [...prev, a].sort((x, y) => {
-              const c = x.category.localeCompare(y.category);
-              return c !== 0 ? c : x.name.localeCompare(y.name);
-            }));
+            void reload();
           }}
         />
       )}
@@ -148,8 +161,8 @@ const AdminAmenitiesPage = () => {
                       <EditAmenityRow
                         amenity={a}
                         onCancel={() => setEditingId(null)}
-                        onSaved={(updated) => {
-                          setAmenities((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+                        onSaved={() => {
+                          void reload();
                           setEditingId(null);
                         }}
                       />
