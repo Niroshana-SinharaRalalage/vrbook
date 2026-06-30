@@ -1,60 +1,64 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, ChevronRight, Clock, Home, CalendarCheck } from 'lucide-react';
 
 import { adminListBookings, type AdminBookingSummary } from '@/lib/api/booking';
 import { adminListMyProperties, type AdminPropertySummary } from '@/lib/api/catalog';
 import { useTentativeBookingPush } from '@/hooks/useTentativeBookingPush';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
+
+// Slice OPS.M.10.2 F11.7.4.6 — Admin dashboard, on useAuthedQuery.
+// Pre-fix the page fired adminListBookings + adminListMyProperties
+// inside a useEffect on mount, ungated. On cold MSAL state the
+// requests went out with no Authorization header, dashboard degraded
+// to an empty state without telling the user why. Same MSAL race as
+// MyBookingsClient.
+const QK_BOOKINGS = ['admin', 'bookings', 'dashboard'] as const;
+const QK_PROPERTIES = ['admin', 'properties', 'mine'] as const;
 
 const AdminDashboardPage = () => {
-  const [bookings, setBookings] = useState<readonly AdminBookingSummary[]>([]);
-  const [properties, setProperties] = useState<readonly AdminPropertySummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
 
-  const refetchBookings = useCallback(async () => {
-    try {
-      const bs = await adminListBookings();
-      setBookings(bs);
-    } catch {
-      /* dashboard degrades gracefully */
-    }
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const [bs, ps] = await Promise.all([adminListBookings(), adminListMyProperties()]);
-        setBookings(bs);
-        setProperties(ps);
-      } catch {
-        // dashboard degrades gracefully — empty cards
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  // Realtime push: when a new tentative booking lands, refetch the canonical
-  // list (single source of truth — see SLICE7_PLAN §2.5 step 5). The pill
-  // increments naturally on the next render.
-  const { connected } = useTentativeBookingPush(() => {
-    void refetchBookings();
+  const bookingsQ = useAuthedQuery<readonly AdminBookingSummary[]>({
+    queryKey: [...QK_BOOKINGS],
+    queryFn: () => adminListBookings(),
+  });
+  const propertiesQ = useAuthedQuery<readonly AdminPropertySummary[]>({
+    queryKey: [...QK_PROPERTIES],
+    queryFn: adminListMyProperties,
   });
 
-  // Always-on safety net (§2.11): on tab-focus, refetch once regardless of
-  // SignalR state. Catches both "long background + connected" staleness AND
-  // "SignalR down + user came back" degradation.
+  const bookings = bookingsQ.data ?? [];
+  const properties = propertiesQ.data ?? [];
+  const loading = bookingsQ.isLoading || propertiesQ.isLoading;
+
+  // Realtime push: when a new tentative booking lands, invalidate the
+  // bookings query so it refetches. Single source of truth — see
+  // SLICE7_PLAN §2.5 step 5.
+  const { connected } = useTentativeBookingPush(() => {
+    void qc.invalidateQueries({ queryKey: [...QK_BOOKINGS] });
+  });
+
+  // Always-on safety net (§2.11): on tab-focus refetch once regardless
+  // of SignalR state. Catches both "long background + connected"
+  // staleness AND "SignalR down + user came back" degradation.
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
-        void refetchBookings();
+        void qc.invalidateQueries({ queryKey: [...QK_BOOKINGS] });
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [refetchBookings]);
+  }, [qc]);
+
+  if (bookingsQ.needsSignIn) {
+    return <SignInGate title="Sign in to view the admin dashboard" />;
+  }
 
   const tentative = bookings.filter((b) => b.status === 'Tentative');
   const confirmed = bookings.filter((b) => b.status === 'Confirmed');

@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Clock, ChevronRight, ClipboardList } from 'lucide-react';
 
 import { adminListBookings, type AdminBookingSummary, type BookingStatus } from '@/lib/api/booking';
 import { ApiProblemError } from '@/lib/api/client';
 import { formatCurrency } from '@/lib/utils/currency';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
 
 // Slice 2 — owner's booking queue. Tentative-first ordering, status filters,
 // click-through to the detail page for Confirm / Reject.
@@ -34,31 +36,29 @@ const STATUS_PILL: Record<BookingStatus, string> = {
 };
 
 const AdminBookingsPage = () => {
-  const [items, setItems] = useState<readonly AdminBookingSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<BookingStatus | 'All'>('All');
 
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    (async () => {
-      try {
-        const list = await adminListBookings(filter === 'All' ? undefined : filter);
-        setItems(list);
-      } catch (err) {
-        setError(
-          err instanceof ApiProblemError
-            ? err.problem.detail ?? err.message
-            : err instanceof Error
-              ? err.message
-              : 'Failed to load',
-        );
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [filter]);
+  // Slice OPS.M.10.2 F11.7.4.6 — useAuthedQuery replaces the
+  // useEffect+useState+try/catch pattern. Same MSAL-readiness gating
+  // as MyBookingsClient; the filter pill is the queryKey discriminator
+  // so changing it triggers a refetch.
+  const { data, isLoading, isError, error, needsSignIn } = useAuthedQuery<readonly AdminBookingSummary[]>({
+    queryKey: ['admin', 'bookings', filter],
+    queryFn: () => adminListBookings(filter === 'All' ? undefined : filter),
+  });
+  const items = data ?? [];
+
+  if (needsSignIn) {
+    return <SignInGate title="Sign in to view bookings" />;
+  }
+
+  const errorMsg = isError
+    ? error instanceof ApiProblemError
+      ? error.problem.detail ?? error.message
+      : error instanceof Error
+        ? error.message
+        : 'Failed to load'
+    : null;
 
   const tentativeCount = items.filter((b) => b.status === 'Tentative').length;
 
@@ -89,22 +89,22 @@ const AdminBookingsPage = () => {
         ))}
       </div>
 
-      {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
 
-      {error && (
+      {errorMsg && (
         <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
-          {error}
+          {errorMsg}
         </div>
       )}
 
-      {!loading && !error && items.length === 0 && (
+      {!isLoading && !errorMsg && items.length === 0 && (
         <div className="rounded-xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
           <ClipboardList className="mx-auto h-10 w-10" aria-hidden />
           <p className="mt-3">No bookings {filter !== 'All' && `in status ${filter}`} yet.</p>
         </div>
       )}
 
-      {!loading && !error && items.length > 0 && (
+      {!isLoading && !errorMsg && items.length > 0 && (
         <div className="overflow-hidden rounded-xl border border-border">
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
