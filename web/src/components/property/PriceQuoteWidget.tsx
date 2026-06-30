@@ -6,6 +6,7 @@ import { computeQuote, type Quote } from '@/lib/api/pricing';
 import { createHold, placeBooking } from '@/lib/api/booking';
 import { getAvailability, type BlockedRange } from '@/lib/api/catalog';
 import { ApiProblemError } from '@/lib/api/client';
+import { useAuth } from '@/lib/auth/useAuth';
 import { formatCurrency } from '@/lib/utils/currency';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -29,6 +30,7 @@ interface PriceQuoteWidgetProps {
 
 export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProps) => {
   const router = useRouter();
+  const { isAuthenticated, signIn } = useAuth();
   const [checkin, setCheckin] = useState(() => addDays(today(), 14));
   const [checkout, setCheckout] = useState(() => addDays(today(), 17));
   const [guests, setGuests] = useState(2);
@@ -40,14 +42,16 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
   const [blocked, setBlocked] = useState<readonly BlockedRange[]>([]);
 
   const conflict = isRangeBlocked(checkin, checkout, blocked);
+  const datesValid = checkout > checkin;
 
-  const fetchQuote = async () => {
+  const fetchQuote = async (cin: string, cout: string, g: number, signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
-      const q = await computeQuote(propertyId, { checkin, checkout, guests });
+      const q = await computeQuote(propertyId, { checkin: cin, checkout: cout, guests: g }, signal);
       setQuote(q);
     } catch (err) {
+      if (signal?.aborted) return;
       setQuote(null);
       if (err instanceof ApiProblemError) {
         setError(err.problem.detail ?? err.message);
@@ -55,11 +59,19 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
         setError(err instanceof Error ? err.message : 'Quote failed');
       }
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   };
 
   const onBook = async () => {
+    // F11.7.1: anonymous user clicking Book should be redirected to Entra
+    // sign-in instead of letting the /bookings/holds call 401. After
+    // sign-in MSAL returns the user to this same URL; the auto-quote
+    // useEffect re-fires, and Book becomes clickable.
+    if (!isAuthenticated) {
+      signIn();
+      return;
+    }
     setBooking(true);
     setError(null);
     try {
@@ -89,9 +101,9 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
     }
   };
 
+  // Initial mount: fetch the year-of-availability map so the date picker
+  // can warn before Book. Quote auto-fetch is handled by the effect below.
   useEffect(() => {
-    void fetchQuote();
-    // Fetch a year of availability so the picker can warn before the user hits Book.
     void (async () => {
       try {
         const from = today();
@@ -99,12 +111,34 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
         const a = await getAvailability(propertyId, from, to);
         setBlocked(a.blocked);
       } catch {
-        // Non-fatal: a missing availability check still leaves the server-side
-        // overlap guard as the final safety net (booking.dates_unavailable 422).
+        // Non-fatal: server-side overlap guard is the final safety net.
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propertyId]);
+
+  // F11.7.1: auto-recompute the quote whenever check-in / check-out /
+  // guests changes. Debounced 300ms so the user can finish typing /
+  // tabbing without firing a quote per keystroke. AbortController
+  // cancels in-flight quotes when the inputs change again before the
+  // response lands (prevents a stale older quote replacing a newer one).
+  // Pre-F11.7.1: required a manual Get-quote click; if the user clicked
+  // Book without it, the booking went out with a stale quote (or none).
+  useEffect(() => {
+    if (!datesValid) {
+      setQuote(null);
+      setError(null);
+      return;
+    }
+    const controller = new AbortController();
+    const t = setTimeout(() => {
+      void fetchQuote(checkin, checkout, guests, controller.signal);
+    }, 300);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propertyId, checkin, checkout, guests, datesValid]);
 
   return (
     <div className="space-y-4">
@@ -145,14 +179,12 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
         />
       </label>
 
-      <button
-        type="button"
-        onClick={() => void fetchQuote()}
-        disabled={loading || booking}
-        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm hover:bg-accent disabled:opacity-50"
-      >
-        {loading ? 'Calculating…' : 'Get quote'}
-      </button>
+      {/* F11.7.1 — Get-quote button removed. Quote auto-fetches on
+          checkin/checkout/guests change (debounced 300ms). The loading
+          indicator surfaces inline below. */}
+      {loading && (
+        <div className="text-xs text-muted-foreground">Calculating…</div>
+      )}
 
       {conflict && !error && (
         <div className="rounded-md border border-yellow-500/40 bg-yellow-50 p-3 text-xs text-yellow-900 dark:bg-yellow-900/20 dark:text-yellow-200">
@@ -200,14 +232,22 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
           <button
             type="button"
             onClick={() => void onBook()}
-            disabled={booking || !agreed || conflict !== null}
+            disabled={booking || (isAuthenticated && !agreed) || conflict !== null}
             className="w-full rounded-md bg-brand-maroon-700 px-3 py-2 text-sm font-medium text-white hover:bg-brand-maroon-800 disabled:opacity-50"
           >
-            {booking ? 'Booking…' : conflict ? 'Dates unavailable' : 'Book this stay'}
+            {booking
+              ? 'Booking…'
+              : conflict
+                ? 'Dates unavailable'
+                : !isAuthenticated
+                  ? 'Sign in to book'
+                  : 'Book this stay'}
           </button>
 
           <p className="text-xs text-muted-foreground">
-            Your card will be authorized but not charged until the host confirms.
+            {isAuthenticated
+              ? 'Your card will be authorized but not charged until the host confirms.'
+              : 'Sign in to continue. We’ll return you here after.'}
           </p>
         </div>
       )}

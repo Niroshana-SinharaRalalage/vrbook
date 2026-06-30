@@ -63,7 +63,7 @@ const OnboardingPage = () => {
   if (isError || !tenant) {
     return (
       <div className="mx-auto max-w-2xl py-12">
-        <h1 className="text-xl font-semibold">We couldn't load your tenant.</h1>
+        <h1 className="text-xl font-semibold">We couldn&apos;t load your tenant.</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Reload the page; if the problem persists, contact support.
         </p>
@@ -108,7 +108,7 @@ const OnboardingPage = () => {
           className="rounded-md border border-sky-300 bg-sky-50/50 p-4 text-sm text-sky-900 dark:bg-sky-950/30 dark:text-sky-200"
         >
           <strong>Stripe is reviewing your details.</strong> Most accounts
-          activate within minutes; we'll refresh this page automatically.
+          activate within minutes; we&apos;ll refresh this page automatically.
         </div>
       )}
 

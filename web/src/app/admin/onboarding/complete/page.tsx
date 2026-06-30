@@ -72,7 +72,7 @@ const OnboardingCompletePage = () => {
       {isExhausted && !isDone && (
         <div className="rounded-md border border-border p-4 text-sm">
           <p>
-            We haven't seen Stripe activate yet. This is usually a brief delay;
+            We haven&apos;t seen Stripe activate yet. This is usually a brief delay;
             most accounts activate within a minute.
           </p>
           <div className="mt-3 flex gap-2">

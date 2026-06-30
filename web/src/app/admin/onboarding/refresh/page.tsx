@@ -39,7 +39,7 @@ const OnboardingRefreshPage = () => {
     <div className="mx-auto max-w-md py-10 text-center">
       <h1 className="text-xl font-semibold">Refreshing your onboarding link…</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Stripe links expire after 5 minutes. We'll generate a new one and
+        Stripe links expire after 5 minutes. We&apos;ll generate a new one and
         bounce you right back.
       </p>
       {error && (

@@ -43,10 +43,15 @@ export interface QuoteRequestBody {
   readonly applyLoyaltyDiscount?: boolean;
 }
 
-export const computeQuote = (propertyId: string, body: QuoteRequestBody): Promise<Quote> =>
+export const computeQuote = (
+  propertyId: string,
+  body: QuoteRequestBody,
+  signal?: AbortSignal,
+): Promise<Quote> =>
   apiFetch<Quote>(`/api/v1/properties/${encodeURIComponent(propertyId)}/quotes`, {
     body: { applyLoyaltyDiscount: false, ...body },
     anonymous: true,
+    signal,
   });
 
 // Slice 6: mirror VrBook.Contracts.Enums.PricingRuleKind / PricingAdjustmentKind.
