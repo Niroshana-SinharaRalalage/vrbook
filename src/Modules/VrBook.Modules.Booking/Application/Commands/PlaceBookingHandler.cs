@@ -2,6 +2,7 @@ using System.Data;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
@@ -26,7 +27,8 @@ internal sealed class PlaceBookingHandler(
     IBookingRepository bookings,
     IHoldStore holds,
     IPropertyOwnerLookup propertyOwners,
-    BookingDbContext db) : IRequestHandler<PlaceBookingCommand, BookingDto>
+    BookingDbContext db,
+    Microsoft.Extensions.Logging.ILogger<PlaceBookingHandler> logger) : IRequestHandler<PlaceBookingCommand, BookingDto>
 {
     public async Task<BookingDto> Handle(PlaceBookingCommand request, CancellationToken cancellationToken)
     {
@@ -219,12 +221,35 @@ internal sealed class PlaceBookingHandler(
         // capture (default in StripeGateway): we authorize now, capture on Confirm,
         // cancel on Reject. If the Stripe call fails the booking is in Tentative
         // with no payment intent; guest can complete from /bookings/[id].
-        await mediator.Send(
-            new CreatePaymentIntentForBookingCommand(
-                booking.Id,
-                new Money(booking.Total, booking.Currency),
-                booking.TenantId),
-            cancellationToken);
+        //
+        // Slice OPS.M.10.2 F11.7.2 — actually honor that comment. Pre-fix
+        // any Stripe error (e.g. tenant.StripeAccountId is a staging stub
+        // that Stripe doesn't recognize, sandbox flake, account capability
+        // not yet granted) propagated up as a 500 and ruined the booking
+        // confirmation UX even though the booking itself is durably in
+        // Tentative. Catch any non-cancellation exception, log, return
+        // the Tentative DTO — the guest can retry payment from the
+        // detail page.
+        try
+        {
+            await mediator.Send(
+                new CreatePaymentIntentForBookingCommand(
+                    booking.Id,
+                    new Money(booking.Total, booking.Currency),
+                    booking.TenantId),
+                cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Honor the cancellation token — caller is bailing out.
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "PaymentIntent creation failed for booking {BookingId} (tenant {TenantId}); leaving booking in Tentative without a PI. Guest can retry from /bookings/<id>.",
+                booking.Id, booking.TenantId);
+        }
 
         return booking.ToDto();
     }
