@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, CheckCircle2, XCircle, Clock, AlertCircle, MessageSquare } from 'lucide-react';
 
 import {
@@ -19,6 +20,8 @@ import { ApiProblemError } from '@/lib/api/client';
 import { getDevPersonas } from '@/lib/api/devAuth';
 import { listThreads, type Thread } from '@/lib/api/messaging';
 import { formatCurrency } from '@/lib/utils/currency';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { SignInGate } from '@/components/auth/SignInGate';
 
 const STATUS_PILL: Record<BookingStatus, string> = {
   Draft: 'bg-muted text-muted-foreground',
@@ -36,10 +39,20 @@ const STATUS_PILL: Record<BookingStatus, string> = {
 const AdminBookingDetailPage = () => {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
-  const [booking, setBooking] = useState<Booking | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const qc = useQueryClient();
+
+  // Slice OPS.M.10.2 F11.7.4.7a — useAuthedQuery replaces the
+  // useState+useEffect+manual reload() pattern. Mutations
+  // (Confirm/Reject/CheckIn/CheckOut) call invalidateQueries with
+  // this same queryKey to refetch.
+  const QK = ['admin', 'booking', id] as const;
+  const { data: booking, isLoading, isError, error, needsSignIn } = useAuthedQuery<Booking>({
+    queryKey: [...QK],
+    queryFn: () => adminGetBooking(id),
+  });
+
   const [acting, setActing] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   // True only when /dev-auth/personas returns 200 (DevAuth:AllowAnonymous=true).
@@ -51,28 +64,6 @@ const AdminBookingDetailPage = () => {
   // when this booking has no thread yet.
   const [thread, setThread] = useState<Thread | null>(null);
 
-  const reload = async () => {
-    try {
-      const b = await adminGetBooking(id);
-      setBooking(b);
-    } catch (err) {
-      setError(
-        err instanceof ApiProblemError
-          ? err.problem.detail ?? err.message
-          : err instanceof Error
-            ? err.message
-            : 'Failed to load',
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-
   useEffect(() => {
     let cancelled = false;
     getDevPersonas()
@@ -82,7 +73,7 @@ const AdminBookingDetailPage = () => {
   }, []);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !booking) return;
     let cancelled = false;
     listThreads(id)
       .then((threads) => {
@@ -91,9 +82,13 @@ const AdminBookingDetailPage = () => {
       })
       .catch(() => { /* swallow — the card just stays hidden */ });
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, booking]);
 
-  if (loading) {
+  if (needsSignIn) {
+    return <SignInGate title="Sign in to view this booking" />;
+  }
+
+  if (isLoading) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold tracking-tight">Booking</h1>
@@ -102,26 +97,35 @@ const AdminBookingDetailPage = () => {
     );
   }
 
-  if (error || !booking) {
+  if (isError || !booking) {
+    const queryErr = isError
+      ? error instanceof ApiProblemError
+        ? error.problem.detail ?? error.message
+        : error instanceof Error
+          ? error.message
+          : 'Failed to load'
+      : 'Not found';
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold tracking-tight">Booking</h1>
         <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
-          {error ?? 'Not found'}
+          {queryErr}
         </div>
       </div>
     );
   }
 
+  const refresh = () => qc.invalidateQueries({ queryKey: [...QK] });
+
   const onConfirm = async () => {
     if (!window.confirm('Confirm this booking? The guest’s card will be charged now.')) return;
     setActing(true);
-    setError(null);
+    setActionError(null);
     try {
-      const updated = await confirmBooking(booking.id);
-      setBooking(updated);
+      await confirmBooking(booking.id);
+      await refresh();
     } catch (err) {
-      setError(
+      setActionError(
         err instanceof ApiProblemError
           ? err.problem.detail ?? err.message
           : err instanceof Error
@@ -135,14 +139,14 @@ const AdminBookingDetailPage = () => {
 
   const onReject = async () => {
     setActing(true);
-    setError(null);
+    setActionError(null);
     try {
-      const updated = await rejectBooking(booking.id, rejectReason.trim() || 'Owner declined.');
-      setBooking(updated);
+      await rejectBooking(booking.id, rejectReason.trim() || 'Owner declined.');
+      await refresh();
       setRejectOpen(false);
       setRejectReason('');
     } catch (err) {
-      setError(
+      setActionError(
         err instanceof ApiProblemError
           ? err.problem.detail ?? err.message
           : err instanceof Error
@@ -157,20 +161,14 @@ const AdminBookingDetailPage = () => {
   const runAction = async (
     label: string,
     fn: (id: string) => Promise<Booking | void>,
-    refresh = false,
   ) => {
     setActing(true);
-    setError(null);
+    setActionError(null);
     try {
-      const result = await fn(booking.id);
-      if (result && typeof result === 'object' && 'status' in result) {
-        setBooking(result as Booking);
-      } else if (refresh) {
-        const fresh = await adminGetBooking(booking.id);
-        setBooking(fresh);
-      }
+      await fn(booking.id);
+      await refresh();
     } catch (err) {
-      setError(
+      setActionError(
         err instanceof ApiProblemError
           ? err.problem.detail ?? err.message
           : err instanceof Error
@@ -243,14 +241,13 @@ const AdminBookingDetailPage = () => {
                 onClick={async () => {
                   if (!window.confirm('Backdate CheckedOutAt by 25h so the completion sweep can run today?')) return;
                   setActing(true);
-                  setError(null);
+                  setActionError(null);
                   try {
                     await backdateCheckedOutAt(booking.id, 25);
-                    const fresh = await adminGetBooking(booking.id);
-                    setBooking(fresh);
+                    await refresh();
                     window.alert('Backdate applied. Now trigger the completion sweep in Azure:\n\naz containerapp job start -n caj-vrbook-completion-staging -g rg-vrbook-staging');
                   } catch (err) {
-                    setError(
+                    setActionError(
                       err instanceof ApiProblemError
                         ? err.problem.detail ?? err.message
                         : err instanceof Error ? err.message : 'Backdate failed',
@@ -345,9 +342,9 @@ const AdminBookingDetailPage = () => {
         </div>
       )}
 
-      {error && (
+      {actionError && (
         <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-          {error}
+          {actionError}
         </div>
       )}
 
