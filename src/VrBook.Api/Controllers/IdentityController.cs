@@ -322,6 +322,23 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
         bool membershipCreated;
         if (existingActive is not null)
         {
+            // Slice OPS.M.10.2 F11.7.5.3 — belt-and-braces. A pre-existing
+            // active row may have been created earlier with IsPrimary=false
+            // (e.g. by an older bootstrap variant or by a manual seed). Without
+            // IsPrimary=true the UserProvisioningMiddleware does NOT stamp the
+            // app_tenant_id claim, which used to surface as the F11.7 walk's
+            // owner-action 403. F11.7.5.2 also fixes the underlying controller
+            // helper so the claim isn't strictly required anymore; this branch
+            // still promotes the row so future operator actions land on a
+            // clean profile.
+            if (!existingActive.IsPrimary)
+            {
+                existingActive.MakePrimary();
+            }
+            if (existingActive.Role != VrBook.Modules.Identity.Domain.TenantMembership.RoleTenantAdmin)
+            {
+                existingActive.ChangeRole(VrBook.Modules.Identity.Domain.TenantMembership.RoleTenantAdmin);
+            }
             membershipId = existingActive.Id;
             membershipCreated = false;
         }
