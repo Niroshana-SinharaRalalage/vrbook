@@ -18,6 +18,10 @@ public sealed class IdentityDbContext(
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<TenantMembership> TenantMemberships => Set<TenantMembership>();
 
+    // Slice OPS.M.13 — see docs/OPS_M_13_IDENTITY_REDESIGN_PLAN.md §2.1.
+    public DbSet<UserIdentity> UserIdentities => Set<UserIdentity>();
+    public DbSet<MigrationAuditEntry> MigrationAudit => Set<MigrationAuditEntry>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
