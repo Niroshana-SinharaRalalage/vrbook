@@ -34,6 +34,17 @@ public sealed class User : AggregateRoot
     /// Provision a new app-side user from a verified AD B2C token. Called once on
     /// first-login per <c>b2c_object_id</c>.
     /// </summary>
+    /// <remarks>
+    /// Slice OPS.M.13 — superseded by the email-first overload
+    /// <see cref="Provision(Email, string, bool)"/> per
+    /// <c>docs/OPS_M_13_IDENTITY_REDESIGN_PLAN.md</c> §2.2. Kept during
+    /// the sub-commit sequence so <c>M.13.4</c>'s backfill migration
+    /// still has a domain path if needed, then removed when
+    /// <c>b2c_object_id</c> column drops.
+    /// </remarks>
+#pragma warning disable S1133 // Do not forget to remove deprecated code — tracked as M.13.4.
+    [Obsolete("Slice OPS.M.13 — use Provision(email, displayName, emailVerified). Identity binding moves to identity.user_identities. Removed once b2c_object_id column drops in M.13.4.")]
+#pragma warning restore S1133
     public static User Provision(
         string b2cObjectId,
         Email email,
@@ -54,6 +65,50 @@ public sealed class User : AggregateRoot
             EmailVerified = emailVerified,
             IsOwner = isOwner,
             IsAdmin = isAdmin,
+        };
+
+        user.Raise(new UserRegistered(user.Id, email.Value, user.DisplayName));
+        if (emailVerified)
+        {
+            user.Raise(new UserEmailVerified(user.Id, email.Value));
+        }
+        return user;
+    }
+
+    /// <summary>
+    /// Slice OPS.M.13 — email-first provisioning. Called by
+    /// <c>ProvisionOrLinkUserHandler</c> Branch 3 (identity miss + email
+    /// miss) per <c>docs/OPS_M_13_IDENTITY_REDESIGN_PLAN.md</c> §3.5.
+    /// The (provider, oid) binding is created separately as a
+    /// <see cref="UserIdentity"/> row in the same handler transaction.
+    /// </summary>
+    /// <remarks>
+    /// <para><c>IsOwner</c> and <c>IsAdmin</c> global flags are omitted
+    /// intentionally — role assignments happen post-provisioning through
+    /// admin flows, not from token claims. Global roles get formally
+    /// deprecated in OPS.M.15.</para>
+    ///
+    /// <para><c>B2CObjectId</c> is set to a placeholder derived from the
+    /// user's freshly-minted id so the NOT NULL + UNIQUE constraint on
+    /// the legacy column stays satisfied for the sub-commit window
+    /// between M.13.3 and M.13.4. The column drops entirely in M.13.4.</para>
+    /// </remarks>
+    public static User Provision(
+        Email email,
+        string displayName,
+        bool emailVerified)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
+
+        var id = Guid.NewGuid();
+        var user = new User
+        {
+            Id = id,
+            // M.13-provisional placeholder — dropped when the column is removed in M.13.4.
+            B2CObjectId = $"m13-placeholder-{id:N}",
+            Email = email,
+            DisplayName = displayName.Trim(),
+            EmailVerified = emailVerified,
         };
 
         user.Raise(new UserRegistered(user.Id, email.Value, user.DisplayName));

@@ -178,7 +178,12 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
         ForceId(tenantB, TenantB);
         idDb.Tenants.AddRange(tenantA, tenantB);
 
-        // Users
+        // Users — this fixture seeds via the legacy Provision overload so
+        // the (real DevAuth-oid → user_id) binding stays exercised. Both
+        // paths coexist during the M.13.3 sub-commit window; the fixture
+        // migrates to Provision(email, name, verified) + UserIdentity.Create
+        // when the middleware flips (Phase B).
+#pragma warning disable CS0618
         var ownerA = User.Provision(
             TwoTenantDevAuthHandler.OwnerAOid,
             new Email("owner-a@vrbook.test"),
@@ -194,6 +199,7 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
             new Email("platform-admin@vrbook.test"),
             "Platform Admin",
             emailVerified: true, isOwner: false, isAdmin: false);
+#pragma warning restore CS0618
         platformAdmin.GrantPlatformAdmin(actorId: Guid.NewGuid());
         idDb.Users.AddRange(ownerA, ownerB, platformAdmin);
         OwnerAUserId = ownerA.Id;

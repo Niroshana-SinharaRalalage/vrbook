@@ -105,6 +105,7 @@ internal sealed class ProvisionUserHandler(
         }
 
         // Branch 3 — oid miss + email miss: provision fresh.
+#pragma warning disable CS0618 // Obsolete Provision overload retained until this handler is removed in the M.13.3 middleware flip.
         var user = User.Provision(
             cmd.B2CObjectId,
             new Email(cmd.Email),
@@ -112,6 +113,7 @@ internal sealed class ProvisionUserHandler(
             cmd.EmailVerified,
             cmd.IsOwner,
             cmd.IsAdmin);
+#pragma warning restore CS0618
 
         await users.AddAsync(user, cancellationToken);
         await uow.SaveChangesAsync(cancellationToken);

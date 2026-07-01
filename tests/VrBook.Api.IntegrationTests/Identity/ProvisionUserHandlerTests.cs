@@ -51,7 +51,12 @@ public sealed class ProvisionUserHandlerTests
 
     private static User NewUser(string oid, string email = TargetEmail, bool isPlatformAdmin = false)
     {
+        // These tests cover the legacy ProvisionUserHandler; the obsolete
+        // User.Provision overload is intentionally the one under test.
+        // Both are removed together with the middleware flip (Phase B of M.13.3).
+#pragma warning disable CS0618
         var u = User.Provision(oid, new Email(email), "Test User", emailVerified: true, isOwner: false, isAdmin: false);
+#pragma warning restore CS0618
         if (isPlatformAdmin)
         {
             u.GrantPlatformAdmin(actorId: u.Id);
