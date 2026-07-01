@@ -1,421 +1,682 @@
-# Slice OPS.M.10.2 F11.7.6 — Multi-row-per-email systemic fix
+# OPS.M.10.2 F11.7.6 — Multi-row-per-email fix (Provisioning upsert)
 
-> **Author**: system-architect consult, 2026-06-30
-> **Status**: Locked — ready to execute
-> **Predecessor**: F11.7.5.10 (5acb5bb) — interim bootstrap-operator loops the promotion across every email-match; unblocked walk-2 but does NOT prevent future divergence.
-> **Successor**: none (this closes the multi-row hazard class before F11.8).
-> **Slice budget**: 6 commits, all CI-gated (one is doc-only close-out, no CI wait per `feedback_no_ci_for_doc_only_commits`).
-
----
-
-## 1. Executive summary
-
-### 1.1 Root cause (agree with the walk-2 read)
-
-Agree exactly. `identity.users.b2c_object_id` is UNIQUE (`Init_IdentitySchema` line 84). `identity.users.email` is a NON-UNIQUE index since `Slice4_DropEmailUnique` (2026-06-22) — dropped so DevAuth personas could share `niroshanaks@gmail.com` during Slice-4 staging verification. `ProvisionUserHandler` (`ProvisionUserHandler.cs:14`) keys ONLY on B2CObjectId — every distinct `oid` creates a new row. The DevAuth-then-Entra sequence produces two rows for one human. `UserProvisioningMiddleware.cs:73-76` reads `is_platform_admin` from the row the CURRENT session's oid maps to — the fresh Entra row, which was never bootstrapped. PA bypass never fires. 403.
-
-`SetPersonaEmail` (`SetPersonaEmailCommand.cs:52`) is a second divergence source: it writes an arbitrary email onto ANY dev-oid row, which is how `dev-guest-00000001@vrbook.local` originally became `niroshanaks@gmail.com` on the guest row while the owner row already held it. That row still exists in staging today.
-
-### 1.2 Pick: **Candidate B (enforce uniqueness on email, backfill, upsert on collision) — with a `Trim + lower(email)` case-insensitive shape and a hard 3-step migration.**
-
-**Why B:**
-1. The code already assumes it (bootstrap-operator's inline comment at `IdentityController.cs:302-311` names the multi-row shape as the hazard, and the F11.7.5.10 fix is explicitly a bandaid for it).
-2. B2CObjectId being stable is a myth in this codebase — DevAuth stubs and real Entra both write to the SAME table, so a stable identity across auth paths is impossible without a normalized secondary key. Email IS the human-stable identifier per ADR-0012 (Entra External ID uses email-as-username).
-3. ADR-0014 (`is_platform_admin` DB-wins, load-bearing) survives untouched IF one row per human is enforced. B and only B makes ADR-0014's "DB is the source of truth" statement operationally true.
-4. Downstream consumer of `guest_user_id` in `booking.bookings` (`BookingConfiguration.cs:23`) has NO cross-schema FK constraint (verified: it's `HasIndex`, not `HasOne<User>`). Merging duplicate user rows re-points application-level references but breaks NO FK invariants. Same for messaging/reviews/notifications — all reference the id but none constrain it.
-
-**Why not A (upsert-by-oid ∪ email):** A mutates the stable identifier (`b2c_object_id`) on collision. Any auditor reading `identity.audit_log` where `target_id = <old oid>` would find nothing that matches now. And role-address collisions (two humans, same shared inbox) become a landmine as the user noted — silent identity confusion, not a loud error.
-
-**Why not C (bypass reads any-row-with-email):** Widens the PlatformAdmin surface to "any row with a matching email" — a DevAuth SetPersonaEmail write becomes a privilege-escalation surface. Also does not fix the tenant claim: `UserProvisioningMiddleware` still picks the per-oid row for memberships, so a bootstrapped owner would still hit "no tenant" if the current session's row has no membership.
-
-**Why not D (something else):** Considered a shadow `identity.user_email_bindings(email PK, user_id FK)` reverse-index. Rejected: adds a second write path for every provisioning; race condition on concurrent first-login-with-two-oids; still requires the merge migration to seed. B does that work once, at migration time, and leaves normal operation with a single write path.
-
-### 1.3 Residual risks (after this slice)
-
-1. **Real production duplicates on cutover to Entra** — if a real user changes their Entra email address, they may temporarily hold two rows during their next sign-in. Mitigation: `ProvisionUserHandler` upsert on email-hit updates the row's B2CObjectId in-place (the ONE mutation of a "stable" identifier we accept), and raises `UserB2CObjectIdRebound` for the audit trail. See §3.1.
-2. **Case-sensitivity in email address** — RFC 5321 makes local-part case-sensitive; virtually all mail systems treat it insensitive. We normalize to `lower(email)` for the unique index (partial index on the expression) but keep the stored value as-typed for display. See §3.3.
-3. **DevAuth persona-email overlap** — after this slice, `SetPersonaEmail` on a persona whose target email already belongs to another row throws a `DuplicateEmailException` (409). This is intended: the staging shared-inbox trick that broke us was an anti-pattern; the operator should reset the OTHER row's email first, or Deactivate it. Runbook update in §5.
-4. **ADR-0014 `is_platform_admin` DB-wins precedence** — unchanged. The bit remains on `identity.users`; there is now exactly one row per human, so "DB-wins" is now decidable. §7 arch tests lock this.
+- **Slice**: OPS.M.10.2 F11.7.6
+- **Status**: Design (locked, ready for TDD)
+- **Author**: system-architect (2026-06-30)
+- **Parent**: OPS.M.10.2 F11 staging enablement
+- **Preceded by**: F11.7.5.10 (interim widening — `5acb5bb`)
 
 ---
 
-## 2. F11.7.6 commit sequence
+## §1 Symptom + verified root cause
 
-All commits push to `develop`, then `gh run watch` until conclusion=success on `cd-staging-api.yml` (except doc-only F11.7.6.6). Local pre-push test filter is `dotnet test --filter "Category!=Integration"` per `feedback_use_ci_filter_locally`.
+### Symptom (walk-3, 2026-06-30)
 
-### F11.7.6.1 — arch tests + integration tests that DEMONSTRATE the bug (red)
+Owner Confirm / Reject 403s with:
 
-**Scope**: TDD gate. Land the failing tests first so we can see them go green.
+```
+Cross-tenant write rejected for ConfirmBookingCommand:
+  attempted=…0001  actual=<null>
+```
 
-**Files (all NEW):**
-- `tests/VrBook.Architecture.Tests/UsersTableEmailUniquenessTests.cs` — Roslyn syntax assertion: `UserConfiguration.cs` MUST call `.HasIndex(u => u.Email).IsUnique()` OR `.HasIndex(...).HasFilter("... IS NULL").IsUnique()` (partial-unique acceptable if the filter carve-out is `deleted_at IS NULL`). Absence of `.IsUnique()` is a fail. Also asserts `ProvisionUserHandler` references BOTH `GetByB2CObjectIdAsync` AND `GetByEmailAsync` (new repo method — see F11.7.6.3).
-- `tests/VrBook.Api.IntegrationTests/Identity/ProvisionUserEmailCollisionTests.cs` — three scenarios (all fail today):
-  - **Scenario A — new oid, existing email**: seed row `(oid=X, email=e@x)`. `ProvisionUserCommand(oid=Y, email=e@x, ...)` returns `existing.Id` (row X's id, not a new row), row X's B2CObjectId is now `Y`, audit log has `UserB2CObjectIdRebound`, no second row exists.
-  - **Scenario B — new oid, new email**: `ProvisionUserCommand(oid=Z, email=new@x, ...)` creates a fresh row (regression net; this is today's normal case).
-  - **Scenario C — same oid**: repeat call is idempotent (regression net for `RefreshFromLogin`).
-- `tests/VrBook.Api.IntegrationTests/Identity/UserRowMergeMigrationTests.cs` — reversibility + data safety net for the migration in F11.7.6.4. Seeds a pre-migration state (2 rows, same email, different oids, one PA=true and one PA=false; one has a membership, other doesn't; one has `guest_user_id` bookings, other has an audit_log target_id) into a scratch DB, runs the migration, asserts: exactly one row remains, its `is_platform_admin=true` (highest-privilege wins), its id is the `oldest CreatedAt` row's id, membership is preserved on the surviving id, both bookings' `guest_user_id` still resolves to the surviving id, audit_log's `target_id` value is untouched (audit is append-only historical record — target_id is a string, not an FK; see §3.5).
+The `<null>` is `ICurrentUser.TenantId`, read by the M.4 gate at
+`src/Modules/VrBook.Modules.Identity/Application/Behaviors/TenantAuthorizationBehavior.cs:96`.
+The gate falls through to `throw new CrossTenantAccessException(...)` because:
 
-**Local validation**: `dotnet test --filter "Category!=Integration"` — arch test fails (expected).
-`dotnet test --filter "FullyQualifiedName~ProvisionUserEmailCollision"` — integration fails (expected).
+1. `currentUser.IsPlatformAdmin` is `false` for this request (so the
+   PA bypass at line 60 doesn't fire), AND
+2. `currentUser.TenantId` is `null` (so the equality check at line 96 rejects).
 
-**CI expectation**: **red** on `cd-staging-api.yml`. This is the TDD signal. Push with `[WIP]` prefix in the commit message so the CI red doesn't get confused with a regression.
+Both facts trace to the SAME `identity.users` row read on this request.
 
-**Rollback**: revert commit; no schema touched.
+### Root cause (verified against source, 2026-06-30)
+
+The caller's diagnosis is **confirmed**. Chain of evidence:
+
+**Provisioning is oid-only.** `src/Modules/VrBook.Modules.Identity/Application/Users/Commands/ProvisionUserHandler.cs:14`:
+
+```csharp
+var existing = await users.GetByB2CObjectIdAsync(cmd.B2CObjectId, cancellationToken);
+if (existing is not null) { ... return existing.Id; }
+var user = User.Provision(cmd.B2CObjectId, new Email(cmd.Email), ...);
+```
+
+No email lookup. If oid is new, `User.Provision` runs and inserts a brand-new
+row with `Id = Guid.NewGuid()`. The middleware
+(`src/Modules/VrBook.Modules.Identity/Infrastructure/Auth/UserProvisioningMiddleware.cs:59`)
+then stamps THAT row's id onto `HttpContext.Items` as `AppUserId`. Membership
+and PA lookups at lines 68–76 target that id.
+
+**Email has no uniqueness constraint.**
+`src/Modules/VrBook.Modules.Identity/Infrastructure/Persistence/UserConfiguration.cs:22-26`:
+
+```csharp
+// Slice 4 polish: relaxed to a non-unique index. DevAuth personas can
+// share an inbox (e.g. niroshanaks@gmail.com) for end-to-end staging
+// verification. ...
+b.HasIndex(u => u.Email);
+```
+
+Backed by migration
+`src/Modules/VrBook.Modules.Identity/Infrastructure/Persistence/Migrations/20260622144933_Slice4_DropEmailUnique.cs`
+which drops the unique index and recreates it non-unique.
+
+**Result**: sign-in flow `A` (e.g. DevAuth stub with oid `dev-owner-00000000`)
+provisions row `U_A`. Sign-in flow `B` (real Entra with oid `abc-real-oid-guid`)
+provisions row `U_B`. Same email on both rows.
+
+**Bootstrap targets one row; the current session uses the other.** Before
+F11.7.5.10 the bootstrap operator promoted only the first matching row. The
+current session's row was the OTHER one. On that row `is_platform_admin=false`
+and `TenantMembership.UserId != U_currentSession.Id`.
+
+Additional divergence source: `SetPersonaEmailHandler.Handle`
+(`src/Modules/VrBook.Modules.Identity/Application/Users/Commands/SetPersonaEmailCommand.cs:52`)
+looks up by `B2CObjectId` and rewrites `Email`. So a DevAuth persona whose
+inbox was pointed at `niroshanaks@gmail.com` collides with the real Entra
+sign-in row for the same human when that human later signs in through the
+real IdP.
+
+**Diagnosis stands.** The interim in `5acb5bb` widens bootstrap to promote
+ALL rows sharing an email, but it does NOT prevent divergence on future
+sign-ins, and it does NOT unify the identity for downstream FK references
+(`tenant_memberships.user_id`, `booking.bookings.guest_user_id`, audit
+`actor_user_id`). F11.7.6 is that structural fix.
 
 ---
 
-### F11.7.6.2 — domain: `User.RebindB2CObjectId(newOid, actorId)` + `UserB2CObjectIdRebound` event
+## §2 Candidate analysis
 
-**Scope**: give the aggregate the vocabulary to say "an existing row is being adopted by a new Entra oid" WITHOUT re-provisioning. Keep the aggregate the single source of truth for identity mutation.
+### A. Provisioning upsert by (oid ∪ email)
 
-**Files:**
-- `src/Modules/VrBook.Modules.Identity/Domain/User.cs`:
-  - Add `public void RebindB2CObjectId(string newB2CObjectId, Guid actorId)` — validates non-empty; no-ops if unchanged; else updates the field and raises `UserB2CObjectIdRebound(Id, oldOid, newOid, actorId)`. Mirrors the shape of `GrantPlatformAdmin` (idempotent + event).
-- `src/VrBook.Contracts/Events/IdentityEvents.cs` (or wherever `UserPlatformAdminGranted` lives — grep first) — add `public sealed record UserB2CObjectIdRebound(Guid UserId, string OldB2CObjectId, string NewB2CObjectId, Guid ActorId)`.
+`ProvisionUserHandler.Handle` looks up by oid; on miss, looks up by email;
+on email-hit + oid-miss, **mutates the existing row's `B2CObjectId` to the
+new oid** and refreshes the login stamps. On email-hit-multi (already-multi
+DB), pick the row with the highest privilege (is_platform_admin > has-membership >
+oldest CreatedAt) as the survivor and merge lower rows into it via a
+domain-visible `ClaimOidForExistingProfile` call (see §3 for detail).
 
-**Tests added:**
-- `tests/VrBook.Domain.Tests/Identity/UserRebindTests.cs` (extend if exists) — three tests: idempotent on same oid, raises event on change, rejects empty/whitespace.
+**Verified feasibility**: `User.B2CObjectId` currently has a private setter
+(`src/Modules/VrBook.Modules.Identity/Domain/User.cs:14`) and is never
+mutated in the domain. Adding a `ClaimOidForExistingProfile(newOid)` method
+is a small aggregate surface change. The unique index on
+`(b2c_object_id)` (`UserConfiguration.cs:15`) stays — the new oid replaces
+the old one on the row, so uniqueness is preserved.
 
-**Local validation**: `dotnet test --filter "Category!=Integration"` — new domain tests pass; arch + integration tests from F11.7.6.1 still red.
+**Pros**:
+- No schema change → no cross-schema FK migration.
+- Zero downtime.
+- Reversible: revert the handler; existing rows keep their (rewritten) oid;
+  no data loss.
+- Preserves ADR-0014 DB-wins precedence (`is_platform_admin` is still a
+  column on the surviving row).
 
-**CI expectation**: red (F11.7.6.1's tests still fail, correctly). Push with `[WIP]`.
+**Cons**:
+- Rewriting a claimed identifier is philosophically noisy. But the Entra
+  `oid` is stable *per identity*, not stable across "same human, different
+  authentication flow"; the DevAuth stub oid is not a real Entra oid, so
+  overwriting it with the real one on real-Entra first-login is the
+  correct semantic — the DevAuth row was a placeholder.
+- Role-address emails shared by real humans (`ops@company.com`) create
+  cross-account access. Mitigation: F11.7.6 restricts the email→oid rebind
+  path to rows where either (a) the row has never been logged into via a
+  non-dev oid (heuristic: `B2CObjectId` starts with `dev-`), OR (b) the
+  incoming oid also starts with `dev-` (staging-only case). See §3.
 
-**Rollback**: revert commit. Pure additive domain change.
+### B. Unique constraint on `identity.users.email` + backfill migration
+
+Migration merges duplicates (privilege-wins survivor), remaps FKs
+(`identity.tenant_memberships.user_id`, `booking.bookings.guest_user_id`,
+`identity.audit_log.actor_user_id`, `messaging.threads.guest_user_id`,
+`reviews.reviews.guest_user_id`), then enforces uniqueness. A fresh
+oid arriving with an already-claimed email would then either (i) 23505 —
+poor UX, OR (ii) route the sign-in to the surviving user id
+(still needs handler logic — becomes candidate A on top of a hard DB
+constraint).
+
+**Verified feasibility**:
+- `bookings.guest_user_id` has NO cross-schema FK
+  (`src/Modules/VrBook.Modules.Booking/Infrastructure/Persistence/Migrations/20260606181431_InitBookingSchema.cs:26`
+  is a plain uuid column, not a foreign key — the modular monolith crosses
+  schemas, not FKs), so the "FK remap" is really "UPDATE
+  bookings SET guest_user_id = @survivor WHERE guest_user_id IN (@losers)"
+  in each module's schema. Same for reviews, messaging, audit.
+- `tenant_memberships` has a partial unique index
+  `(user_id, tenant_id) WHERE deleted_at IS NULL` per M.1 (referenced
+  by `TenantMembership.Revive` XML comment,
+  `src/Modules/VrBook.Modules.Identity/Domain/TenantMembership.cs:88-93`);
+  merging two losers into one survivor could 23505 if both had active
+  memberships in the same tenant. Migration must dedup memberships too.
+
+**Pros**:
+- Enforces the invariant our code already assumes: one email = one identity
+  handle.
+- No sign-in-time surprise (candidate A still runs on top of it).
+
+**Cons (why not first)**:
+- Requires a multi-schema, multi-module migration. Modular monolith rule
+  is "each module owns its schema; migrations are per-module." A user-id
+  merge crosses `identity`, `booking`, `reviews`, `messaging` — a
+  coordinated deploy step, not a single `Add-Migration`.
+- The DevAuth staging use case
+  (`UserConfiguration.cs:22` says "DevAuth personas can share an inbox
+  ...for end-to-end staging verification") — the WHOLE POINT of dropping
+  the unique index in Slice 4 — would regress. We would have to reintroduce
+  the constraint gated on the environment or a config flag. That's fragile.
+- Rollback plan is a fresh migration (can't reverse a merge — data is gone).
+  The Slice 4 comment shows this constraint was already deliberately relaxed.
+  Re-enforcing it invalidates that design decision without new evidence
+  that we NEED it (candidate A is sufficient).
+
+### C. M.4 gate consults email OR oid for PA bypass
+
+The gate `TenantAuthorizationBehavior.cs:60` would read "ANY user with this
+email has `is_platform_admin=true`" instead of "the current user has
+`is_platform_admin=true`". Requires a claim carrying the email so the gate
+can query without an extra round-trip per request.
+
+**Pros**:
+- No data mutation.
+
+**Cons**:
+- Does NOT fix the tenant-claim problem: `ICurrentUser.TenantId` is stamped
+  from the `TenantMembership` rows joined on `UserId`
+  (`UserProvisioningMiddleware.cs:68-71`) — those rows still belong to the
+  OTHER user id. So even with a PA email bypass, the M.4 gate might pass
+  but `ICurrentUser.TenantId` is still null; every downstream handler that
+  reads `TenantId` (RLS layer, `BackgroundTenantScope` capture in
+  `CancelBookingHandler`, audit stamps) sees null, and the operator's PA
+  bypass on the gate does not automatically restore `TenantId`.
+- Widens the trust surface from `is_platform_admin` (single row property)
+  to `email` (mutable per-row). A compromised IdP that changes a user's
+  email → escalation. Or a `SetPersonaEmail` DevAuth call in staging
+  that a config typo could then expose. This is a step BACKWARD from
+  ADR-0014's "DB is the sole source of truth per row" invariant.
+- Fails ADR-0014 §"Consequences → Positive → Audit-friendly" — grants are
+  no longer 1:1 with rows; auditing "who is a PA right now" becomes
+  a `GROUP BY email` scan.
+
+### D. (Not needed)
+
+Candidate A alone, done properly with survivor logic for the multi-row
+DB we already have in staging, is enough. Adding B on top is future work
+if we later see a case where "the DB happens to have two rows for the
+same person" during a request that doesn't route through the handler.
+That path doesn't exist today (every authenticated request goes through
+`UserProvisioningMiddleware` before hitting a handler).
 
 ---
 
-### F11.7.6.3 — application: `IUserRepository.GetByEmailAsync` + `ProvisionUserHandler` upsert on email-hit
+## §3 Picked candidate + rationale
 
-**Scope**: land the actual bug fix in application code. Behavior:
-1. Look up by B2CObjectId → hit → refresh + save (unchanged from today).
-2. Miss → look up by email (`lower(email) = lower(cmd.Email)`, `deleted_at IS NULL`).
-3. Email hit → call `existing.RebindB2CObjectId(cmd.B2CObjectId, actorId: existing.Id)` + `RefreshFromLogin` + grant flags + save. Return `existing.Id`.
-4. Email miss → today's fresh `User.Provision` path (unchanged).
+**Candidate A** (Provisioning upsert by oid ∪ email, with survivor merge on
+multi-row-hit) is the correct fix.
 
-**Files:**
-- `src/Modules/VrBook.Modules.Identity/Infrastructure/Persistence/IUserRepository.cs` — add `Task<User?> GetByEmailAsync(string email, CancellationToken ct = default)`.
-- `src/Modules/VrBook.Modules.Identity/Infrastructure/Persistence/UserRepository.cs` — implement with `db.Users.FirstOrDefaultAsync(u => EF.Functions.ILike(((string)(object)u.Email), email))`. Match the existing `BuildQ` case-insensitive shape (`UserRepository.cs:39`).
-- `src/Modules/VrBook.Modules.Identity/Application/Users/Commands/ProvisionUserHandler.cs` — the three-branch handler above. Log at Information on email-hit-rebind so operators see when a rebind occurs (rare event).
+### Why A over B
 
-**Tests added:**
-- The three integration scenarios from F11.7.6.1 go GREEN with this commit.
-- `tests/VrBook.Api.IntegrationTests/Identity/ProvisionUserEmailCollisionTests.cs` — extend with two more scenarios:
-  - Case-insensitive: seed `Niroshanaks@Gmail.com`, provision `niroshanaks@gmail.com` — treated as same row.
-  - Soft-deleted collision: seed row deleted; provision with same email — DOES create fresh row (soft-deleted row is skipped by the `deleted_at IS NULL` filter). Prevents an admin's deactivation from becoming a permanent email-blocker.
+- **Modular-monolith constraint**: B requires coordinated migrations across
+  four module schemas. The identity module cannot 100% enforce email
+  uniqueness without also cleaning up sibling-schema FKs, and no other
+  module's migrations depend on this. A puts the fix where the causality is
+  (provisioning) and lets each module keep its schema self-contained.
+- **Slice 4 design intent**: `UserConfiguration.cs:26` deliberately relaxed
+  the constraint. B reverses a design decision without new evidence.
+  A closes the actual bug (provisioning creates diverging rows) without
+  reversing the DB constraint.
+- **Blast radius**: A is a handler + aggregate method + tests. B is a
+  cross-module data migration during a live-staging window. A is deployable
+  in one CI pass.
 
-**Local validation**: `dotnet test --filter "Category!=Integration"` — arch test still red (still no `.IsUnique()`); integration tests are green.
+### Why A over C
 
-**CI expectation**: red (arch test still fails). Push with `[WIP]`. Do NOT strip WIP until F11.7.6.4 is in and the migration ran.
+- ADR-0014 explicitly puts `is_platform_admin` on the ROW as the source
+  of truth. C dilutes that. A preserves it.
+- C does not fix the `TenantId` null (the actual symptom) — the M.4 gate
+  bypass would pass, but every downstream `ICurrentUser.TenantId` read
+  still sees null.
 
-**Rollback**: revert commit. No schema touched.
+### Survivor policy for existing multi-row data
+
+For an existing staging DB with N rows for one email, choose the survivor
+row (highest privilege first, tiebreak by earliest CreatedAt for stable
+oid preservation):
+
+1. Any row with `is_platform_admin = true`.
+2. Any row with at least one active `tenant_memberships` row.
+3. Earliest `CreatedAt`.
+
+Non-survivor rows are soft-deleted (`DeletedAt = NOW()`, `DeletedBy = NULL`
+for system-initiated); their oid is NOT preserved (the survivor keeps its
+own oid). The next sign-in flow that carried a non-survivor's oid will hit
+`GetByB2CObjectIdAsync → null`, then the new email-lookup branch will find
+the survivor and rebind that survivor's oid to the incoming (real Entra) oid.
+
+**FK remap for existing multi-row DBs**: because we soft-delete the losers
+rather than hard-delete, the module-schema FKs
+(`bookings.guest_user_id`, `reviews.reviews.guest_user_id`,
+`messaging.threads.guest_user_id`, `audit_log.actor_user_id`,
+`tenant_memberships.user_id`) still resolve. Bookings authored under a
+loser row can still be read; new bookings authored via the surviving-row
+session will be under the survivor. No cross-module data mutation needed.
+
+### Guardrails
+
+The oid rebind path (email-hit + oid-miss) is dangerous if two different
+humans genuinely share an inbox (role addresses, distribution lists). The
+handler MUST refuse to rebind when:
+
+- The row has been "logged into as a real Entra identity before" — i.e.,
+  `B2CObjectId` does NOT start with `dev-`, AND the incoming oid also does
+  NOT start with `dev-`, AND they differ. In this case the safe action is:
+  throw a business error (`BusinessRuleException("email_already_claimed")`),
+  do NOT provision a new row (because that's the very bug we're fixing).
+- The row was soft-deleted (`DeletedAt != null`). In this case: provision
+  a fresh row (the loser row is not a candidate).
+
+For all other cases (DevAuth-only origin → real Entra takeover; DevAuth
+→ DevAuth email edit): rebind is safe.
 
 ---
 
-### F11.7.6.4 — migration: merge duplicates + add partial-unique index on `lower(email)`
+## §4 Commit sequence
 
-**Scope**: THE MIGRATION. This is the load-bearing step. See §3 for the full plan.
+Each commit is a full vertical slice — code + tests + green CI — per the
+"single-slice-per-commit" convention used by prior F11 slices.
 
-**Files:**
-- `src/Modules/VrBook.Modules.Identity/Infrastructure/Persistence/Migrations/<timestamp>_F11_7_6_UsersEmailUnique.cs` — three-step Up:
-  1. Merge duplicates via a raw SQL block (§3.2). Emits one row into `identity.audit_log` per merged pair for traceability.
-  2. Add partial-unique index: `CREATE UNIQUE INDEX ux_users_email_active ON identity.users (lower(email)) WHERE deleted_at IS NULL`.
-  3. Drop the non-unique `IX_users_email` (from `Slice4_DropEmailUnique`) — the new partial-unique covers the same lookup use cases.
-- `src/Modules/VrBook.Modules.Identity/Infrastructure/Persistence/UserConfiguration.cs`:
-  - Replace `b.HasIndex(u => u.Email)` with `b.HasIndex(u => u.Email).IsUnique().HasFilter("deleted_at IS NULL AND lower(email) IS NOT NULL").HasDatabaseName("ux_users_email_active")`.
-  - **Note**: EF Core cannot express `lower(email)` in `HasIndex` directly. The runtime uniqueness is enforced by the raw migration SQL; the model snapshot carries a "close-enough" HasIndex so future migrations don't churn it. Add a comment marking the model↔DB drift as intentional.
-- `src/Modules/VrBook.Modules.Identity/Infrastructure/Persistence/Migrations/IdentityDbContextModelSnapshot.cs` — regenerate via `dotnet ef migrations add`.
+### F11.7.6.1 — Failing tests for the provisioning upsert (RED)
 
-**Tests added:**
-- `tests/VrBook.Architecture.Tests/UsersTableEmailUniquenessTests.cs` — goes GREEN (the arch test asserts `.IsUnique()` on the Email HasIndex).
-- `tests/VrBook.Api.IntegrationTests/Identity/UserRowMergeMigrationTests.cs` — goes GREEN (this test was authored in F11.7.6.1 against the expected post-migration shape).
-- `tests/VrBook.Api.IntegrationTests/Identity/EmailUniquenessEnforcementTests.cs` (NEW) — direct SQL insert of a second row with the same email throws `PostgresException` (23505 unique violation). Locks the DB-level invariant.
+**Scope**: Add failing unit tests (`tests/VrBook.Modules.Identity.Tests`)
+that pin the intended `ProvisionUserHandler` behavior. No production code
+changes. TDD entry gate.
+
+**Files**:
+- `tests/VrBook.Modules.Identity.Tests/Users/ProvisionUserHandlerTests.cs` (new)
+  - `Handler_by_oid_hit_is_unchanged` — existing coverage baseline.
+  - `Handler_by_email_hit_oid_miss_rebinds_oid_when_row_is_dev_origin`
+  - `Handler_by_email_hit_oid_miss_throws_when_both_oids_are_real_entra`
+  - `Handler_by_email_hit_oid_miss_when_multi_row_selects_platform_admin_survivor`
+  - `Handler_by_email_hit_oid_miss_when_multi_row_selects_membership_survivor`
+  - `Handler_by_email_hit_oid_miss_ignores_soft_deleted_rows`
+  - `Handler_by_email_miss_provisions_new_row` — unchanged path.
+
+**Tests**: the tests themselves.
+**Local validation**: `dotnet test tests/VrBook.Modules.Identity.Tests --filter "FullyQualifiedName~ProvisionUserHandlerTests"` → expect all new tests to FAIL (compile errors OK if new methods don't yet exist).
+**CI expectation**: RED. This is the RED half of the TDD pair.
+
+### F11.7.6.2 — GREEN: `IUserRepository.GetActiveByEmailAsync` + `User.ClaimOidForExistingProfile`
+
+**Scope**: Domain + repo surface for the upsert.
+
+**Files**:
+- `src/Modules/VrBook.Modules.Identity/Infrastructure/Persistence/IUserRepository.cs` —
+  add `Task<IReadOnlyList<User>> GetActiveByEmailAsync(string email, CancellationToken ct)`.
+  Returns non-soft-deleted rows only.
+- `src/Modules/VrBook.Modules.Identity/Infrastructure/Persistence/UserRepository.cs` —
+  impl using EF (`db.Users.Where(u => ((string)(object)u.Email) == email).ToListAsync(ct)`).
+  Global query filter already excludes soft-deleted (uses `AggregateRoot.DeletedAt`).
+- `src/Modules/VrBook.Modules.Identity/Domain/User.cs` — add:
+  ```csharp
+  public void ClaimOidForExistingProfile(string newOid) { ... }
+  ```
+  Preconditions: not soft-deleted; `newOid` non-empty. Raises `UserOidRebound`
+  domain event (new; see contracts change below) — for the audit trail.
+- `src/VrBook.Contracts/Events/IdentityEvents.cs` — add
+  `UserOidRebound(Guid UserId, string OldOid, string NewOid)`.
+
+**Tests**:
+- `tests/VrBook.Modules.Identity.Tests/Domain/UserOidRebindTests.cs` (new) —
+  domain-side test for `ClaimOidForExistingProfile` (preconditions, event
+  raised, uniqueness at aggregate is caller's problem).
+- Existing `ProvisionUserHandlerTests` still fail — handler not touched yet.
 
 **Local validation**:
-```sh
-# Regenerate the migration:
-cd src/Modules/VrBook.Modules.Identity
-dotnet ef migrations add F11_7_6_UsersEmailUnique --context IdentityDbContext -o Infrastructure/Persistence/Migrations
-# Edit the migration to hand-write the merge SQL (§3.2).
-dotnet build
-dotnet test --filter "Category!=Integration"
-# All arch tests pass. Migration test needs Category=Integration.
-dotnet test --filter "FullyQualifiedName~UserRowMergeMigration"
 ```
+dotnet test tests/VrBook.Modules.Identity.Tests --filter "Category!=Integration"
+```
+Domain tests pass; handler tests still fail (intentional).
 
-**CI expectation**: **green** on `cd-staging-api.yml`. Strip `[WIP]` from the commit message. The staging DB migration runs automatically on deploy; the merge SQL is idempotent (see §3.2 no-op guard).
+**CI expectation**: yellow (handler tests still red); this is a scaffold
+commit. Squash-safe.
 
-**Rollback**:
-- Migration `Down`:
-  1. Drop the partial-unique index.
-  2. Recreate `IX_users_email` (non-unique).
-  3. **Do NOT attempt to un-merge rows.** The merge is lossy by design (that's the point). If the migration must be reverted AFTER duplicate-recreation would be needed, the operator must restore from the pre-migration snapshot. Document this in the migration's XML docs.
-- Emergency out: revert the code commit (Down migration runs), then restore the staging DB from the pre-migration snapshot. Snapshot is `staging-vrbook-preF11_7_6-YYYYMMDD.dump` — must be captured by ops BEFORE deploying this commit. See §3.6 pre-deploy checklist.
+### F11.7.6.3 — GREEN: `ProvisionUserHandler` upsert-by-oid∪email
 
----
+**Scope**: Rewrite the handler body per §3 policy.
 
-### F11.7.6.5 — DevAuth guard: `SetPersonaEmail` refuses duplicates
+**Files**:
+- `src/Modules/VrBook.Modules.Identity/Application/Users/Commands/ProvisionUserHandler.cs` —
+  new flow:
+  1. `existing = users.GetByB2CObjectIdAsync(oid)` — hit → refresh (unchanged branch).
+  2. Miss → `matches = users.GetActiveByEmailAsync(email)`.
+  3. If `matches.Count == 0` → provision new (unchanged branch).
+  4. If `matches.Count >= 1` → pick survivor per §3 ranking.
+  5. Guardrail: if `survivor.B2CObjectId` and `oid` are BOTH non-dev
+     (both real Entra shape → `!oid.StartsWith("dev-", StringComparison.Ordinal)`),
+     throw `BusinessRuleException("email_already_claimed", detail...)`
+     (do NOT provision — this is the ambiguous role-address case).
+  6. Otherwise → `survivor.ClaimOidForExistingProfile(oid)`; refresh login
+     stamps; return `survivor.Id`.
 
-**Scope**: post-migration, the DevAuth SetPersonaEmail write can now HIT the unique constraint and throw a raw `PostgresException`. Convert to a friendly `DuplicateEmailException` (409) with an actionable message. Also block the trivial self-shadow case (setting `dev-guest-...@vrbook.local` on the guest persona to the owner's real inbox when the owner row exists).
+**Tests**:
+- All F11.7.6.1 tests now GREEN.
+- No changes to existing tests expected; middleware behavior unchanged
+  (still hands the returned user id to `HttpContext.Items`).
 
-**Files:**
-- `src/Modules/VrBook.Modules.Identity/Application/Users/Commands/SetPersonaEmailCommand.cs`:
-  - Before calling `user.SetEmail(...)`, `await db.Users.FirstOrDefaultAsync(u => EF.Functions.ILike(...) && u.Id != user.Id && u.DeletedAt == null)`. If found → `throw new DuplicateEmailException(newEmail, otherUserId)`.
-- `src/VrBook.Contracts/Exceptions/DuplicateEmailException.cs` (NEW) — `sealed class DuplicateEmailException(string email, Guid conflictingUserId) : DomainException`. Mapped to 409 by the global `ProblemDetails` writer (verify the mapping table has an entry; add one if missing).
-- `src/VrBook.Api/Controllers/IdentityController.cs`:
-  - `SetPersonaEmail` action: catch `DuplicateEmailException` → return `Conflict(new { detail, conflictingUserId })` for a cleaner API surface (optional; the global mapper handles it if omitted, but the explicit conversion gives us the id in the payload for the operator UI).
+**Local validation**:
+```
+dotnet test tests/VrBook.Modules.Identity.Tests --filter "Category!=Integration"
+```
+Full identity module tests green.
 
-**Tests added:**
-- `tests/VrBook.Api.IntegrationTests/Identity/SetPersonaEmailDuplicateGuardTests.cs` (NEW) — three scenarios:
-  - Set persona email to an inbox that is UNIQUE → 200.
-  - Set persona email to an inbox that ALREADY BELONGS to another user → 409, payload includes `conflictingUserId`.
-  - Set persona email to the SAME persona's current email → 200 no-op.
+**CI expectation**: green.
 
-**Local validation**: `dotnet test --filter "Category!=Integration"` — arch tests all green. Then run the integration subset.
+### F11.7.6.4 — Data-heal migration for existing multi-row DBs
 
-**CI expectation**: **green** on `cd-staging-api.yml`.
+**Scope**: One-shot SQL to soft-delete non-survivor rows in staging (and
+any prod DB that ever hit this path — none should, but defensive).
 
-**Rollback**: revert commit. DB constraint is still enforced (that's F11.7.6.4's job); SetPersonaEmail would just throw a raw 500 on collision — ugly but not unsafe.
+**Files**:
+- `src/Modules/VrBook.Modules.Identity/Infrastructure/Persistence/Migrations/YYYYMMDDHHMMSS_OpsM10_2_F11_7_6_SoftDeleteDuplicateUsers.cs` (new)
 
----
-
-### F11.7.6.6 — close-out: this doc gets §11
-
-**Scope**: §11 close-out per slice-completion policy. Document the verification walk results.
-
-**Files:**
-- `docs/OPS_M_10_2_F11_7_6_MULTI_ROW_USER_FIX.md` (this file) — append §11 with:
-  - Verification commands (curl to force a rebind scenario; SQL count of pre/post rows for `niroshanaks@gmail.com` on staging).
-  - The audit-log rebind rows written (count).
-  - Interim from F11.7.5.10 status: keep the loop-across-emails code, mark it as `[Obsolete("kept as defense-in-depth; one row per email is now the invariant")]` OR remove it since the invariant makes it unreachable. **Decision deferred to the close-out; both are defensible.** Note the choice made in §11.
-- No memory file edits.
-
-**This is a doc-only commit. Per `feedback_no_ci_for_doc_only_commits`: do NOT `gh run watch`. The previous code-commit (F11.7.6.5) is the binding CI gate.**
-
----
-
-## 3. Backfill-migration plan (Candidate B)
-
-### 3.1 Identifying duplicates
-
-- **Comparison shape**: `lower(trim(email))`. Trim guards against a stray trailing space in the Entra token's `emails` claim; lower guards against display-caps variance.
-- **Scope**: only rows where `deleted_at IS NULL` count as "duplicate for merge purposes." Soft-deleted rows keep their historical email verbatim; the unique index's partial filter (`WHERE deleted_at IS NULL`) makes them invisible to future insertion checks.
-
-SQL to identify:
+Migration body (Postgres SQL, wrapped in EF's `MigrationBuilder.Sql`):
 
 ```sql
-WITH normalized AS (
-  SELECT "Id", lower(trim(email)) AS n_email, b2c_object_id,
-         is_platform_admin, created_at,
-         (SELECT COUNT(*) FROM identity.tenant_memberships m WHERE m.user_id = u."Id" AND m.deleted_at IS NULL) AS membership_count
+-- OPS.M.10.2 F11.7.6 — soft-delete non-survivor duplicate user rows.
+-- Survivor per row-group is chosen by:
+--   1. is_platform_admin desc
+--   2. active_memberships count desc
+--   3. created_at asc
+-- The survivor keeps its oid; non-survivors are soft-deleted so their FK
+-- references (bookings.guest_user_id, reviews, messaging, audit) still
+-- resolve.
+WITH ranked AS (
+    SELECT
+        u."Id",
+        u.email,
+        u.is_platform_admin,
+        u.created_at,
+        (SELECT COUNT(*) FROM identity.tenant_memberships tm
+           WHERE tm."UserId" = u."Id" AND tm.deleted_at IS NULL) AS active_memberships,
+        ROW_NUMBER() OVER (
+            PARTITION BY u.email
+            ORDER BY u.is_platform_admin DESC,
+                     (SELECT COUNT(*) FROM identity.tenant_memberships tm
+                        WHERE tm."UserId" = u."Id" AND tm.deleted_at IS NULL) DESC,
+                     u.created_at ASC
+        ) AS rn
     FROM identity.users u
-   WHERE deleted_at IS NULL
-),
-dupes AS (
-  SELECT n_email FROM normalized GROUP BY n_email HAVING COUNT(*) > 1
+    WHERE u.deleted_at IS NULL
 )
-SELECT n.* FROM normalized n JOIN dupes d ON n.n_email = d.n_email
- ORDER BY n.n_email, n.created_at;
+UPDATE identity.users u
+   SET deleted_at = NOW(),
+       deleted_by = NULL,   -- system-initiated; no actor id
+       updated_at = NOW()
+  FROM ranked r
+ WHERE u."Id" = r."Id" AND r.rn > 1;
 ```
 
-Every group of ≥ 2 rows is a merge cluster.
+**Down migration**: idempotent no-op with a comment
+(`-- Cannot reverse: survivor merge is destructive at the tenant-membership
+layer if we ever add per-tenant deduplication.`). Reversibility strategy
+for staging: `pg_dump identity.users, tenant_memberships` BEFORE running
+the migration on staging; restore from that dump is the rollback.
 
-### 3.2 Winner-selection rule (per cluster)
+**Tests**:
+- `tests/VrBook.Api.IntegrationTests/Identity/DuplicateUserHealMigrationTests.cs`
+  (new) — Category=Integration, connection-string gated. Seeds 3 rows
+  for one email (one PA, one with membership, one plain), runs the
+  migration via `DbContext.Database.Migrate()`, asserts one survivor
+  (the PA), two soft-deleted.
 
-**Precedence** (first satisfied wins; tie → next tier):
-1. `is_platform_admin = true` beats `is_platform_admin = false`.
-2. **Higher active `tenant_memberships` count** wins (a row wired into the tenant graph is more expensive to reroute than a bare row).
-3. **Oldest `created_at`** wins (the row the audit trail refers to for longest; minimizes audit_log target_id staleness).
-4. **Lexicographically smallest `"Id"`** as a final deterministic tiebreak (so the SQL is idempotent — re-running the merge on an already-merged state is a no-op).
+**Local validation**:
+```
+dotnet ef migrations add OpsM10_2_F11_7_6_SoftDeleteDuplicateUsers \
+  --project src/Modules/VrBook.Modules.Identity \
+  --startup-project src/VrBook.Api \
+  --context IdentityDbContext
+dotnet build
+dotnet test tests/VrBook.Api.IntegrationTests --filter "FullyQualifiedName~DuplicateUserHealMigrationTests"
+```
 
-Rejected alternatives:
-- "Newest oid wins" — favors churn; the just-created Entra row has done less than the DevAuth row it collided with. Rejected.
-- "Row with the most bookings" — requires cross-schema join to `booking.bookings.guest_user_id`; adds a cross-module coupling in the migration. Rejected: booking count is highly correlated with membership count for owners; membership_count is a cheaper local signal.
+**CI expectation**: green. Integration test runs against the CI Postgres
+service container.
 
-### 3.3 Losers → surviving id: FK repointing
+### F11.7.6.5 — Arch tests locking the invariant
 
-Cross-schema references to `identity.users."Id"` — none of them are Postgres FK constraints (verified by grep), so the merge is a plain UPDATE, not a `ON DELETE CASCADE` cascade. **Confirmed FK-lite references to re-point:**
+**Scope**: Source-text scans in `tests/VrBook.Architecture.Tests` that
+prevent a future regressor from reintroducing the oid-only provisioning
+shape.
 
-| Table (schema.table) | Column | Constraint? | Action |
-|---|---|---|---|
-| `identity.tenant_memberships` | `user_id` | **Yes** (`HasOne<User>().WithMany().HasForeignKey(m => m.UserId).OnDelete(Cascade)`) | Repoint to surviving `"Id"`; then dedupe `(user_id, tenant_id)` pairs (partial-unique index `ux_tenant_memberships_user_tenant` fires here — prefer the row with matching role or `IsPrimary=true`, soft-delete the other). |
-| `identity.audit_log` | `actor_user_id`, `target_id` (string) | No FK | Repoint `actor_user_id`; leave `target_id` (string, historical) UNTOUCHED. Audit is append-only historical record. Rebind event covers the story. |
-| `booking.bookings` | `guest_user_id` | No FK (cross-schema; verified: `HasIndex(x => x.GuestUserId)` only) | Repoint. |
-| `messaging.threads` | `guest_user_id` (grep to confirm exact column) | No FK | Repoint. |
-| `reviews.reviews` | `guest_user_id` | No FK | Repoint. |
-| `loyalty.accounts` | `user_id` | No FK | Repoint. |
-| `notifications.*.recipient_user_id` | (varies) | No FK | Repoint. |
+**Files**:
+- `tests/VrBook.Architecture.Tests/ProvisionUserHandlerShapeTests.cs` (new).
 
-The migration hand-writes the UPDATEs for each of these tables. Per-slice architects have kept module DbContexts separate, so a single migration crossing schemas is unusual but justified here — an alternative "one migration per module" fan-out is REJECTED because it opens a partial-merge window where `booking.guest_user_id` is repointed but `messaging.guest_user_id` isn't yet, breaking joins that thread across those.
+Assertions (regex over
+`src/Modules/VrBook.Modules.Identity/Application/Users/Commands/ProvisionUserHandler.cs`):
 
-**All cross-schema UPDATEs land in `identity`'s migration** (schemas share the DB; the Identity migration can `UPDATE booking.bookings SET guest_user_id = <surviving> WHERE guest_user_id = <loser>`). Document this cross-schema write in the migration's XML doc; add an entry to `RlsBypassCallSiteAllowlistTests` if the migration runs under an RLS context (verify — likely not, since migrations run pre-app-startup, but check).
+1. Handler body contains `GetActiveByEmailAsync` — proves the email
+   fallback branch exists.
+2. Handler body contains `ClaimOidForExistingProfile` — proves the rebind
+   path exists.
+3. Handler body contains the string literal `"email_already_claimed"` —
+   proves the guardrail exists.
+4. `IUserRepository.cs` declares `GetActiveByEmailAsync` — signature check.
 
-**Loser rows**: after repointing, HARD DELETE the loser rows (not soft-delete) — the row's identity is what we're eliminating, not a historical fact worth preserving. The audit_log rebind event (§3.4) is where the history lives.
+Existing shape-scan pattern is
+`tests/VrBook.Architecture.Tests/OwnerActionTenantResolutionTests.cs`;
+copy its `ReadControllerSource()` helper (rename to `ReadHandlerSource`).
 
-### 3.4 Merge audit trail
+**Tests**: the scans themselves — no runtime dependency, no DB.
 
-For every merge cluster, the migration writes ONE audit_log row per loser:
+**Local validation**:
+```
+dotnet test tests/VrBook.Architecture.Tests --filter "FullyQualifiedName~ProvisionUserHandlerShapeTests"
+```
+
+**CI expectation**: green.
+
+### F11.7.6.6 — Integration coverage: end-to-end multi-oid convergence
+
+**Scope**: One end-to-end test that reproduces the staging bug in a fixture.
+
+**Files**:
+- `tests/VrBook.Api.IntegrationTests/Identity/MultiOidConvergenceTests.cs`
+  (new). Category=Integration. Uses `IdentityApiFixture`.
+
+Test:
+
+1. Sign in through DevAuth as `dev-owner-...` — provisions row `U_A` with
+   email `pro@vrbook.local`.
+2. Rewrite `U_A.Email` to `niroshanaks@gmail.com` via `SetPersonaEmail`.
+3. Simulate a fresh real-Entra login: hit any authenticated endpoint with
+   a bearer token whose `oid` claim is `real-oid-xyz` and `emails` claim
+   is `niroshanaks@gmail.com`.
+4. Assert (a) NO new row is provisioned — `identity.users` count is
+   unchanged; (b) `U_A.B2CObjectId` is now `real-oid-xyz` (the rebind);
+   (c) `GET /api/v1/me` on the new session returns `U_A.Id`.
+
+**Local validation**:
+```
+dotnet test tests/VrBook.Api.IntegrationTests --filter "FullyQualifiedName~MultiOidConvergenceTests"
+```
+
+**CI expectation**: green.
+
+### F11.7.6.7 — Remove the F11.7.5.10 interim widening + close-out doc
+
+**Scope**: Now that provisioning converges rows at write time, the
+`BootstrapOperator` widened-target loop can revert to single-row semantics.
+Not strictly required (the loop is idempotent and harmless), but leaving
+the widened loop in place while the underlying hazard is fixed is dead
+code that misleads future readers.
+
+**Files**:
+- `src/VrBook.Api/Controllers/IdentityController.cs` — revert the
+  `usersWithEmail` loop back to single-user semantics (rename local var
+  back to `user`, remove `usersWithEmail.Count` response field). Keep the
+  F11.7.5.10 comment block as a historical note pointing to F11.7.6.
+- Close-out §11 in `docs/OPS_M_10_2_F11_7_6_MULTI_ROW_USER_FIX.md`
+  (append to this file after CI green).
+
+**Tests**: existing bootstrap tests (if any) still pass; no new tests.
+
+**Local validation**: `dotnet test --filter "Category!=Integration"`.
+
+**CI expectation**: green.
+
+---
+
+## §5 Backfill plan (data heal — F11.7.6.4 detail)
+
+Dupes identified by:
 
 ```sql
-INSERT INTO identity.audit_log
-  (Id, occurred_at, actor_user_id, actor_role, action, target_type, target_id, before, after)
-VALUES
-  (gen_random_uuid(), NOW(), NULL, 'system',
-   'user.merge-duplicate-email',
-   'User',
-   <surviving_id>,
-   jsonb_build_object('loser_id', <loser_id>, 'loser_oid', <loser_oid>, 'loser_email', <loser_email>),
-   jsonb_build_object('surviving_id', <surviving_id>, 'surviving_oid', <surviving_oid>));
+SELECT email, COUNT(*) AS rowcount
+  FROM identity.users
+ WHERE deleted_at IS NULL
+ GROUP BY email
+HAVING COUNT(*) > 1;
 ```
 
-`actor_user_id` is NULL because the migration runs as `system`. Grepped: `identity.audit_log.actor_user_id` is nullable — verified in `Init_IdentitySchema.cs:24`.
+**Survivor selection** (§3 policy, restated as SQL — see F11.7.6.4 for the
+CTE):
 
-### 3.5 Case-sensitivity + normalization
+1. `is_platform_admin DESC`
+2. `(count of active tenant_memberships) DESC`
+3. `created_at ASC`
 
-- Stored value in `email` column stays as-typed (RFC display).
-- Uniqueness enforced on `lower(email)` via a Postgres expression index: `CREATE UNIQUE INDEX ux_users_email_active ON identity.users (lower(email)) WHERE deleted_at IS NULL`.
-- `ProvisionUserHandler` looks up via `EF.Functions.ILike` (already the pattern in `UserRepository.BuildQ`).
-- Trim happens at write time in the handler (`cmd.Email.Trim()` before `new Email(...)`), not in the index — trim is a normalization the app owns.
+**FK remap**: NOT NEEDED because losers are soft-deleted, not hard-deleted.
+Their `Id` values remain valid uuid references. Existing
+`bookings.guest_user_id`, `reviews.reviews.guest_user_id`,
+`messaging.threads.guest_user_id`, and `audit_log.actor_user_id` values
+continue to resolve. The row is present, just marked `deleted_at IS NOT NULL`
+so it no longer participates in the global query filter for `IdentityDbContext`.
 
-### 3.6 Reversibility
+**Reversibility strategy for the staging window**:
 
-**Migration Up is NOT losslessly reversible** — the merge deletes rows. Down does:
-1. Drop the unique index.
-2. Recreate the non-unique `IX_users_email`.
+1. Immediately before applying the F11.7.6.4 migration on staging, take:
+   ```
+   pg_dump --schema=identity --data-only \
+           --table=identity.users \
+           --table=identity.tenant_memberships \
+           > f11_7_6_pre_heal.sql
+   ```
+2. If the migration causes a regression, roll back by restoring the two
+   tables from `f11_7_6_pre_heal.sql` (truncate + restore), then revert
+   the F11.7.6.3 code deploy.
 
-Down does NOT recreate the deleted rows. **This is called out in the migration's XML docs.** Rollback path if the Up needs to be undone with data recovery: restore the DB from the pre-migration snapshot named `staging-vrbook-preF11_7_6-YYYYMMDD.dump`.
-
-**Pre-deploy checklist for F11.7.6.4** (operator, one-time):
-1. Take a DB snapshot of staging: `az postgres flexible-server backup create --name staging-vrbook --backup-name preF11_7_6-YYYYMMDD`.
-2. Verify the snapshot appears: `az postgres flexible-server backup list --name staging-vrbook`.
-3. Confirm staging traffic is low (this is dev/staging; production has this migration deferred to a Production-cutover slice per §6).
-4. Merge the PR + wait for CI green.
-5. Watch the deploy log; assert the migration prints its "merged N duplicate rows" line.
-
-Production cutover (deferred to a later slice, NOT F11.7.6):
-- Production has never enabled DevAuth (`docs/OPS_M_0_PLAN.md`).
-- Production has never invoked `SetPersonaEmail` (dev-bridge only, host-env-guarded).
-- So Production `identity.users` should have zero duplicates today. But belt-and-braces: production migration adds a `SELECT COUNT(*) FROM dupes; RAISE NOTICE 'Found % duplicate email groups', ...;` check that FAILS the migration if any dupes are found — better to fail-fast in production than merge silently.
-
-### 3.7 Idempotency
-
-The merge SQL uses `NOT EXISTS` on the winner-selection step and re-runnability of the UPDATEs (idempotent by construction — repointing a row that's already pointing at the surviving id is a no-op). If the migration is re-run (retry after a transient failure mid-flight), it produces no additional changes.
+**Prod**: The bug shipped to staging only; prod's `identity.users` should
+have zero multi-row groups. The migration runs on prod but the CTE affects
+zero rows.
 
 ---
 
-## 4. Arch-test additions (catch future drift)
+## §6 Arch-test additions
 
-### 4.1 `tests/VrBook.Architecture.Tests/UsersTableEmailUniquenessTests.cs` (NEW, F11.7.6.1)
+Two arch-test files, both regex source-text scans (no Roslyn needed,
+matching `tests/VrBook.Architecture.Tests/OwnerActionTenantResolutionTests.cs`
+style):
 
-Assertions:
-- `UserConfiguration.Configure` calls `.HasIndex(u => u.Email).IsUnique()` (or partial-unique with `deleted_at IS NULL` filter). Roslyn syntax walk on the source file, not reflection on the compiled model — the model builder's runtime state can be gamed; the SOURCE assertion catches the intent.
-- `ProvisionUserHandler` references BOTH `GetByB2CObjectIdAsync` AND `GetByEmailAsync`. Locks the upsert shape against a future refactor that "simplifies" by dropping the email-hit branch.
-- `IUserRepository` declares `GetByEmailAsync` with a `CancellationToken` parameter. Locks the method signature so tests don't need to update en masse.
+### `ProvisionUserHandlerShapeTests.cs` (new, ships in F11.7.6.5)
 
-### 4.2 `tests/VrBook.Architecture.Tests/UserAggregateRebindContractTests.cs` (NEW, F11.7.6.2)
+- **`Handler_reads_by_oid_first`** — asserts `GetByB2CObjectIdAsync`
+  precedes `GetActiveByEmailAsync` in the source text. Fails if a refactor
+  inverts the order (which would spam-provision on every real-Entra
+  sign-in that happens to share an email with a stale row).
+- **`Handler_has_email_fallback`** — asserts `GetActiveByEmailAsync` is
+  called. Fails if a regressor removes the fallback and reverts to
+  provision-new-on-oid-miss.
+- **`Handler_has_role_address_guardrail`** — asserts the literal
+  `"email_already_claimed"` appears. Fails if the guardrail is silently
+  removed (which would let a compromised Entra tenant hijack an existing
+  PA account by changing its email to match).
+- **`IUserRepository_exposes_GetActiveByEmailAsync`** — asserts the
+  interface declares the method. Fails if it's removed and the handler
+  starts inlining EF queries again.
 
-Assertions:
-- `User.RebindB2CObjectId` exists as a `public void` method taking `(string, Guid)`. Signature lock.
-- The event `UserB2CObjectIdRebound` is a `sealed record` in the Contracts events assembly. Consumer-facing shape lock.
+### `UserAggregateRebindShapeTests.cs` (new, ships in F11.7.6.5)
 
-### 4.3 Extend `tests/VrBook.Architecture.Tests/TenantAuthorizationBackgroundScopeBypassTests.cs` (F11.7.6.3)
-
-Add one fact: `TenantAuthorizationBehavior` does NOT reference `ICurrentUser.Email`. Locks in the rejection of Candidate C — no future refactor can quietly widen the PA bypass to "any row with matching email."
-
-### 4.4 Extend `tests/VrBook.Architecture.Tests/PlatformAdminEndpointRoleGateTests.cs` (F11.7.6.4)
-
-Grep-existing test; if it asserts endpoint role gates by role name, add: `BootstrapOperator`'s F11.7.5.10 "promote every email match" loop is STILL PRESENT but is now provably unreachable (the unique index makes `usersWithEmail.Count > 1` impossible for active rows). The test asserts that either the loop is present with a comment marker `// F11.7.5.10 interim: reachable only for soft-deleted rows` OR the loop has been simplified back to a single-user path. Both are OK; picking one is a F11.7.6.6 close-out decision.
-
----
-
-## 5. Runbook updates (deferred to F11.7.6.6 close-out — no separate commit)
-
-Add to `docs/runbooks/OPS_M_8_PROMOTE_PLATFORM_ADMIN.md`:
-
-- New section: **"Handling a `DuplicateEmailException` from `SetPersonaEmail` or Entra migration."**
-  - Look up `identity.users WHERE lower(email) = lower('...')` — find both rows.
-  - Decide which row is the human's "real" identity (usually the one with active memberships or platform_admin=true).
-  - Options: (a) Deactivate the loser row (`user.Deactivate(...)`); (b) rebind loser to a new email if it belongs to a different human who happens to share the inbox (rare).
-  - Never delete a row directly — the aggregate's `Deactivate` handles soft-delete + event.
-
-Add to `docs/OPS_M_10_2_F11_7_6_MULTI_ROW_USER_FIX.md` §11:
-
-- Note whether the F11.7.5.10 loop-across-emails code was kept or removed.
+- **`User_has_ClaimOidForExistingProfile`** — asserts the method exists on
+  the aggregate. Fails if a refactor moves the rebind out to the handler
+  (leaking domain state mutation into infra).
+- **`User_B2CObjectId_setter_is_private`** — asserts `public string
+  B2CObjectId { get; private set; }`. Fails if a regressor makes it
+  publicly settable (bypassing the domain event).
 
 ---
 
-## 6. Time estimate
+## §7 Integration-test additions
 
-| Commit | Estimate |
-|---|---|
-| F11.7.6.1 (tests-red) | 45 min |
-| F11.7.6.2 (domain: Rebind) | 30 min |
-| F11.7.6.3 (handler upsert) | 30 min |
-| F11.7.6.4 (migration) | 90 min (hand-written SQL + pre-deploy checklist) |
-| F11.7.6.5 (DevAuth guard) | 30 min |
-| F11.7.6.6 (doc close-out) | 15 min |
-| **Total** | **~4 hours** + CI wait between pushes. |
+In `tests/VrBook.Api.IntegrationTests/Identity/`:
 
----
+### `MultiOidConvergenceTests.cs` (F11.7.6.6, detailed in §4)
 
-## 7. What NOT to do (boundaries)
+The end-to-end reproducer.
 
-- **Do NOT change ADR-0014's `is_platform_admin` DB-wins contract.** Preserved as-is.
-- **Do NOT widen the PlatformAdmin bypass to consult `ICurrentUser.Email`.** Rejected as Candidate C.
-- **Do NOT remove the `Slice4_DropEmailUnique` migration.** That migration is history; the new F11.7.6.4 migration re-adds uniqueness with a wider filter (partial unique on `lower(email)` where `deleted_at IS NULL`).
-- **Do NOT change `B2CObjectId` uniqueness.** Still `IsUnique()`. What we CAN do is UPDATE it (via `RebindB2CObjectId`) — that's a distinct operation from "another row can share it."
-- **Do NOT do the Production migration in F11.7.6.** Production is duplicate-free by construction (§3.6); the same migration will run on Production as part of the next production deploy, but with the fail-fast RAISE NOTICE. Do NOT layer additional Production-specific logic; the migration is one artifact.
-- **Do NOT try to fix `DevAuth:AllowAnonymous`-in-Production as part of this slice.** That's a separate hardening pass. This slice trusts the existing three-guard (host-env + AllowAnonymous + AllowStripeStub) for the dev-bridge writes.
-- **Do NOT touch `UserProvisioningMiddleware.cs:73-76`.** Once the invariant is enforced, the middleware's per-oid read is CORRECT — there is exactly one row for the human, and it carries the truthful `is_platform_admin` bit.
+### `DuplicateUserHealMigrationTests.cs` (F11.7.6.4, detailed in §4)
+
+Migration correctness check.
+
+### `ProvisioningUpsertTests.cs` (F11.7.6.3 supplement, optional)
+
+Real-DB variant of the unit-test scenarios in F11.7.6.1 — same assertions
+but through the mediator end-to-end, so we catch any EF query-filter
+weirdness on the `IsDeleted` filter that the in-memory unit tests can't
+see.
 
 ---
 
-## 8. Residual risk register
+## §8 Residual risks + out-of-scope
 
-| Risk | Severity | Mitigation today | Follow-up |
-|---|---|---|---|
-| Real Entra email-change means a human transiently has two rows during migration cutover (unlikely in staging; theoretically possible in Prod). | Low. | `ProvisionUserHandler` upsert on email-hit rebinds the surviving row's B2CObjectId. `UserB2CObjectIdRebound` event fires for the audit trail. | Consider adding an `UserEmailChanged` event handler in a future slice that verifies no stray row exists post-change. |
-| Case-insensitive uniqueness assumes a normalized `lower(email)` — a caller who bypasses the aggregate and inserts raw SQL could still create a duplicate. | Very low. | The partial-unique DB index catches it. Any raw-SQL path is out-of-invariant regardless. | None. |
-| The F11.7.6.4 migration is not losslessly reversible. | Medium (mitigated). | Pre-deploy snapshot named in the checklist (§3.6). Down migration only removes the index, not the row deletion. | None. |
-| DevAuth `SetPersonaEmail` becomes more restrictive (409 on collision instead of silent overwrite). Ops runbook must reflect the new failure mode. | Low. | Runbook update in §5. Actionable 409 error payload. | None. |
-| Cross-schema UPDATEs in an Identity module migration violate the "module owns its schema" convention. | Low (documented). | Migration XML doc explains why. Alternative (per-module migration fan-out) is riskier per §3.3. | Post-slice, consider a `docs/adr` entry codifying "identity merges can cross-schema-UPDATE for lifecycle events." |
+### Residual risks
+
+1. **Role-address collision** (`ops@company.com` shared by two real humans).
+   The §3 guardrail throws `email_already_claimed` — but that means the
+   second human's sign-in fails. Mitigation: a follow-up slice can add an
+   admin-facing "unlink email" surface (`PATCH
+   /api/v1/admin/users/{id}/unlink-email`) that decouples the row from the
+   email so the second person can sign in fresh. Out of scope for
+   F11.7.6.
+
+2. **Race on concurrent sign-in of a fresh oid with an existing email.**
+   Two parallel real-Entra logins for the same email → both hit
+   `GetByB2CObjectIdAsync → null`, both hit
+   `GetActiveByEmailAsync → 1 row`, one wins the rebind, the other's
+   `SaveChangesAsync` throws optimistic-concurrency (`RowVersion` guard on
+   `AggregateRoot`). The failure is retryable at the middleware layer,
+   which catches provisioning failures and logs
+   (`UserProvisioningMiddleware.cs:103`). Acceptable — retries land on
+   the just-rebound row and hit the oid-hit branch.
+
+3. **DevAuth `SetPersonaEmail` after real-Entra sign-in**. Would rewrite
+   the survivor row's email. Next real-Entra sign-in from a DIFFERENT
+   human (whose email got assigned to the persona) would hit the guardrail
+   or the rebind path depending on oids. This is a DevAuth-only path,
+   already prod-gated at handler + controller (§F8 audit #20), so no
+   prod risk. Add a runbook note that `SetPersonaEmail` on a DevAuth
+   persona that shares an email with a real-Entra row is a "collision
+   step" — not a code fix.
+
+### Out of scope
+
+- **DB-level `UNIQUE (email) WHERE deleted_at IS NULL` partial index**
+  (candidate B). Reconsider after 60 days of production observability if
+  we see zero divergence. If yes, add the constraint in a future slice
+  as belt-and-suspenders.
+- **Cross-schema FK enforcement** (`bookings.guest_user_id` REFERENCES
+  `identity.users.Id`). Would require breaking the "one schema per
+  module" invariant. Not this slice.
+- **Merging tenant_memberships across multi-row survivors** with active
+  memberships in DIFFERENT tenants. Today's staging DB has one such
+  case at most; the current soft-delete-losers approach leaves the
+  loser's memberships intact but the loser row hidden. The membership
+  join in `UserProvisioningMiddleware` won't find them (it joins on
+  `UserId`, which is the loser's id, which the middleware never returns
+  from provisioning anymore). Effectively they become orphaned. Deferred
+  to a future slice.
+- **DevAuth stub oid stability across environments** — `dev-owner-...`
+  shape is baked into `DevAuthPersonas.Owner`. Not touching.
 
 ---
 
-## 9. Open questions (for user confirmation before execution)
+## §11 Close-out (append after CI green on F11.7.6.7)
 
-1. **Winner-selection rule** — is "PA=true > membership_count > oldest CreatedAt > smallest Id" the right precedence? Alternative: "PA=true > oldest > membership_count." Default: as written (membership_count second, because a row wired into the tenant graph is more expensive to reroute than a bare row).
-2. **Migration Production posture** — deploy the migration to Production the same way as staging (relying on §3.6's fail-fast), OR gate it behind an explicit `MIGRATE_MERGE_ACK=true` env var for Production? Default: same as staging (fail-fast is enough; Production has no duplicates).
-3. **F11.7.5.10 loop-across-emails code** — keep-as-defense or remove-as-unreachable in F11.7.6.6 close-out? Default: keep for a slice or two as belt-and-braces (the loop is unreachable for active rows post-migration; harmless overhead). Remove in the F11.8 close-out.
-4. **`UserB2CObjectIdRebound` event handling** — do we need a Notifications/Loyalty-side reaction to a rebind? Default: no (the row's `Id` is unchanged; downstream references are stable). The event exists purely for the audit trail today.
-
----
-
-## 10. Verification protocol (for the architect/Claude to run after F11.7.6.5 is green)
-
-```sh
-# 1. Confirm the interim from F11.7.5.10 is still visible in the response.
-curl -X POST https://api.vrbook-staging.example.com/api/v1/dev-auth/bootstrap-operator \
-  -b /tmp/cookies.txt -H "Content-Type: application/json" \
-  -d '{"email":"niroshanaks@gmail.com","tenantId":"00000000-0000-0000-0000-000000000001"}' | jq
-# Expect: usersPromoted=1 (was 2 before this slice). One row per human is the invariant.
-
-# 2. Force a duplicate via SetPersonaEmail — should now 409.
-curl -X POST 'https://api.vrbook-staging.example.com/api/v1/dev-auth/persona-email?persona=Guest&email=niroshanaks@gmail.com' -i
-# Expect: 409, body includes conflictingUserId.
-
-# 3. SQL count check.
-psql -h staging-vrbook -c "SELECT lower(email), COUNT(*) FROM identity.users WHERE deleted_at IS NULL GROUP BY 1 HAVING COUNT(*) > 1;"
-# Expect: 0 rows.
-
-# 4. Full end-to-end: sign out of staging, sign back in as niroshanaks@gmail.com via Entra.
-#    UserProvisioningMiddleware finds the existing row by oid (no rebind needed if oid unchanged).
-#    Confirm/Reject on /admin/bookings/{id} → 200. F11.7 walk-3 unblocked.
-```
-
-UI handoff to user follows the F11.7.5 pattern (paths from `feedback_slice_completion_test_pattern`).
-
----
-
-## 11. Close-out
-
-TO BE APPENDED at F11.7.6.6 commit time.
+_To be filled in after the final commit lands._
