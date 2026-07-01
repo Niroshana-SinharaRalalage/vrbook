@@ -61,4 +61,9 @@ internal sealed class UserRepository(IdentityDbContext db) : IUserRepository
 
     public async Task AddAsync(User user, CancellationToken ct = default) =>
         await db.Users.AddAsync(user, ct);
+
+    public async Task<IReadOnlyList<User>> GetActiveByEmailAsync(string email, CancellationToken ct = default) =>
+        await db.Users
+            .Where(u => ((string)(object)u.Email) == email)
+            .ToListAsync(ct);
 }

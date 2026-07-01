@@ -153,4 +153,32 @@ public sealed class User : AggregateRoot
         DeletedBy = actorId;
         Raise(new UserDeactivated(Id, reason));
     }
+
+    /// <summary>
+    /// Slice OPS.M.10.2 F11.7.6 — rebind this aggregate's <c>B2CObjectId</c>
+    /// to a new oid. Called from <c>ProvisionUserHandler</c> when an
+    /// incoming oid is not found but the email matches this row. Raises
+    /// <see cref="UserOidRebound"/> for the audit trail. Idempotent —
+    /// re-binding to the SAME oid is a no-op (no event).
+    ///
+    /// <para>Preconditions: not soft-deleted; <paramref name="newOid"/>
+    /// non-empty. The handler enforces the guardrail (both-oids-real-Entra
+    /// throws before this is called), so this method does not re-verify.</para>
+    /// </summary>
+    public void ClaimOidForExistingProfile(string newOid)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(newOid);
+        if (IsDeleted)
+        {
+            throw new InvalidOperationException(
+                "Cannot rebind oid on a soft-deleted user row.");
+        }
+        if (string.Equals(B2CObjectId, newOid, StringComparison.Ordinal))
+        {
+            return; // idempotent — same oid, no event
+        }
+        var oldOid = B2CObjectId;
+        B2CObjectId = newOid;
+        Raise(new UserOidRebound(Id, oldOid, newOid));
+    }
 }
