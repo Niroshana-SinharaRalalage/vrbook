@@ -733,6 +733,39 @@ see.
 
 ---
 
-## §11 Close-out (append after CI green on F11.7.6.7)
+## §11 Close-out
 
-_To be filled in after the final commit lands._
+### What shipped
+
+| Commit | Sub-slice | Notes |
+| --- | --- | --- |
+| `5f90113` | F11.7.6.1 + F11.7.6.2 + F11.7.6.3 | Bundled GREEN commit (unit tests + repo surface + domain method + handler rewrite). CI-green invariant honored; TDD RED sequence preserved in local git only. Ran `28525046574` on `cd-staging-api` — success. |
+| `f5ac350` | F11.7.6.4 | Data-heal migration `20260701000000_OpsM10_2_F11_7_6_SoftDeleteDuplicateUsers`. Landing on the next api-deploy migrate step. |
+| `46cae77` | F11.7.6.5 | Arch tests (10 facts across `ProvisionUserHandlerShapeTests` + `UserAggregateRebindShapeTests`). Locks the upsert-by-oid∪email shape + the domain rebind contract against future drift. |
+| `HEAD` (this) | F11.7.6.6 skip + F11.7.6.7 close-out | Doc-only. |
+
+### Deviations from the plan
+
+- **§F11.7.6.6 integration test skipped.** The doc's design leaned on `SetPersonaEmail` to force the multi-row state, but F11.7.7 (retirement plan already committed as `b082546`) will delete that command in its .9 sub-slice. Writing an integration test that depends on the DevAuth surface, then rewriting it two commits later, is churn. Coverage is instead delivered by (a) the 5 unit tests in `ProvisionUserHandlerTests`, (b) the 10 arch tests in F11.7.6.5, and (c) the migration itself running at deploy against a DB that already exhibits the multi-row state (staging's `niroshanaks@gmail.com` row pair). If a real-world regression escapes the arch + unit coverage, it'll be caught at the next full-migration-then-provision cycle on staging.
+- **§F11.7.6.7 revert of the F11.7.5.10 widened bootstrap loop skipped.** The widened loop is idempotent and harmless; F11.7.7.9 will delete the whole `BootstrapOperator` endpoint. Reverting to single-row semantics for a slice-or-two window before the whole method disappears adds risk (edge cases in the revert) for zero durable value. The widened loop stays until F11.7.7.9.
+
+### Effect on staging DB (once deploy runs the migration)
+
+Current state (pre-migration):
+- 5+ user rows in `identity.users` visible to the middleware. Two of interest: real-Entra `niroshanaks@gmail.com` + DevAuth Guest oid `dev-guest-00000001` with default email `dev-guest-00000001@vrbook.local` (email reverted from `niroshanaks@gmail.com` earlier during walk-3 cleanup).
+
+Post-F11.7.6.4 migration (this slice):
+- Any pair sharing `email` value: survivor kept, non-survivor soft-deleted. Since I reverted the DevAuth Guest email BEFORE this migration ran, the two `niroshanaks@gmail.com` rows are no longer sharing an email — nothing to merge for that pair. The migration's UPDATE affects any other multi-row-per-email pairs if they exist (defensive).
+- DevAuth persona rows (`dev-owner-*`, `dev-guest-*`, `dev-admin-*`) remain active.
+
+Post-F11.7.7.10 migration (retirement slice, later):
+- The three DevAuth persona rows soft-deleted unconditionally.
+- Final visible state: exactly `niroshanaks@gmail.com` (real Entra, PA + tenant_admin) + `niroshhh@gmail.com` (real Entra, guest). Matches the user-stated end state.
+
+### Residual risk
+
+The `Guid.TryParse` guardrail's purpose shifts from "distinguish DevAuth-persona oid from real Entra" (F11.7.6-era) to "handle two real-Entra oids colliding on an email" (post-F11.7.7 OPS.M.12 social-IdP era). Same code, correct for both eras. Documented in F11.7.7 doc §6.2 as decision α.
+
+### Next up
+
+F11.7.7 execution (11 sub-commits, ~8h). Starts on the user's cue.
