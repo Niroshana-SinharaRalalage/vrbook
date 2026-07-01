@@ -213,6 +213,18 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
             ownerB.Id, tenantB.Id, TenantMembership.RoleTenantAdmin, isPrimary: true);
         idDb.Set<TenantMembership>().AddRange(membershipA, membershipB);
 
+        // Slice OPS.M.13.3 — pre-seed user_identities rows so the middleware's
+        // new ProvisionOrLinkUserHandler hits Branch 1 (identity mapped)
+        // instead of falling to Branch 2 (link-existing). Models the
+        // post-M.13.4-backfill production state. Without these rows the
+        // fixture would seed users unreachable by the new provisioning path
+        // and every request would 403.
+        var seedNow = DateTimeOffset.UtcNow.AddMinutes(-1);
+        idDb.Set<UserIdentity>().AddRange(
+            UserIdentity.Create(ownerA.Id, "entra", TwoTenantDevAuthHandler.OwnerAOid, seedNow),
+            UserIdentity.Create(ownerB.Id, "entra", TwoTenantDevAuthHandler.OwnerBOid, seedNow),
+            UserIdentity.Create(platformAdmin.Id, "entra", TwoTenantDevAuthHandler.PlatformAdminOid, seedNow));
+
         await idDb.SaveChangesAsync();
 
         // One property per tenant — use the real Property.Create surface
