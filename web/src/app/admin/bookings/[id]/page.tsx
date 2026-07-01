@@ -22,6 +22,7 @@ import { listThreads, type Thread } from '@/lib/api/messaging';
 import { formatCurrency } from '@/lib/utils/currency';
 import { useAuthedQuery } from '@/hooks/useAuthedQuery';
 import { SignInGate } from '@/components/auth/SignInGate';
+import { ConfirmActionModal } from '@/components/ui/ConfirmActionModal';
 
 const STATUS_PILL: Record<BookingStatus, string> = {
   Draft: 'bg-muted text-muted-foreground',
@@ -51,10 +52,19 @@ const AdminBookingDetailPage = () => {
     queryFn: () => adminGetBooking(id),
   });
 
+  // Slice OPS.M.10.2 F11.7.5.9 — modal state now includes per-modal error
+  // slots so the reject modal (and the new confirm-booking + backdate
+  // modals) can surface their error INSIDE the popup instead of leaking
+  // to the page-level banner while the modal stays open.
   const [acting, setActing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectError, setRejectError] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [backdateOpen, setBackdateOpen] = useState(false);
+  const [backdateError, setBackdateError] = useState<string | null>(null);
   // True only when /dev-auth/personas returns 200 (DevAuth:AllowAnonymous=true).
   // Same gate the existing DevPersonaSwitcher uses to hide itself in production,
   // so the Backdate dev shortcut is invisible to real users.
@@ -118,14 +128,14 @@ const AdminBookingDetailPage = () => {
   const refresh = () => qc.invalidateQueries({ queryKey: [...QK] });
 
   const onConfirm = async () => {
-    if (!window.confirm('Confirm this booking? The guest’s card will be charged now.')) return;
     setActing(true);
-    setActionError(null);
+    setConfirmError(null);
     try {
       await confirmBooking(booking.id);
       await refresh();
+      setConfirmOpen(false);
     } catch (err) {
-      setActionError(
+      setConfirmError(
         err instanceof ApiProblemError
           ? err.problem.detail ?? err.message
           : err instanceof Error
@@ -139,19 +149,43 @@ const AdminBookingDetailPage = () => {
 
   const onReject = async () => {
     setActing(true);
-    setActionError(null);
+    setRejectError(null);
     try {
       await rejectBooking(booking.id, rejectReason.trim() || 'Owner declined.');
       await refresh();
       setRejectOpen(false);
       setRejectReason('');
     } catch (err) {
-      setActionError(
+      setRejectError(
         err instanceof ApiProblemError
           ? err.problem.detail ?? err.message
           : err instanceof Error
             ? err.message
             : 'Reject failed',
+      );
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const onBackdate = async () => {
+    setActing(true);
+    setBackdateError(null);
+    try {
+      await backdateCheckedOutAt(booking.id, 25);
+      await refresh();
+      setBackdateOpen(false);
+      window.alert(
+        'Backdate applied. Now trigger the completion sweep in Azure:\n\n' +
+          'az containerapp job start -n caj-vrbook-completion-staging -g rg-vrbook-staging',
+      );
+    } catch (err) {
+      setBackdateError(
+        err instanceof ApiProblemError
+          ? err.problem.detail ?? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Backdate failed',
       );
     } finally {
       setActing(false);
@@ -238,24 +272,7 @@ const AdminBookingDetailPage = () => {
             )}
             {booking.status === 'CheckedOut' && devAuth && (
               <button
-                onClick={async () => {
-                  if (!window.confirm('Backdate CheckedOutAt by 25h so the completion sweep can run today?')) return;
-                  setActing(true);
-                  setActionError(null);
-                  try {
-                    await backdateCheckedOutAt(booking.id, 25);
-                    await refresh();
-                    window.alert('Backdate applied. Now trigger the completion sweep in Azure:\n\naz containerapp job start -n caj-vrbook-completion-staging -g rg-vrbook-staging');
-                  } catch (err) {
-                    setActionError(
-                      err instanceof ApiProblemError
-                        ? err.problem.detail ?? err.message
-                        : err instanceof Error ? err.message : 'Backdate failed',
-                    );
-                  } finally {
-                    setActing(false);
-                  }
-                }}
+                onClick={() => setBackdateOpen(true)}
                 disabled={acting}
                 className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50 dark:text-blue-300 dark:hover:bg-blue-950/30"
               >
@@ -294,7 +311,7 @@ const AdminBookingDetailPage = () => {
               <XCircle className="h-4 w-4" aria-hidden /> Reject
             </button>
             <button
-              onClick={() => void onConfirm()}
+              onClick={() => setConfirmOpen(true)}
               disabled={acting}
               className="inline-flex items-center gap-1.5 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
             >
@@ -304,10 +321,36 @@ const AdminBookingDetailPage = () => {
         </div>
       )}
 
+      {/* Slice OPS.M.10.2 F11.7.5.9 — booking confirm modal (replaces window.confirm). */}
+      <ConfirmActionModal
+        open={confirmOpen}
+        title="Confirm this booking?"
+        description="The guest's card will be charged now."
+        confirmLabel="Confirm booking"
+        busyLabel="Confirming…"
+        confirmVariant="success"
+        busy={acting}
+        error={confirmError}
+        onCancel={() => {
+          if (acting) return;
+          setConfirmOpen(false);
+          setConfirmError(null);
+        }}
+        onConfirm={() => void onConfirm()}
+      />
+
+      {/* Reject modal — has a textarea, so we don't use the ConfirmActionModal
+          shape. Error slot is INSIDE the modal now (was on the page banner
+          in F11.7.5, which the walk 2 report flagged as confusing). */}
       {rejectOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reject-modal-title"
+        >
           <div className="w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-2xl">
-            <h3 className="text-base font-medium">Reject booking?</h3>
+            <h3 id="reject-modal-title" className="text-base font-medium">Reject booking?</h3>
             <p className="mt-2 text-sm text-muted-foreground">
               The guest will be told the host couldn&apos;t accept the reservation. Their card
               authorization is released; no charge is made.
@@ -322,11 +365,20 @@ const AdminBookingDetailPage = () => {
                 className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-maroon-600"
               />
             </label>
+            {rejectError && (
+              <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
+                {rejectError}
+              </div>
+            )}
             <div className="mt-4 flex justify-end gap-2">
               <button
-                onClick={() => setRejectOpen(false)}
+                onClick={() => {
+                  if (acting) return;
+                  setRejectOpen(false);
+                  setRejectError(null);
+                }}
                 disabled={acting}
-                className="rounded-md border border-input bg-background px-4 py-2 text-sm hover:bg-accent"
+                className="rounded-md border border-input bg-background px-4 py-2 text-sm hover:bg-accent disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -341,6 +393,24 @@ const AdminBookingDetailPage = () => {
           </div>
         </div>
       )}
+
+      {/* Slice OPS.M.10.2 F11.7.5.9 — backdate modal (replaces window.confirm). */}
+      <ConfirmActionModal
+        open={backdateOpen}
+        title="Backdate CheckedOutAt by 25h?"
+        description="This is a dev-only shortcut so the completion sweep can run today. Only available while DevAuth is enabled."
+        confirmLabel="Backdate -25h"
+        busyLabel="Applying…"
+        confirmVariant="default"
+        busy={acting}
+        error={backdateError}
+        onCancel={() => {
+          if (acting) return;
+          setBackdateOpen(false);
+          setBackdateError(null);
+        }}
+        onConfirm={() => void onBackdate()}
+      />
 
       {actionError && (
         <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">

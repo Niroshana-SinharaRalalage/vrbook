@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { cancelBooking, type Booking } from '@/lib/api/booking';
 import { ApiProblemError } from '@/lib/api/client';
 import { formatCurrency } from '@/lib/utils/currency';
@@ -10,8 +10,20 @@ interface Props {
   readonly booking: Booking;
 }
 
+/**
+ * Slice OPS.M.10.2 F11.7.5.8 — after a successful cancel, invalidate the
+ * `booking` + `my-bookings` react-query keys so the surrounding
+ * BookingDetailClient re-fetches immediately and the status pill flips from
+ * "Awaiting host" / "Confirmed" to "Cancelled" without a hard refresh.
+ *
+ * Pre-fix this component navigated to /account/bookings after cancel,
+ * relying on that page's server-fetch to show the fresh state. After
+ * F11.7.4.2 the account bookings list is client-rendered via useAuthedQuery
+ * — the navigation still worked, but the CURRENT detail page's status pill
+ * stayed stale, which is what the walk 2 report flagged.
+ */
 export const CancelBookingButton = ({ booking }: Props) => {
-  const router = useRouter();
+  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -29,13 +41,16 @@ export const CancelBookingButton = ({ booking }: Props) => {
     setError(null);
     try {
       await cancelBooking(booking.id, reason || 'Cancelled by guest');
-      // Navigate away from the now-Cancelled booking detail rather than relying on
-      // router.refresh() (Next.js App Router caches the server fetch heavily, the
-      // status pill keeps showing the old value). /account/bookings re-fetches
-      // fresh and shows the cancellation in context with the user's other trips.
-      router.push('/account/bookings');
+      // Invalidate the two cache keys that render this booking's status.
+      // The detail page's useAuthedQuery key is ['booking', id]; the account
+      // list is ['my-bookings']. Both re-fetch on the next microtask.
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['booking', booking.id] }),
+        qc.invalidateQueries({ queryKey: ['my-bookings'] }),
+      ]);
+      setOpen(false);
+      setReason('');
     } catch (err) {
-      setBusy(false);
       setError(
         err instanceof ApiProblemError
           ? err.problem.detail ?? err.message
@@ -43,6 +58,8 @@ export const CancelBookingButton = ({ booking }: Props) => {
             ? err.message
             : 'Cancel failed',
       );
+    } finally {
+      setBusy(false);
     }
   };
 
