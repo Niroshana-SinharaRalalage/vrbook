@@ -345,8 +345,14 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
         {
             var (seededId, wasCreated) = await SeedOperatorMembershipInlineAsync(
                 idDb, currentUser.Id, body.TenantId, ct);
-            if (firstMembershipId == Guid.Empty) firstMembershipId = seededId;
-            if (wasCreated) anyMembershipCreated = true;
+            if (firstMembershipId == Guid.Empty)
+            {
+                firstMembershipId = seededId;
+            }
+            if (wasCreated)
+            {
+                anyMembershipCreated = true;
+            }
         }
         await idDb.SaveChangesAsync(ct);
         Guid membershipId = firstMembershipId;
