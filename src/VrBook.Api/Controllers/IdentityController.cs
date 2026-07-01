@@ -295,83 +295,62 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
 
         using var bypass = RlsBypassScope.Enter();
 
-        // 1) Promote the user to PlatformAdmin (idempotent — domain method
-        //    no-ops on already-granted).
-        var user = await idDb.Users.FirstOrDefaultAsync(
-            u => ((string)(object)u.Email) == body.Email, ct);
-        if (user is null)
+        // 1) Promote EVERY user row with this email to PlatformAdmin.
+        //
+        // Slice OPS.M.10.2 F11.7.5.10 — `identity.users` does NOT enforce
+        // uniqueness on email; the row's identity is the Entra `oid`
+        // (B2CObjectId). Every distinct Entra sign-in provisions a new row
+        // via `UserProvisioningMiddleware` -> `ProvisionUserCommand`.
+        // Result: one email can map to several rows if the same person
+        // signed in through DevAuth (dev-oid stub) AND later through real
+        // Entra (real oid). The F11.7 walk 2 report hit this: bootstrap
+        // targeted only the FIRST matching row, then the real-Entra
+        // session's middleware queried the OTHER row and read
+        // is_platform_admin=false.
+        //
+        // Fix (this commit): promote ALL rows with the email. Idempotent
+        // per row. The multi-row shape itself is deferred to F11.7.6; the
+        // dev-bridge just widens its target here so operator setup lands
+        // on whichever row the current session happens to be using.
+        var usersWithEmail = await idDb.Users
+            .Where(u => ((string)(object)u.Email) == body.Email)
+            .ToListAsync(ct);
+        if (usersWithEmail.Count == 0)
         {
             return NotFound(new { detail = $"No user with email '{body.Email}' has signed in to staging yet." });
         }
-        var alreadyPA = user.IsPlatformAdmin;
-        if (!alreadyPA)
+        foreach (var u in usersWithEmail)
         {
-            user.GrantPlatformAdmin(actorId: user.Id);
+            if (!u.IsPlatformAdmin)
+            {
+                u.GrantPlatformAdmin(actorId: u.Id);
+            }
         }
+        var user = usersWithEmail[0]; // for response payload — arbitrary; PA is granted to all
+        var alreadyPA = user.IsPlatformAdmin;
 
-        // 2) Seed tenant_memberships row (idempotent).
+        // 2) Seed tenant_memberships row for EVERY promoted user (idempotent).
         var tenantExists = await idDb.Tenants.AnyAsync(t => t.Id == body.TenantId, ct);
         if (!tenantExists)
         {
             return NotFound(new { detail = $"Tenant '{body.TenantId}' not found." });
         }
 
-        var existingActive = await idDb.TenantMemberships.FirstOrDefaultAsync(
-            m => m.UserId == user.Id && m.TenantId == body.TenantId && m.DeletedAt == null, ct);
-        Guid membershipId;
-        bool membershipCreated;
-        if (existingActive is not null)
+        // Loop across every user row so the current session's row gets its
+        // membership too. `membershipId` in the response is the FIRST row's
+        // id — kept for API-shape stability.
+        Guid firstMembershipId = Guid.Empty;
+        bool anyMembershipCreated = false;
+        foreach (var currentUser in usersWithEmail)
         {
-            // Slice OPS.M.10.2 F11.7.5.3 — belt-and-braces. A pre-existing
-            // active row may have been created earlier with IsPrimary=false
-            // (e.g. by an older bootstrap variant or by a manual seed). Without
-            // IsPrimary=true the UserProvisioningMiddleware does NOT stamp the
-            // app_tenant_id claim, which used to surface as the F11.7 walk's
-            // owner-action 403. F11.7.5.2 also fixes the underlying controller
-            // helper so the claim isn't strictly required anymore; this branch
-            // still promotes the row so future operator actions land on a
-            // clean profile.
-            if (!existingActive.IsPrimary)
-            {
-                existingActive.MakePrimary();
-            }
-            if (existingActive.Role != VrBook.Modules.Identity.Domain.TenantMembership.RoleTenantAdmin)
-            {
-                existingActive.ChangeRole(VrBook.Modules.Identity.Domain.TenantMembership.RoleTenantAdmin);
-            }
-            membershipId = existingActive.Id;
-            membershipCreated = false;
-        }
-        else
-        {
-            var softDeleted = await idDb.TenantMemberships.IgnoreQueryFilters()
-                .FirstOrDefaultAsync(m => m.UserId == user.Id && m.TenantId == body.TenantId && m.DeletedAt != null, ct);
-            if (softDeleted is not null)
-            {
-                softDeleted.Revive();
-                if (softDeleted.Role != VrBook.Modules.Identity.Domain.TenantMembership.RoleTenantAdmin)
-                {
-                    softDeleted.ChangeRole(VrBook.Modules.Identity.Domain.TenantMembership.RoleTenantAdmin);
-                }
-                if (!softDeleted.IsPrimary)
-                {
-                    softDeleted.MakePrimary();
-                }
-                membershipId = softDeleted.Id;
-                membershipCreated = false;
-            }
-            else
-            {
-                var fresh = VrBook.Modules.Identity.Domain.TenantMembership.Create(
-                    user.Id, body.TenantId,
-                    VrBook.Modules.Identity.Domain.TenantMembership.RoleTenantAdmin,
-                    isPrimary: true);
-                idDb.TenantMemberships.Add(fresh);
-                membershipId = fresh.Id;
-                membershipCreated = true;
-            }
+            var (seededId, wasCreated) = await SeedOperatorMembershipInlineAsync(
+                idDb, currentUser.Id, body.TenantId, ct);
+            if (firstMembershipId == Guid.Empty) firstMembershipId = seededId;
+            if (wasCreated) anyMembershipCreated = true;
         }
         await idDb.SaveChangesAsync(ct);
+        Guid membershipId = firstMembershipId;
+        bool membershipCreated = anyMembershipCreated;
 
         // 3) Seed default PricingPlan for every active, undeleted property
         //    in this tenant that doesn't already have one. Idempotent on
@@ -420,7 +399,63 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
             membershipCreated,
             propertyCount = propertyIds.Count,
             pricingPlansCreated = plansCreated,
+            usersPromoted = usersWithEmail.Count,
         });
+    }
+
+    /// <summary>
+    /// Slice OPS.M.10.2 F11.7.5.10 helper — idempotent tenant-membership
+    /// seed for a specific user id. Extracted so <c>BootstrapOperator</c>
+    /// can loop across every user row that shares the target email (the
+    /// multi-row-per-email hazard described in the caller's comment
+    /// block). Three branches match the pre-refactor inline shape:
+    /// existing active row, revive-soft-deleted, fresh create.
+    /// </summary>
+    private static async Task<(Guid MembershipId, bool WasCreated)> SeedOperatorMembershipInlineAsync(
+        VrBook.Modules.Identity.Infrastructure.Persistence.IdentityDbContext idDb,
+        Guid userId,
+        Guid tenantId,
+        CancellationToken ct)
+    {
+        var existingActive = await idDb.TenantMemberships.FirstOrDefaultAsync(
+            m => m.UserId == userId && m.TenantId == tenantId && m.DeletedAt == null, ct);
+        if (existingActive is not null)
+        {
+            if (!existingActive.IsPrimary)
+            {
+                existingActive.MakePrimary();
+            }
+            if (existingActive.Role != VrBook.Modules.Identity.Domain.TenantMembership.RoleTenantAdmin)
+            {
+                existingActive.ChangeRole(VrBook.Modules.Identity.Domain.TenantMembership.RoleTenantAdmin);
+            }
+            return (existingActive.Id, false);
+        }
+
+        var softDeleted = await idDb.TenantMemberships.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(
+                m => m.UserId == userId && m.TenantId == tenantId && m.DeletedAt != null,
+                ct);
+        if (softDeleted is not null)
+        {
+            softDeleted.Revive();
+            if (softDeleted.Role != VrBook.Modules.Identity.Domain.TenantMembership.RoleTenantAdmin)
+            {
+                softDeleted.ChangeRole(VrBook.Modules.Identity.Domain.TenantMembership.RoleTenantAdmin);
+            }
+            if (!softDeleted.IsPrimary)
+            {
+                softDeleted.MakePrimary();
+            }
+            return (softDeleted.Id, false);
+        }
+
+        var fresh = VrBook.Modules.Identity.Domain.TenantMembership.Create(
+            userId, tenantId,
+            VrBook.Modules.Identity.Domain.TenantMembership.RoleTenantAdmin,
+            isPrimary: true);
+        idDb.TenantMemberships.Add(fresh);
+        return (fresh.Id, true);
     }
 
     /// <summary>
