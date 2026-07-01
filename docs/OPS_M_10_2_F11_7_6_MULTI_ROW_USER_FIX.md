@@ -119,9 +119,12 @@ the old one on the row, so uniqueness is preserved.
   correct semantic — the DevAuth row was a placeholder.
 - Role-address emails shared by real humans (`ops@company.com`) create
   cross-account access. Mitigation: F11.7.6 restricts the email→oid rebind
-  path to rows where either (a) the row has never been logged into via a
-  non-dev oid (heuristic: `B2CObjectId` starts with `dev-`), OR (b) the
-  incoming oid also starts with `dev-` (staging-only case). See §3.
+  path so that if BOTH the surviving row's oid AND the incoming oid are
+  real Entra oids (both parse as `Guid.TryParse` — see §3 for the tight
+  form; the earlier draft used a `dev-` prefix heuristic but that leaks
+  because `dev-` isn't a reserved namespace in Entra), the rebind is
+  refused with `email_already_claimed` (409). Only the DevAuth-persona
+  side is ever rewriteable. See §3.
 
 ### B. Unique constraint on `identity.users.email` + backfill migration
 
@@ -349,10 +352,28 @@ commit. Squash-safe.
   2. Miss → `matches = users.GetActiveByEmailAsync(email)`.
   3. If `matches.Count == 0` → provision new (unchanged branch).
   4. If `matches.Count >= 1` → pick survivor per §3 ranking.
-  5. Guardrail: if `survivor.B2CObjectId` and `oid` are BOTH non-dev
-     (both real Entra shape → `!oid.StartsWith("dev-", StringComparison.Ordinal)`),
-     throw `BusinessRuleException("email_already_claimed", detail...)`
+  5. Guardrail: if BOTH `survivor.B2CObjectId` AND the incoming `oid`
+     are real Entra oids, throw
+     `BusinessRuleException("email_already_claimed", detail...)`
      (do NOT provision — this is the ambiguous role-address case).
+     **Real-Entra oids are always GUID-shaped**; DevAuth persona oids
+     are the literal strings `dev-owner-00000000`, `dev-guest-00000001`,
+     `dev-admin-00000002` (see `DevAuthHandler.cs:49-73`). The tight
+     form of the check is therefore:
+     ```csharp
+     static bool IsRealEntraOid(string oid) => Guid.TryParse(oid, out _);
+     if (IsRealEntraOid(survivor.B2CObjectId) && IsRealEntraOid(oid))
+     {
+         throw new BusinessRuleException(
+             "email_already_claimed",
+             $"Email '{email}' is already claimed by a different Entra identity ({survivor.Id}).");
+     }
+     ```
+     Earlier draft used `!oid.StartsWith("dev-")` — rejected because
+     `dev-` isn't reserved by Entra; the IdP could theoretically issue
+     a `dev-`-prefixed oid. `Guid.TryParse` is the load-bearing shape
+     check because DevAuth's three persona oids are the ONLY non-GUID
+     oids in the system.
   6. Otherwise → `survivor.ClaimOidForExistingProfile(oid)`; refresh login
      stamps; return `survivor.Id`.
 
@@ -395,12 +416,12 @@ WITH ranked AS (
         u.is_platform_admin,
         u.created_at,
         (SELECT COUNT(*) FROM identity.tenant_memberships tm
-           WHERE tm."UserId" = u."Id" AND tm.deleted_at IS NULL) AS active_memberships,
+           WHERE tm.user_id = u."Id" AND tm.deleted_at IS NULL) AS active_memberships,
         ROW_NUMBER() OVER (
             PARTITION BY u.email
             ORDER BY u.is_platform_admin DESC,
                      (SELECT COUNT(*) FROM identity.tenant_memberships tm
-                        WHERE tm."UserId" = u."Id" AND tm.deleted_at IS NULL) DESC,
+                        WHERE tm.user_id = u."Id" AND tm.deleted_at IS NULL) DESC,
                      u.created_at ASC
         ) AS rn
     FROM identity.users u
@@ -419,6 +440,25 @@ UPDATE identity.users u
 layer if we ever add per-tenant deduplication.`). Reversibility strategy
 for staging: `pg_dump identity.users, tenant_memberships` BEFORE running
 the migration on staging; restore from that dump is the rollback.
+
+**Note on bypassing `User.Deactivate()`**: The migration writes
+`deleted_at`/`deleted_by`/`updated_at` directly via raw SQL rather than
+routing through the `User.Deactivate(reason, actorId)` domain method at
+`User.cs:146-155`. This is deliberate:
+
+- `Deactivate` raises a `UserDeactivated` domain event; the migration
+  runs at deploy time with no handlers registered (grep confirms no
+  `UserDeactivated` consumer in `src/Modules`).
+- `Deactivate` requires a non-nullable `actorId Guid`; this is a
+  system-initiated heal with no actor. Passing `Guid.Empty` would be a
+  lie in the audit log.
+- The migration is a one-shot data heal, not part of the aggregate's
+  normal lifecycle.
+
+A future maintainer who wants to "fix" this by routing through the
+domain method should note this trade-off. Adding a `UserAutoHeal`
+domain method with nullable `actorId` semantics is out-of-scope for
+F11.7.6; the raw SQL is correct for the one-shot use.
 
 **Tests**:
 - `tests/VrBook.Api.IntegrationTests/Identity/DuplicateUserHealMigrationTests.cs`
@@ -654,6 +694,22 @@ see.
    prod risk. Add a runbook note that `SetPersonaEmail` on a DevAuth
    persona that shares an email with a real-Entra row is a "collision
    step" — not a code fix.
+
+4. **Orphaned `TenantMembership` rows for soft-deleted losers**. The
+   migration soft-deletes the loser user rows but does NOT soft-delete
+   their `identity.tenant_memberships` rows. The middleware queries
+   memberships by `user_id`; a lookup by the loser row's `Id` still
+   returns those memberships. The loser row itself is invisible to the
+   middleware (global query filter on `IdentityDbContext` respects
+   `deleted_at`), so a real-Entra sign-in that hits the loser oid can't
+   even happen post-migration (the oid was rebound to the survivor).
+   The orphaned memberships are dead-weight rows visible via
+   `IgnoreQueryFilters()`. Not a correctness bug — a cleanliness bug.
+   `TenantMembershipConfiguration.cs:23-26` declares
+   `.OnDelete(DeleteBehavior.Cascade)` for `User→TenantMembership`, but
+   this is EF Cascade on **hard-delete**; soft-delete via `UPDATE
+   deleted_at = NOW()` does not trigger the cascade. Cleanup pass
+   scoped for a future OPS.M.11 hygiene slice.
 
 ### Out of scope
 
