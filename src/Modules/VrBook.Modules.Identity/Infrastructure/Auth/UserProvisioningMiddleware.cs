@@ -46,18 +46,20 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<Use
                         ctx.User.FindFirstValue("email_verified"), "true",
                         StringComparison.OrdinalIgnoreCase);
 
-                    var isOwner = string.Equals(
-                        ctx.User.FindFirstValue(HttpCurrentUser.OwnerClaim), "true",
-                        StringComparison.OrdinalIgnoreCase)
-                        || ctx.User.IsInRole("Owner");
-
-                    var isAdmin = string.Equals(
-                        ctx.User.FindFirstValue(HttpCurrentUser.AdminClaim), "true",
-                        StringComparison.OrdinalIgnoreCase)
-                        || ctx.User.IsInRole("Admin");
-
-                    var userId = await mediator.Send(new ProvisionUserCommand(
-                        oid, email, displayName, emailVerified, isOwner, isAdmin));
+                    // Slice OPS.M.13.3 — switched from ProvisionUserCommand
+                    // to ProvisionOrLinkUserCommand. Global isOwner/isAdmin
+                    // flags are dropped from the provisioning payload
+                    // entirely; role assignments happen through admin flows
+                    // per §2.2 (they were never DB-authoritative anyway —
+                    // OPS.M.15 formalizes the removal).
+                    // Provider is hardcoded to "entra" until OPS.M.12 wires
+                    // social IdPs through Entra federation.
+                    var userId = await mediator.Send(new ProvisionOrLinkUserCommand(
+                        Provider: "entra",
+                        ExternalId: oid,
+                        Email: email,
+                        EmailVerified: emailVerified,
+                        DisplayName: displayName));
 
                     ctx.Items[HttpCurrentUser.AppUserIdItemKey] = userId;
 

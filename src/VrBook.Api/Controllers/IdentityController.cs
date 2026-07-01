@@ -300,7 +300,8 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
         // Slice OPS.M.10.2 F11.7.5.10 — `identity.users` does NOT enforce
         // uniqueness on email; the row's identity is the Entra `oid`
         // (B2CObjectId). Every distinct Entra sign-in provisions a new row
-        // via `UserProvisioningMiddleware` -> `ProvisionUserCommand`.
+        // via `UserProvisioningMiddleware` -> `ProvisionOrLinkUserCommand`
+        // (M.13.3 replaced the earlier `ProvisionUserCommand`).
         // Result: one email can map to several rows if the same person
         // signed in through DevAuth (dev-oid stub) AND later through real
         // Entra (real oid). The F11.7 walk 2 report hit this: bootstrap

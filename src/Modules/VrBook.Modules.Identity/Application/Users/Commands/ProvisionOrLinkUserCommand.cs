@@ -4,7 +4,7 @@ using VrBook.Modules.Identity.Application.Behaviors;
 namespace VrBook.Modules.Identity.Application.Users.Commands;
 
 /// <summary>
-/// Slice OPS.M.13 — supersedes <see cref="ProvisionUserCommand"/> per
+/// Slice OPS.M.13 — supersedes the retired <c>ProvisionUserCommand</c> per
 /// <c>docs/OPS_M_13_IDENTITY_REDESIGN_PLAN.md</c> §2.2.
 ///
 /// <para>Issued by <c>UserProvisioningMiddleware</c> on every
