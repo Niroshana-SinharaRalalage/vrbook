@@ -51,6 +51,19 @@ DECLARE
     retired_memberships    INT := 0;
     still_owning           INT := 0;
 BEGIN
+    -- (0) Fresh-DB / integration-test early-return.
+    --     Migrator registers IdentityDbContext BEFORE CatalogDbContext
+    --     (Program.cs). On a fresh Postgres testcontainer the catalog
+    --     schema doesn't exist yet when this migration runs. Skip
+    --     entirely — there's nothing to heal in a fresh DB anyway.
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.tables
+         WHERE table_schema = 'catalog' AND table_name = 'properties'
+    ) THEN
+        RAISE NOTICE 'F11.7.7 fast-track: catalog.properties does not exist yet (fresh DB / testcontainer); skipping.';
+        RETURN;
+    END IF;
+
     -- (1) Transfer property ownership from DevAuth personas to a
     --     real-Entra tenant-admin survivor of the same tenant.
     --     WHERE clause is best-effort: no survivor -> property is
