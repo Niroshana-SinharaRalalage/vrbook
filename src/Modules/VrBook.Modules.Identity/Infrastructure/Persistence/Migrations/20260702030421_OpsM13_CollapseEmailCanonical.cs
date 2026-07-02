@@ -76,7 +76,7 @@ BEGIN
     THEN EXECUTE 'CREATE TABLE _pre_m13_snap.notifications_notification_log AS TABLE notifications.notification_log'; END IF;
 END $$;
 
-INSERT INTO identity.migration_audit (id, migration_name, step_name, affected_count, notes, executed_at)
+INSERT INTO identity.migration_audit (""Id"", migration_name, step_name, affected_count, notes, executed_at)
 SELECT gen_random_uuid(), 'OpsM13_CollapseEmailCanonical', 'snapshot',
        (SELECT COUNT(*) FROM _pre_m13_snap.users), NULL, NOW();
 ");
@@ -105,7 +105,7 @@ SELECT r.user_id AS non_survivor_id, s.user_id AS survivor_id
   JOIN survivors s ON s.email_key = r.email_key
  WHERE r.rn > 1;
 
-INSERT INTO identity.migration_audit (id, migration_name, step_name, affected_count, notes, executed_at)
+INSERT INTO identity.migration_audit (""Id"", migration_name, step_name, affected_count, notes, executed_at)
 SELECT gen_random_uuid(), 'OpsM13_CollapseEmailCanonical', 'survivor_pick',
        (SELECT COUNT(*)::int FROM _work_survivor_map),
        'total-ordering PA DESC → membership-count DESC → CreatedAt ASC → Id ASC',
@@ -163,7 +163,7 @@ BEGIN
         $f$, r.table_schema, r.table_name, r.column_name, r.column_name)
         INTO step_count;
 
-        INSERT INTO identity.migration_audit (id, migration_name, step_name, affected_count, notes, executed_at)
+        INSERT INTO identity.migration_audit (""Id"", migration_name, step_name, affected_count, notes, executed_at)
         VALUES (gen_random_uuid(),
                 'OpsM13_CollapseEmailCanonical',
                 format('rewrite_audit_%s.%s.%s', r.table_schema, r.table_name, r.column_name),
@@ -193,7 +193,7 @@ WITH inserted_5a AS (
     ON CONFLICT (provider, external_id) DO NOTHING
     RETURNING 1
 )
-INSERT INTO identity.migration_audit (id, migration_name, step_name, affected_count, notes, executed_at)
+INSERT INTO identity.migration_audit (""Id"", migration_name, step_name, affected_count, notes, executed_at)
 SELECT gen_random_uuid(), 'OpsM13_CollapseEmailCanonical', 'populate_identities_survivors',
        (SELECT COUNT(*)::int FROM inserted_5a), NULL, NOW();
 
@@ -214,7 +214,7 @@ WITH inserted_5b AS (
     ON CONFLICT (provider, external_id) DO NOTHING
     RETURNING 1
 )
-INSERT INTO identity.migration_audit (id, migration_name, step_name, affected_count, notes, executed_at)
+INSERT INTO identity.migration_audit (""Id"", migration_name, step_name, affected_count, notes, executed_at)
 SELECT gen_random_uuid(), 'OpsM13_CollapseEmailCanonical', 'populate_identities_nonsurvivors_linked',
        (SELECT COUNT(*)::int FROM inserted_5b), NULL, NOW();
 ");
@@ -230,7 +230,7 @@ WITH deleted AS (
      WHERE u.""Id"" = m.non_survivor_id
     RETURNING 1
 )
-INSERT INTO identity.migration_audit (id, migration_name, step_name, affected_count, notes, executed_at)
+INSERT INTO identity.migration_audit (""Id"", migration_name, step_name, affected_count, notes, executed_at)
 SELECT gen_random_uuid(), 'OpsM13_CollapseEmailCanonical', 'soft_delete_nonsurvivors',
        (SELECT COUNT(*)::int FROM deleted), NULL, NOW();
 ");
@@ -243,7 +243,7 @@ DROP INDEX IF EXISTS identity.""IX_users_b2c_object_id"";
 DROP INDEX IF EXISTS identity.""IX_users_email"";
 ALTER TABLE identity.users DROP COLUMN IF EXISTS b2c_object_id;
 
-INSERT INTO identity.migration_audit (id, migration_name, step_name, affected_count, notes, executed_at)
+INSERT INTO identity.migration_audit (""Id"", migration_name, step_name, affected_count, notes, executed_at)
 VALUES (gen_random_uuid(), 'OpsM13_CollapseEmailCanonical', 'drop_b2c_object_id_column', 1, NULL, NOW());
 ");
 
@@ -255,13 +255,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS users_email_active_lower_uq
     ON identity.users (lower(email))
     WHERE deleted_at IS NULL;
 
-INSERT INTO identity.migration_audit (id, migration_name, step_name, affected_count, notes, executed_at)
+INSERT INTO identity.migration_audit (""Id"", migration_name, step_name, affected_count, notes, executed_at)
 VALUES (gen_random_uuid(), 'OpsM13_CollapseEmailCanonical', 'ensure_partial_unique_email', 1, NULL, NOW());
 ");
 
             // Step 9: Final audit row -------------------------------------------------
             migrationBuilder.Sql(@"
-INSERT INTO identity.migration_audit (id, migration_name, step_name, affected_count, notes, executed_at)
+INSERT INTO identity.migration_audit (""Id"", migration_name, step_name, affected_count, notes, executed_at)
 SELECT gen_random_uuid(), 'OpsM13_CollapseEmailCanonical', 'complete',
        (SELECT COUNT(*)::int FROM identity.users WHERE deleted_at IS NULL),
        'final active users count', NOW();
@@ -293,7 +293,7 @@ BEGIN
         )
         SELECT COUNT(*)::int INTO step_count FROM updated;
     END IF;
-    INSERT INTO identity.migration_audit (id, migration_name, step_name, affected_count, notes, executed_at)
+    INSERT INTO identity.migration_audit (""Id"", migration_name, step_name, affected_count, notes, executed_at)
     VALUES (gen_random_uuid(),
             'OpsM13_CollapseEmailCanonical',
             'rewrite_{schema}_{table}.{column}',
