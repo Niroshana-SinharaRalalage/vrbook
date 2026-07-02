@@ -54,9 +54,13 @@ internal sealed class SeedTenantMembershipHandler(IdentityDbContext db)
             throw new NotFoundException("Tenant", cmd.TenantId);
         }
 
-        // Resolve Entra OID -> User.Id. The Entra path stores the OID in
-        // identity.users.b2c_object_id (same column the DevAuth path uses).
-        var user = await db.Users.FirstOrDefaultAsync(u => u.B2CObjectId == cmd.EntraOid, cancellationToken)
+        // Resolve Entra OID -> User.Id via identity.user_identities.
+        // Slice OPS.M.13.4 — the legacy users.b2c_object_id column is
+        // dropped; identity mapping lives in the user_identities table.
+        var user = await (from ui in db.UserIdentities
+                          where ui.Provider == "entra" && ui.ExternalId == cmd.EntraOid
+                          join u in db.Users on ui.UserId equals u.Id
+                          select u).FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("User (by EntraOid)", cmd.EntraOid);
 
         // Idempotent path: active membership already present.

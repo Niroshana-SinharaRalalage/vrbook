@@ -192,10 +192,10 @@ public sealed class TenantSchemaMigrationTests
         var seedUser = connection.CreateCommand();
         seedUser.CommandText = $"""
             INSERT INTO identity.users
-                ("Id", b2c_object_id, email, display_name, phone, is_owner, is_admin,
+                ("Id", email, display_name, phone, is_owner, is_admin,
                  email_verified, created_at, updated_at, row_version)
             VALUES
-                ('{userId}', 'oid-{userId}', 'unique-test-{userId}@vrbook.test',
+                ('{userId}', 'unique-test-{userId}@vrbook.test',
                  'Unique Test', '+10000000000', false, false, false, NOW(), NOW(), 0);
             """;
         await seedUser.ExecuteNonQueryAsync();
@@ -258,10 +258,10 @@ public sealed class TenantSchemaMigrationTests
         var seedUser = connection.CreateCommand();
         seedUser.CommandText = $"""
             INSERT INTO identity.users
-                ("Id", b2c_object_id, email, display_name, phone, is_owner, is_admin,
+                ("Id", email, display_name, phone, is_owner, is_admin,
                  email_verified, created_at, updated_at, row_version)
             VALUES
-                ('{userId}', 'oid-{userId}', 'role-check-{userId}@vrbook.test',
+                ('{userId}', 'role-check-{userId}@vrbook.test',
                  'Role Check', '+10000000000', false, false, false, NOW(), NOW(), 0);
             """;
         await seedUser.ExecuteNonQueryAsync();

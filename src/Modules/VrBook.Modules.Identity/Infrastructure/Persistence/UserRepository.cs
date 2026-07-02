@@ -5,9 +5,6 @@ namespace VrBook.Modules.Identity.Infrastructure.Persistence;
 
 internal sealed class UserRepository(IdentityDbContext db) : IUserRepository
 {
-    public Task<User?> GetByB2CObjectIdAsync(string b2cObjectId, CancellationToken ct = default) =>
-        db.Users.FirstOrDefaultAsync(u => u.B2CObjectId == b2cObjectId, ct);
-
     public Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         db.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
 
@@ -36,7 +33,7 @@ internal sealed class UserRepository(IdentityDbContext db) : IUserRepository
             var like = $"%{q.Trim().ToLowerInvariant()}%";
             query = query.Where(u =>
                 EF.Functions.ILike(u.DisplayName, like) ||
-                EF.Functions.ILike(((string)(object)u.Email), like));
+                EF.Functions.ILike(u.Email.Value, like));
         }
         return query;
     }
@@ -61,9 +58,4 @@ internal sealed class UserRepository(IdentityDbContext db) : IUserRepository
 
     public async Task AddAsync(User user, CancellationToken ct = default) =>
         await db.Users.AddAsync(user, ct);
-
-    public async Task<IReadOnlyList<User>> GetActiveByEmailAsync(string email, CancellationToken ct = default) =>
-        await db.Users
-            .Where(u => ((string)(object)u.Email) == email)
-            .ToListAsync(ct);
 }

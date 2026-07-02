@@ -49,7 +49,15 @@ internal sealed class SetPersonaEmailHandler(
         ArgumentException.ThrowIfNullOrWhiteSpace(request.B2CObjectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.NewEmail);
 
-        var user = await db.Users.FirstOrDefaultAsync(u => u.B2CObjectId == request.B2CObjectId, cancellationToken)
+        // Slice OPS.M.13.4 — oid -> user resolution now goes through
+        // identity.user_identities (was: users.b2c_object_id column, now
+        // dropped). The `B2CObjectId` request-field name is retained for
+        // wire-format compatibility with the dev-bridge callers; OPS.M.14
+        // renames it alongside DevAuth retirement.
+        var user = await (from ui in db.UserIdentities
+                          where ui.Provider == "entra" && ui.ExternalId == request.B2CObjectId
+                          join u in db.Users on ui.UserId equals u.Id
+                          select u).FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("User", request.B2CObjectId);
 
         var oldEmail = user.Email.Value;

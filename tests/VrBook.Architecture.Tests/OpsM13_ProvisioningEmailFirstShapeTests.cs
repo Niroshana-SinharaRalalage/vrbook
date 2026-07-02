@@ -77,13 +77,11 @@ public sealed class OpsM13_ProvisioningEmailFirstShapeTests
         var provisionOverloads = t.GetMethods(BindingFlags.Public | BindingFlags.Static)
             .Where(m => m.Name == "Provision")
             .ToArray();
-        provisionOverloads.Should().HaveCountGreaterThan(1,
-            because: "M.13.3 adds an email-first overload alongside the (deprecated) oid-first overload.");
         provisionOverloads.Should().Contain(m =>
             m.GetParameters().Length == 3
             && m.GetParameters()[0].ParameterType.Name == "Email"
             && m.GetParameters()[1].ParameterType == typeof(string)
             && m.GetParameters()[2].ParameterType == typeof(bool),
-            because: "Provision(Email, displayName, emailVerified) is the M.13 shape used by ProvisionOrLinkUserHandler Branch 3.");
+            because: "Provision(Email, displayName, emailVerified) is the M.13 shape used by ProvisionOrLinkUserHandler Branch 3. (M.13.4 dropped the legacy oid-first overload; exact-count of overloads is now locked by OpsM13_EmailCanonicalUsersShapeTests.)");
     }
 }

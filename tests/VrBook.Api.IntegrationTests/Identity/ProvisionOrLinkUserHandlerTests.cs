@@ -71,10 +71,7 @@ public sealed class ProvisionOrLinkUserHandlerTests(IdentityApiFixture fixture)
         {
             var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
             var clock = scope.ServiceProvider.GetRequiredService<IDateTimeProvider>();
-#pragma warning disable CS0618 // legacy overload — seed only
-            var user = User.Provision(ExistingOid, new Email(SharedEmail), "Seeded User",
-                emailVerified: true, isOwner: false, isAdmin: false);
-#pragma warning restore CS0618
+            var user = User.Provision(new Email(SharedEmail), "Seeded User", emailVerified: true);
             var identity = UserIdentity.Create(user.Id, EntraProvider, ExistingOid, clock.UtcNow.AddMinutes(-30));
             db.Users.Add(user);
             db.UserIdentities.Add(identity);
@@ -105,10 +102,7 @@ public sealed class ProvisionOrLinkUserHandlerTests(IdentityApiFixture fixture)
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
-#pragma warning disable CS0618
-            var user = User.Provision(ExistingOid, new Email(SharedEmail), "Existing Profile",
-                emailVerified: true, isOwner: false, isAdmin: false);
-#pragma warning restore CS0618
+            var user = User.Provision(new Email(SharedEmail), "Existing Profile", emailVerified: true);
             db.Users.Add(user);
             await db.SaveChangesAsync();
             seededUserId = user.Id;
@@ -138,10 +132,7 @@ public sealed class ProvisionOrLinkUserHandlerTests(IdentityApiFixture fixture)
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
-#pragma warning disable CS0618
-            var user = User.Provision(ExistingOid, new Email(SharedEmail), "Existing Profile",
-                emailVerified: true, isOwner: false, isAdmin: false);
-#pragma warning restore CS0618
+            var user = User.Provision(new Email(SharedEmail), "Existing Profile", emailVerified: true);
             db.Users.Add(user);
             await db.SaveChangesAsync();
         }

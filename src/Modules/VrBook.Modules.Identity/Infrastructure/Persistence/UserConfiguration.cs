@@ -11,19 +11,20 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         b.ToTable("users", IdentityDbContext.SchemaName);
         b.HasKey(u => u.Id);
 
-        b.Property(u => u.B2CObjectId).HasColumnName("b2c_object_id").HasMaxLength(64).IsRequired();
-        b.HasIndex(u => u.B2CObjectId).IsUnique();
-
         b.Property(u => u.Email)
             .HasColumnName("email")
             .HasMaxLength(320)
             .HasConversion(v => v.Value, v => new Email(v))
             .IsRequired();
-        // Slice 4 polish: relaxed to a non-unique index. DevAuth personas can
-        // share an inbox (e.g. niroshanaks@gmail.com) for end-to-end staging
-        // verification. Production uniqueness is enforced upstream at the
-        // Entra IdP (ADR-0012), so the DB constraint was belt-and-suspenders.
-        b.HasIndex(u => u.Email);
+        // Slice OPS.M.13.2 shipped the partial-UNIQUE `users_email_active_lower_uq`
+        // on `lower(email) WHERE deleted_at IS NULL`. Declare it here so the EF
+        // model snapshot reflects the DB state — the actual index creation lives
+        // in the migration (EF Fluent API cannot emit partial or expression
+        // indexes natively).
+        b.HasIndex(u => u.Email)
+            .HasDatabaseName("users_email_active_lower_uq")
+            .IsUnique()
+            .HasFilter("deleted_at IS NULL");
 
         b.Property(u => u.DisplayName).HasColumnName("display_name").HasMaxLength(200).IsRequired();
 
