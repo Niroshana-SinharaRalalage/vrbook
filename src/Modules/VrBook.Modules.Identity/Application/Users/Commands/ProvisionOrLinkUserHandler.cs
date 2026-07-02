@@ -125,7 +125,14 @@ internal sealed class ProvisionOrLinkUserHandler(
         db.Users
             .AsTracking()
             .FirstOrDefaultAsync(
-                u => EF.Functions.ILike(u.Email.Value, normalizedEmail) && u.DeletedAt == null,
+                // The ((string)(object)u.Email) cast is a Npgsql EF Core translator
+                // workaround: the Email HasConversion prevents u.Email.Value from
+                // being translated inside EF.Functions.ILike (fails at runtime with
+                // "could not be translated" — see reference_email_ilike_translator
+                // memory + M.13.4 fixup 2 for UserRepository.BuildQ). The soft-delete
+                // clause is redundant with the global query filter and dropped so the
+                // predicate stays translatable.
+                u => EF.Functions.ILike(((string)(object)u.Email), normalizedEmail),
                 cancellationToken);
 
     private async Task<Guid> LinkIdentityToUserAsync(
