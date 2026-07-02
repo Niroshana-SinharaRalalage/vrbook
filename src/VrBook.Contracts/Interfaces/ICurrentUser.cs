@@ -33,23 +33,40 @@ public interface ICurrentUser
     bool IsPlatformAdmin { get; }
 
     /// <summary>
-    /// The tenant the caller is currently acting as. Read from the
-    /// <c>app_tenant_id</c> claim stamped by the OPS.M.2 middleware
-    /// enrichment (UserProvisioningMiddleware reads the caller's
-    /// <c>tenant_memberships</c> row where <c>IsPrimary=true</c> and adds the
-    /// claim). Null for guests and any caller without a primary membership.
+    /// The tenant the caller is currently acting as.
+    ///
+    /// <para>Slice OPS.M.13.6 — sourced from <c>X-Active-Tenant</c> HTTP header
+    /// (SPA-injected from sessionStorage per the tenant picker in M.13.5) if
+    /// present and matching an active membership; falls back to the caller's
+    /// <c>IsPrimary=true</c> membership stamped by <c>UserProvisioningMiddleware</c>
+    /// for DevAuth + non-SPA callers. Null for guests and any caller without a
+    /// resolvable membership.</para>
     /// </summary>
     Guid? TenantId { get; }
+
+    /// <summary>
+    /// Slice OPS.M.13.6 — DB-authoritative per-tenant role dictionary
+    /// materialized by <c>UserProvisioningMiddleware</c> from
+    /// <c>identity.tenant_memberships</c>. The key is a tenant id; the value
+    /// is the set of role strings the caller holds for that tenant. Empty
+    /// dictionary for guests + callers without memberships.
+    ///
+    /// <para>This is the shape <see cref="HasTenantRole"/> is now built on
+    /// so per-tenant role checks are scoped to the active tenant instead of
+    /// leaking across tenants (fix for the pre-M.13 cross-tenant claim
+    /// hazard flagged in OPS_M_13_ARCHITECTURAL_REVIEW.md Ev-A).</para>
+    /// </summary>
+    IReadOnlyDictionary<Guid, IReadOnlySet<string>> MembershipRoles { get; }
 
     bool HasRole(string role);
 
     /// <summary>
     /// True iff the caller has the given per-tenant role for the given tenant.
-    /// Reads <c>ClaimTypes.Role</c> for the role match AND verifies
-    /// <c>app_tenant_id</c> equals <paramref name="tenantId"/>. The plain
-    /// <see cref="HasRole"/> alone cannot answer "WHICH tenant" — that's why
-    /// this method exists. Foundation for OPS.M.4's
-    /// <c>TenantAuthorizationBehavior</c>.
+    ///
+    /// <para>Slice OPS.M.13.6 — implemented against <see cref="MembershipRoles"/>
+    /// instead of <c>ClaimTypes.Role</c> so a tenant_admin membership in tenant
+    /// B cannot satisfy a role check against tenant A. Foundation for OPS.M.4's
+    /// <c>TenantAuthorizationBehavior</c>.</para>
     /// </summary>
     bool HasTenantRole(Guid tenantId, string role);
 }

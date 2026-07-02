@@ -34,13 +34,43 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
     public const string PlatformAdminRole = "PlatformAdmin";
 
     /// <summary>
-    /// Claim type carrying the caller's primary-tenant id (per OPS.M.2 /
-    /// `docs/OPS_M_2_PLAN.md` §2.5). String-formatted GUID, lowercase
-    /// canonical (`d` format). Stamped by <c>UserProvisioningMiddleware</c>
-    /// when the caller has an <c>IsPrimary=true</c> membership in
-    /// <c>tenant_memberships</c>.
+    /// Claim type carrying the caller's active-tenant id. Post-M.13.6 the
+    /// canonical source is <see cref="ActiveTenantItemKey"/> in
+    /// <c>HttpContext.Items</c> (populated from the <c>X-Active-Tenant</c>
+    /// header or the primary-membership fallback); this claim is kept as a
+    /// legacy accessor so anything still reading claim shape keeps working.
     /// </summary>
     public const string TenantIdClaimType = "app_tenant_id";
+
+    /// <summary>
+    /// Slice OPS.M.13.6 — <c>HttpContext.Items</c> key holding the resolved
+    /// active tenant id (Guid). Set by <c>UserProvisioningMiddleware</c>
+    /// from the <c>X-Active-Tenant</c> header when that header names a
+    /// valid membership; falls back to the caller's <c>IsPrimary=true</c>
+    /// membership so DevAuth + non-SPA callers keep resolving.
+    /// </summary>
+    public const string ActiveTenantItemKey = "VrBook:ActiveTenantId";
+
+    /// <summary>
+    /// Slice OPS.M.13.6 — <c>HttpContext.Items</c> key holding the caller's
+    /// per-tenant role dictionary
+    /// (<c>IReadOnlyDictionary&lt;Guid, IReadOnlySet&lt;string&gt;&gt;</c>).
+    /// Materialized by <c>UserProvisioningMiddleware</c> from
+    /// <c>identity.tenant_memberships</c>. <see cref="HasTenantRole"/>
+    /// reads through this key; the cross-tenant claim hazard from
+    /// pre-M.13 is closed because the role check is now correlated with
+    /// the tenant id in one lookup.
+    /// </summary>
+    public const string MembershipRolesItemKey = "VrBook:MembershipRoles";
+
+    /// <summary>
+    /// Slice OPS.M.13.6 — the HTTP header the SPA sets on every
+    /// non-anonymous request. Populated in the api client from
+    /// <c>getActiveTenantId()</c> (per-tab sessionStorage). Blank / missing
+    /// for direct API callers (curl, tests) — middleware falls back to
+    /// primary membership.
+    /// </summary>
+    public const string ActiveTenantHeader = "X-Active-Tenant";
 
     public Guid? UserId
     {
@@ -102,10 +132,43 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
     {
         get
         {
-            var raw = accessor.HttpContext?.User.FindFirstValue(TenantIdClaimType);
+            var ctx = accessor.HttpContext;
+            if (ctx is null)
+            {
+                return null;
+            }
+            // Slice OPS.M.13.6 — Items key is the canonical source (populated
+            // from X-Active-Tenant OR primary-membership fallback). Claim
+            // stays as a legacy accessor.
+            if (ctx.Items.TryGetValue(ActiveTenantItemKey, out var v) && v is Guid g)
+            {
+                return g;
+            }
+            var raw = ctx.User.FindFirstValue(TenantIdClaimType);
             return Guid.TryParse(raw, out var id) ? id : null;
         }
     }
+
+    public IReadOnlyDictionary<Guid, IReadOnlySet<string>> MembershipRoles
+    {
+        get
+        {
+            var ctx = accessor.HttpContext;
+            if (ctx is null)
+            {
+                return EmptyMembershipRoles;
+            }
+            if (ctx.Items.TryGetValue(MembershipRolesItemKey, out var v)
+                && v is IReadOnlyDictionary<Guid, IReadOnlySet<string>> dict)
+            {
+                return dict;
+            }
+            return EmptyMembershipRoles;
+        }
+    }
+
+    private static readonly IReadOnlyDictionary<Guid, IReadOnlySet<string>> EmptyMembershipRoles =
+        new Dictionary<Guid, IReadOnlySet<string>>();
 
     public bool HasTenantRole(Guid tenantId, string role)
     {
@@ -113,17 +176,13 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
         {
             return false;
         }
-        var user = accessor.HttpContext?.User;
-        if (user is null || user.Identity?.IsAuthenticated != true)
-        {
-            return false;
-        }
-        if (!HasRole(role))
-        {
-            return false;
-        }
-        var raw = user.FindFirstValue(TenantIdClaimType);
-        return Guid.TryParse(raw, out var claimTenant) && claimTenant == tenantId;
+        // Slice OPS.M.13.6 — direct dictionary lookup: the caller's role
+        // set for the specific tenant. Pre-M.13.6 this went through
+        // ClaimTypes.Role + app_tenant_id claim, which allowed a
+        // tenant_admin role in tenant B to satisfy a HasTenantRole(A, ...)
+        // check. See docs/OPS_M_10_2_F11_ARCHITECTURAL_REVIEW.md Ev-A.
+        return MembershipRoles.TryGetValue(tenantId, out var roles)
+            && roles.Contains(role);
     }
 
     public bool HasRole(string role)

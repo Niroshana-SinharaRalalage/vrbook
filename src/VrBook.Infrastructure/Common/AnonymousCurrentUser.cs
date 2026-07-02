@@ -8,6 +8,9 @@ namespace VrBook.Infrastructure.Common;
 /// </summary>
 public sealed class AnonymousCurrentUser : ICurrentUser
 {
+    private static readonly IReadOnlyDictionary<Guid, IReadOnlySet<string>> EmptyMembershipRoles =
+        new Dictionary<Guid, IReadOnlySet<string>>();
+
     public Guid? UserId => null;
     public string? B2CObjectId => null;
     public string? Email => null;
@@ -16,6 +19,7 @@ public sealed class AnonymousCurrentUser : ICurrentUser
     public bool IsAdmin => false;
     public bool IsPlatformAdmin => false;
     public Guid? TenantId => null;
+    public IReadOnlyDictionary<Guid, IReadOnlySet<string>> MembershipRoles => EmptyMembershipRoles;
     public bool HasRole(string role) => false;
     public bool HasTenantRole(Guid tenantId, string role) => false;
 }

@@ -11,16 +11,24 @@ namespace VrBook.Modules.Identity.Infrastructure.Auth;
 
 /// <summary>
 /// On every authenticated request, ensures a row exists in <c>identity.users</c> for the
-/// caller's B2C <c>oid</c>. First-login provisions the row; subsequent calls refresh
-/// LastLoginAt + DisplayName + EmailVerified from the latest token. Stamps
-/// <c>HttpCurrentUser.AppUserIdItemKey</c> on <see cref="HttpContext.Items"/> so downstream
-/// handlers can read <see cref="VrBook.Contracts.Interfaces.ICurrentUser.UserId"/>.
+/// caller's external identity (Entra oid + provider) via
+/// <c>ProvisionOrLinkUserCommand</c>. Also stamps <c>HttpContext.Items</c> with the
+/// app-side user id + platform-admin flag + resolved active tenant + per-tenant
+/// role dictionary. Downstream handlers read these through <c>ICurrentUser</c>.
 ///
-/// OPS.M.2: after provisioning, reads the caller's <c>tenant_memberships</c> rows and
-/// stamps <c>ClaimTypes.Role</c> (one per membership) + <c>app_tenant_id</c> (from the
-/// <c>IsPrimary=true</c> row) onto the request's <see cref="ClaimsPrincipal"/>. DB is the
-/// sole source of truth per `docs/OPS_M_2_PLAN.md` §2.7 (DB-wins precedence) — no
-/// claim-already-present guard; the DB read always runs.
+/// <para>Slice OPS.M.13.6 — active-tenant resolution flipped from
+/// "always the caller's IsPrimary membership" to "X-Active-Tenant header if
+/// present and valid, else IsPrimary membership fallback". The tenant-picker
+/// SPA sets the header from sessionStorage on every non-anonymous request;
+/// DevAuth cookies + curl callers hit the fallback and behave as before.</para>
+///
+/// <para>Slice OPS.M.13.6 — the per-membership <c>ClaimTypes.Role</c> loop
+/// was dropped. Downstream tenant-role checks read
+/// <c>ICurrentUser.MembershipRoles</c> which is stamped as a
+/// <c>Dictionary&lt;Guid, IReadOnlySet&lt;string&gt;&gt;</c> on
+/// <c>HttpContext.Items</c>. The <c>PlatformAdmin</c> role claim IS still
+/// written because <c>[Authorize(Roles="PlatformAdmin")]</c> reads through
+/// <c>ClaimsPrincipal.IsInRole</c>.</para>
 /// </summary>
 public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<UserProvisioningMiddleware> logger)
 {
@@ -46,14 +54,6 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<Use
                         ctx.User.FindFirstValue("email_verified"), "true",
                         StringComparison.OrdinalIgnoreCase);
 
-                    // Slice OPS.M.13.3 — switched from ProvisionUserCommand
-                    // to ProvisionOrLinkUserCommand. Global isOwner/isAdmin
-                    // flags are dropped from the provisioning payload
-                    // entirely; role assignments happen through admin flows
-                    // per §2.2 (they were never DB-authoritative anyway —
-                    // OPS.M.15 formalizes the removal).
-                    // Provider is hardcoded to "entra" until OPS.M.12 wires
-                    // social IdPs through Entra federation.
                     var userId = await mediator.Send(new ProvisionOrLinkUserCommand(
                         Provider: "entra",
                         ExternalId: oid,
@@ -63,10 +63,6 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<Use
 
                     ctx.Items[HttpCurrentUser.AppUserIdItemKey] = userId;
 
-                    // OPS.M.2 — DB-wins per-tenant claim enrichment.
-                    // OPS.M.8 §3.2 (D2) — also read the user's is_platform_admin
-                    // bit on the same round-trip; stamp it onto HttpContext.Items
-                    // and add a "PlatformAdmin" role claim so [Authorize] works.
                     var memberships = await db.Set<TenantMembership>()
                         .Where(m => m.UserId == userId && m.DeletedAt == null)
                         .Select(m => new { m.TenantId, m.Role, m.IsPrimary })
@@ -79,26 +75,61 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<Use
 
                     ctx.Items[HttpCurrentUser.PlatformAdminItemKey] = isPlatformAdmin;
 
-                    if ((memberships.Count > 0 || isPlatformAdmin)
+                    // Slice OPS.M.13.6 — build the per-tenant role dictionary and stamp
+                    // Items[MembershipRoles]. Multiple memberships in the same tenant
+                    // (rare — shouldn't happen given the (user_id, tenant_id) partial
+                    // UNIQUE — but defense in depth) get their role sets merged.
+                    var membershipRoles = memberships
+                        .GroupBy(m => m.TenantId)
+                        .ToDictionary<IGrouping<Guid, dynamic>, Guid, IReadOnlySet<string>>(
+                            g => g.Key,
+                            g => (IReadOnlySet<string>)new HashSet<string>(
+                                g.Select(m => (string)m.Role),
+                                StringComparer.Ordinal));
+                    ctx.Items[HttpCurrentUser.MembershipRolesItemKey] = membershipRoles;
+
+                    // Slice OPS.M.13.6 — active tenant resolution.
+                    // Priority: X-Active-Tenant header (SPA) → IsPrimary fallback (DevAuth + tests).
+                    Guid? activeTenantId = null;
+                    var headerValue = ctx.Request.Headers[HttpCurrentUser.ActiveTenantHeader]
+                        .ToString();
+                    if (!string.IsNullOrWhiteSpace(headerValue)
+                        && Guid.TryParse(headerValue, out var headerTenantId)
+                        && memberships.Any(m => m.TenantId == headerTenantId))
+                    {
+                        activeTenantId = headerTenantId;
+                    }
+                    else
+                    {
+                        var primary = memberships.FirstOrDefault(m => m.IsPrimary);
+                        if (primary is not null)
+                        {
+                            activeTenantId = primary.TenantId;
+                        }
+                    }
+
+                    if (activeTenantId.HasValue)
+                    {
+                        ctx.Items[HttpCurrentUser.ActiveTenantItemKey] = activeTenantId.Value;
+                    }
+
+                    // Slice OPS.M.13.6 — write ONLY the PlatformAdmin role claim +
+                    // the legacy app_tenant_id claim (still consumed by pre-M.13
+                    // code paths + any external audit). Per-membership role claims
+                    // are gone; HasTenantRole reads MembershipRoles from Items.
+                    if ((activeTenantId.HasValue || isPlatformAdmin)
                         && ctx.User.Identity is ClaimsIdentity primaryIdentity)
                     {
-                        foreach (var m in memberships)
-                        {
-                            // Duplicate role-name claims across tenants are OK — IsInRole is set membership.
-                            primaryIdentity.AddClaim(new Claim(ClaimTypes.Role, m.Role));
-                        }
-
                         if (isPlatformAdmin)
                         {
                             primaryIdentity.AddClaim(new Claim(
                                 ClaimTypes.Role, HttpCurrentUser.PlatformAdminRole));
                         }
 
-                        var primary = memberships.FirstOrDefault(m => m.IsPrimary);
-                        if (primary is not null)
+                        if (activeTenantId.HasValue)
                         {
                             primaryIdentity.AddClaim(new Claim(
-                                HttpCurrentUser.TenantIdClaimType, primary.TenantId.ToString()));
+                                HttpCurrentUser.TenantIdClaimType, activeTenantId.Value.ToString()));
                         }
                     }
                 }

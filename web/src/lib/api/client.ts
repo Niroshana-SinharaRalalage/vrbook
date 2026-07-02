@@ -44,6 +44,24 @@ export const setTokenProvider = (provider: TokenProvider): void => {
   tokenProvider = provider;
 };
 
+/**
+ * Slice OPS.M.13.6 — the SPA attaches the resolved active tenant id on every
+ * non-anonymous request. The backend middleware uses this header to stamp
+ * `HttpContext.Items[VrBook:ActiveTenantId]` (verified against the caller's
+ * memberships); handlers read it via `ICurrentUser.TenantId`.
+ *
+ * Injected here rather than inline so the `activeTenant` sessionStorage module
+ * stays browser-only (this file is used server-side too). Providers.tsx wires
+ * this up on mount.
+ */
+export type ActiveTenantProvider = () => string | null;
+
+let activeTenantProvider: ActiveTenantProvider = () => null;
+
+export const setActiveTenantProvider = (provider: ActiveTenantProvider): void => {
+  activeTenantProvider = provider;
+};
+
 /** Read the current W3C trace header, if any tracer set one. */
 const readTraceparent = (): string | null => {
   if (typeof window === 'undefined') return null;
@@ -112,6 +130,11 @@ export const apiFetch = async <T = unknown>(
   if (!anonymous) {
     const token = await tokenProvider();
     if (token) headers['Authorization'] = `Bearer ${token}`;
+    // Slice OPS.M.13.6 — attach the resolved active tenant id if the SPA
+    // has set one. Anonymous paths (public property search, health checks)
+    // skip this so callers can't leak a stale value to unauthenticated routes.
+    const activeTenantId = activeTenantProvider();
+    if (activeTenantId) headers['X-Active-Tenant'] = activeTenantId;
   }
 
   const traceparent = readTraceparent();

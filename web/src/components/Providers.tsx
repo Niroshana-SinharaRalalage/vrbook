@@ -12,7 +12,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 
 import { msalConfig, apiScopes } from '@/lib/auth/msalConfig';
-import { setTokenProvider } from '@/lib/api/client';
+import { setActiveTenantProvider, setTokenProvider } from '@/lib/api/client';
+import { getActiveTenantId } from '@/lib/tenants/activeTenant';
 
 interface ProvidersProps {
   readonly children: ReactNode;
@@ -68,6 +69,11 @@ export const Providers = ({ children }: ProvidersProps) => {
     // NOT `${clientId}/.default` - the latter would target the SPA itself
     // and every authenticated /api/* call would 401 with audience mismatch.
     // See msalConfig.ts:64 + docs/OPS_M_0_PLAN.md §2.4.
+    // Slice OPS.M.13.6 — attach the picker's sessionStorage value as
+    // X-Active-Tenant on every non-anonymous request. Read fresh each call
+    // so tab-scoped changes propagate immediately.
+    setActiveTenantProvider(() => getActiveTenantId());
+
     setTokenProvider(async () => {
       const account = msalInstance.getActiveAccount();
       if (!account) return null;
