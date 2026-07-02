@@ -37,9 +37,13 @@ internal sealed class UserIdentityConfiguration : IEntityTypeConfiguration<UserI
         b.Property(x => x.DeletedAt).HasColumnName("deleted_at");
         b.Property(x => x.DeletedBy).HasColumnName("deleted_by");
 
-        b.Property<long>("RowVersion")
-            .HasColumnName("row_version")
-            .IsRowVersion();
+        // Match the pattern from UserConfiguration / TenantConfiguration:
+        // RowVersion is app-managed (inherited from AggregateRoot, default 0
+        // on new rows). NOT declared .IsRowVersion() because Postgres does
+        // not auto-generate bigint columns; that would leave the column
+        // NULL on INSERT and trip the NOT NULL constraint (which is exactly
+        // the failure that CI caught on fe1360c).
+        b.Property(x => x.RowVersion).HasColumnName("row_version");
 
         // FK to identity.users. ON DELETE CASCADE per the design doc:
         // if a users row is hard-deleted (e.g., GDPR erasure) all its

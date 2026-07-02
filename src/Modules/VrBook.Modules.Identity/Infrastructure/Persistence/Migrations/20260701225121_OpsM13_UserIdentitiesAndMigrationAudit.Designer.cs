@@ -528,8 +528,6 @@ namespace VrBook.Modules.Identity.Infrastructure.Persistence.Migrations
                         .HasColumnName("provider");
 
                     b.Property<long>("RowVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("bigint")
                         .HasColumnName("row_version");
 
