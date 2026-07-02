@@ -102,3 +102,30 @@ public sealed record PlatformTenantDto(
     decimal LifetimeGrossRevenue,
     DateTimeOffset CreatedAt,
     DateTimeOffset? UpdatedAt);
+
+/// <summary>
+/// Slice OPS.M.13.5 — response for <c>GET /api/v1/me/tenants</c>. Lists every
+/// active tenant_memberships row the caller has, so the SPA can drive the
+/// post-sign-in tenant picker per <c>docs/OPS_M_13_IDENTITY_REDESIGN_PLAN.md</c>
+/// §3.2. Includes IsPlatformAdmin at the top level so the SPA can route platform-
+/// only humans (no memberships but PA=true) straight to the platform dashboard
+/// instead of the "no tenant" dead-end.
+/// </summary>
+public sealed record MyTenantsResponse(
+    IReadOnlyList<MyTenantMembershipDto> Memberships,
+    bool IsPlatformAdmin);
+
+/// <summary>
+/// Slice OPS.M.13.5 — one tenant + role pair the caller has access to. Role is
+/// the DB <c>identity.tenant_memberships.role</c> value (e.g. <c>"tenant_admin"</c>,
+/// <c>"tenant_owner"</c>). Status is the tenant's operational status
+/// (<c>"Active"</c> / <c>"PendingOnboarding"</c> / <c>"Suspended"</c> / <c>"Closed"</c>)
+/// so the picker can gray out non-usable tenants.
+/// </summary>
+public sealed record MyTenantMembershipDto(
+    Guid TenantId,
+    string Slug,
+    string DisplayName,
+    string Status,
+    string Role,
+    bool IsPrimary);

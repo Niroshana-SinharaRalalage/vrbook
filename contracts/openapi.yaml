@@ -72,6 +72,37 @@ paths:
       responses:
         '204': { description: Deactivated. }
 
+  /me/tenants:
+    get:
+      tags: [Identity]
+      summary: List every tenant the caller has active membership in.
+      description: |
+        Slice OPS.M.13.5 — used by the SPA post-sign-in callback to drive
+        the tenant picker. 0 memberships → landing; 1 → auto-pick; N → /select-tenant.
+      responses:
+        '200':
+          description: Membership list + PlatformAdmin flag.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [memberships, isPlatformAdmin]
+                properties:
+                  memberships:
+                    type: array
+                    items:
+                      type: object
+                      required: [tenantId, slug, displayName, status, role, isPrimary]
+                      properties:
+                        tenantId:    { type: string, format: uuid }
+                        slug:        { type: string }
+                        displayName: { type: string }
+                        status:      { type: string, enum: [Active, PendingOnboarding, Suspended, Closed] }
+                        role:        { type: string }
+                        isPrimary:   { type: boolean }
+                  isPlatformAdmin: { type: boolean }
+        '401': { $ref: '#/components/responses/Problem401' }
+
   # =========================== Catalog ============================
   /properties:
     get:

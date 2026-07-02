@@ -60,6 +60,22 @@ public sealed class IdentityController(IMediator mediator) : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<MeTenantDto>> GetTenant(CancellationToken ct) =>
         Ok(await mediator.Send(new GetMyTenantQuery(), ct));
+
+    /// <summary>
+    /// Slice OPS.M.13.5 — list every tenant the caller has active membership in.
+    /// The SPA's post-sign-in callback calls this to route based on membership
+    /// count (0/1/N) per <c>docs/OPS_M_13_IDENTITY_REDESIGN_PLAN.md</c> §3.2.
+    /// Not <c>[Authorize(Roles = "Owner,Admin")]</c> — the picker needs to
+    /// answer "which tenants CAN I sign into" for any authenticated human,
+    /// including PlatformAdmins with zero tenant memberships.
+    /// </summary>
+    [HttpGet("tenants")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [SwaggerOperation(Summary = "List every tenant the caller has active membership in (OPS.M.13.5).")]
+    [ProducesResponseType(typeof(MyTenantsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<MyTenantsResponse>> GetTenants(CancellationToken ct) =>
+        Ok(await mediator.Send(new GetMyTenantsQuery(), ct));
 }
 
 /// <summary>
