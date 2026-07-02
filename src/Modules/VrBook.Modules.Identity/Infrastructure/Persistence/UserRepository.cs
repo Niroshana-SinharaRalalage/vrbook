@@ -31,9 +31,13 @@ internal sealed class UserRepository(IdentityDbContext db) : IUserRepository
         if (!string.IsNullOrWhiteSpace(q))
         {
             var like = $"%{q.Trim().ToLowerInvariant()}%";
+            // The cast-to-object-then-string idiom is a Npgsql EF Core translator
+            // workaround: HasConversion on Email prevents u.Email.Value from
+            // being translated inside EF.Functions.ILike. See M.13.4 CI run
+            // 28562876342 for the failure this fixes.
             query = query.Where(u =>
                 EF.Functions.ILike(u.DisplayName, like) ||
-                EF.Functions.ILike(u.Email.Value, like));
+                EF.Functions.ILike(((string)(object)u.Email), like));
         }
         return query;
     }
