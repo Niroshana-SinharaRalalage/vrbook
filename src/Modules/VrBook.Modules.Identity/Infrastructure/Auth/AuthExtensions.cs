@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
 namespace VrBook.Modules.Identity.Infrastructure.Auth;
@@ -57,6 +58,46 @@ public static class AuthExtensions
                     ValidAudience = entraClientId,
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromMinutes(2),
+                };
+
+                // Slice OPS.M.13.6 diagnostic — JwtBearer's default 401 path is
+                // silent (no LA trace of WHY validation failed). These handlers
+                // surface the actual reason so evidence-based RCA is possible.
+                opts.Events = new JwtBearerEvents
+                {
+                    OnAuthenticationFailed = ctx =>
+                    {
+                        var logger = ctx.HttpContext.RequestServices
+                            .GetRequiredService<ILoggerFactory>()
+                            .CreateLogger("JwtBearer.AuthEvents");
+                        logger.LogWarning(ctx.Exception,
+                            "JWT authentication FAILED on {Path}. Type={ExType} Message={ExMsg}",
+                            ctx.HttpContext.Request.Path,
+                            ctx.Exception?.GetType().FullName ?? "<none>",
+                            ctx.Exception?.Message ?? "<none>");
+                        return Task.CompletedTask;
+                    },
+                    OnChallenge = ctx =>
+                    {
+                        // OnChallenge fires even when the token is simply absent.
+                        // Only log when there's a failure/description worth
+                        // capturing so we don't spam LA on anonymous requests.
+                        if (!string.IsNullOrEmpty(ctx.Error)
+                            || !string.IsNullOrEmpty(ctx.ErrorDescription)
+                            || ctx.AuthenticateFailure is not null)
+                        {
+                            var logger = ctx.HttpContext.RequestServices
+                                .GetRequiredService<ILoggerFactory>()
+                                .CreateLogger("JwtBearer.AuthEvents");
+                            logger.LogWarning(
+                                "JWT challenge on {Path}. Error={Err} Desc={Desc} FailureType={FT}",
+                                ctx.HttpContext.Request.Path,
+                                ctx.Error ?? "<none>",
+                                ctx.ErrorDescription ?? "<none>",
+                                ctx.AuthenticateFailure?.GetType().FullName ?? "<none>");
+                        }
+                        return Task.CompletedTask;
+                    },
                 };
             });
         }
