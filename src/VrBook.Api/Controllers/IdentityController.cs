@@ -290,8 +290,10 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
         [FromServices] VrBook.Modules.Pricing.Infrastructure.Persistence.PricingDbContext pricingDb,
         [FromServices] VrBook.Modules.Catalog.Infrastructure.Persistence.CatalogDbContext catalogDb,
         [FromServices] Microsoft.Extensions.Hosting.IHostEnvironment hostEnv,
+        [FromServices] Microsoft.Extensions.Logging.ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
+        var opLogger = loggerFactory.CreateLogger("Ops.BootstrapOperator");
         if (hostEnv.IsProduction())
         {
             return NotFound();
@@ -337,20 +339,34 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
             .ToListAsync(ct);
         if (usersWithEmail.Count == 0)
         {
-            // Diagnostic surface — return matching emails as a substring probe
-            // so the operator sees exactly what rows exist. Uses Problem()
-            // (not NotFound()) so the ProblemDetails middleware doesn't strip
-            // the extended payload.
             var localPart = body.Email.Split('@', 2)[0];
             var probeEmails = await idDb.Users
                 .Where(u => EF.Functions.ILike(((string)(object)u.Email), $"%{localPart}%"))
                 .Select(u => ((string)(object)u.Email))
                 .Take(20)
                 .ToListAsync(ct);
+            var allEmailsSample = await idDb.Users
+                .OrderBy(u => u.CreatedAt)
+                .Select(u => ((string)(object)u.Email))
+                .Take(30)
+                .ToListAsync(ct);
+            var tenantIds = await idDb.Tenants
+                .Select(t => new { t.Id, t.Slug })
+                .Take(20)
+                .ToListAsync(ct);
+            opLogger.LogWarning(
+                "bootstrap-operator diagnostic: NO_EXACT_MATCH email={Email}. " +
+                "SubstringMatches={SubCount} SubEmails={SubEmails}. " +
+                "AllEmailsSampleCount={AllCount} Sample={AllSample}. " +
+                "Tenants={TenantList}",
+                body.Email,
+                probeEmails.Count, string.Join("|", probeEmails),
+                allEmailsSample.Count, string.Join("|", allEmailsSample),
+                string.Join("|", tenantIds.Select(t => $"{t.Id}={t.Slug}")));
             return Problem(
-                detail: $"No exact-ILike match for '{body.Email}'. Substring '{localPart}' matches {probeEmails.Count}: {string.Join(", ", probeEmails)}",
+                detail: "No user match — see Log Analytics 'Ops.BootstrapOperator' warning for probe details.",
                 statusCode: 404,
-                title: "User not found (diagnostic)");
+                title: "User not found");
         }
         foreach (var u in usersWithEmail)
         {
