@@ -79,19 +79,24 @@ public static class AuthExtensions
                     },
                     OnChallenge = ctx =>
                     {
-                        // OnChallenge fires even when the token is simply absent.
-                        // Only log when there's a failure/description worth
-                        // capturing so we don't spam LA on anonymous requests.
-                        if (!string.IsNullOrEmpty(ctx.Error)
-                            || !string.IsNullOrEmpty(ctx.ErrorDescription)
-                            || ctx.AuthenticateFailure is not null)
+                        // Log every challenge on /api/v1/* so we can distinguish
+                        // "no token attached" (Error/Desc empty, AuthorizationHeader missing)
+                        // from "token rejected" (Error/Desc populated with reason).
+                        // Anonymous public routes don't hit this path with a bearer at all
+                        // so we won't spam the log unless someone hits an authed route.
+                        var path = ctx.HttpContext.Request.Path.Value ?? "";
+                        if (path.StartsWith("/api/v1/", StringComparison.Ordinal))
                         {
+                            var authHeader = ctx.HttpContext.Request.Headers["Authorization"].ToString();
+                            var hasBearer = !string.IsNullOrEmpty(authHeader)
+                                && authHeader.StartsWith("Bearer ", StringComparison.Ordinal);
                             var logger = ctx.HttpContext.RequestServices
                                 .GetRequiredService<ILoggerFactory>()
                                 .CreateLogger("JwtBearer.AuthEvents");
                             logger.LogWarning(
-                                "JWT challenge on {Path}. Error={Err} Desc={Desc} FailureType={FT}",
-                                ctx.HttpContext.Request.Path,
+                                "JWT challenge on {Path}. HasBearer={HasBearer} Error={Err} Desc={Desc} FailureType={FT}",
+                                path,
+                                hasBearer,
                                 ctx.Error ?? "<none>",
                                 ctx.ErrorDescription ?? "<none>",
                                 ctx.AuthenticateFailure?.GetType().FullName ?? "<none>");

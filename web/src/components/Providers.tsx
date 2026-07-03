@@ -76,23 +76,41 @@ export const Providers = ({ children }: ProvidersProps) => {
 
     setTokenProvider(async () => {
       const account = msalInstance.getActiveAccount();
-      if (!account) return null;
+      if (!account) {
+        // eslint-disable-next-line no-console
+        console.warn('[vrbook-auth] tokenProvider: no active MSAL account. All authed API calls will 401.');
+        return null;
+      }
       try {
         const result = await msalInstance.acquireTokenSilent({
           scopes: apiScopes,
           account,
         });
+        if (!result.accessToken) {
+          // eslint-disable-next-line no-console
+          console.warn('[vrbook-auth] acquireTokenSilent returned an empty accessToken.', {
+            scopes: apiScopes,
+            expiresOn: result.expiresOn,
+            tenantId: result.tenantId,
+          });
+          return null;
+        }
         return result.accessToken;
       } catch (err) {
-        // Slice OPS.M.10.2 F11.7.4.1 — don't silently return null.
-        // Pre-fix any failure (consent needed, expired refresh token,
-        // session expired) returned null AND let apiFetch proceed
-        // without Authorization. Every authed call then 401'd
-        // permanently and the user saw "Unauthorized" with no way out
-        // short of manual sign-out / sign-in. InteractionRequiredAuthError
-        // is the canonical signal that interactive re-auth is needed —
-        // bounce to redirect so MSAL re-issues the token and brings the
-        // user back to the current route.
+        // Slice OPS.M.10.2 F11.7.4.1 — original fix redirected only on
+        // InteractionRequiredAuthError. OPS.M.13.6 diagnostic pass — every
+        // non-InteractionRequired failure now logs to the browser console
+        // so we can see WHY the token acquisition failed. Silent null
+        // returns still cause the "signed-in-but-unauthed" trap (F11.7.4.1).
+        const asAny = err as { errorCode?: string; errorMessage?: string; name?: string };
+        // eslint-disable-next-line no-console
+        console.error('[vrbook-auth] acquireTokenSilent failed.', {
+          name: asAny?.name ?? '<no-name>',
+          errorCode: asAny?.errorCode ?? '<no-code>',
+          errorMessage: asAny?.errorMessage ?? '<no-msg>',
+          isInteractionRequired: err instanceof InteractionRequiredAuthError,
+          raw: err,
+        });
         if (err instanceof InteractionRequiredAuthError) {
           try {
             await msalInstance.acquireTokenRedirect({
