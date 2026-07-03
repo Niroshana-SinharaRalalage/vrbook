@@ -329,12 +329,22 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
         // per row. The multi-row shape itself is deferred to F11.7.6; the
         // dev-bridge just widens its target here so operator setup lands
         // on whichever row the current session happens to be using.
+        // Slice OPS.M.13.6 walk fix — case-insensitive email match. Some
+        // users' rows were provisioned with the pre-fix synthetic
+        // '{oid}@unknown.local' or with case variants; ILike catches all.
         var usersWithEmail = await idDb.Users
-            .Where(u => ((string)(object)u.Email) == body.Email)
+            .Where(u => EF.Functions.ILike(((string)(object)u.Email), body.Email))
             .ToListAsync(ct);
         if (usersWithEmail.Count == 0)
         {
-            return NotFound(new { detail = $"No user with email '{body.Email}' has signed in to staging yet." });
+            // Diagnostic surface: also count matches on lower(email) contains
+            // so the operator sees whether the row exists in a different case.
+            var likeCount = await idDb.Users
+                .CountAsync(u => EF.Functions.ILike(((string)(object)u.Email), $"%{body.Email}%"), ct);
+            return NotFound(new
+            {
+                detail = $"No user with email '{body.Email}' has signed in to staging yet. Substring-ILike match count: {likeCount}.",
+            });
         }
         foreach (var u in usersWithEmail)
         {
