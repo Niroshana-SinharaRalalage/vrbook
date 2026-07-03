@@ -11,5 +11,13 @@ export const useMe = () =>
     queryKey: ['me'],
     queryFn: getCurrentUser,
     staleTime: 60_000,
-    retry: false,
+    // Slice OPS.M.13.6 — bounded 1-shot 401 retry lets the MSAL init race
+    // self-heal on cold loads (token provider waited for account
+    // materialization; second attempt fires with a valid bearer). All other
+    // 4xx still fail-fast to avoid masking real auth problems.
+    retry: (failureCount, error) => {
+      const status = (error as { status?: number } | undefined)?.status;
+      return status === 401 && failureCount < 1;
+    },
+    retryDelay: 400,
   });
