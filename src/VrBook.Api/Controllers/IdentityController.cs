@@ -337,14 +337,20 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
             .ToListAsync(ct);
         if (usersWithEmail.Count == 0)
         {
-            // Diagnostic surface: also count matches on lower(email) contains
-            // so the operator sees whether the row exists in a different case.
-            var likeCount = await idDb.Users
-                .CountAsync(u => EF.Functions.ILike(((string)(object)u.Email), $"%{body.Email}%"), ct);
-            return NotFound(new
-            {
-                detail = $"No user with email '{body.Email}' has signed in to staging yet. Substring-ILike match count: {likeCount}.",
-            });
+            // Diagnostic surface — return matching emails as a substring probe
+            // so the operator sees exactly what rows exist. Uses Problem()
+            // (not NotFound()) so the ProblemDetails middleware doesn't strip
+            // the extended payload.
+            var localPart = body.Email.Split('@', 2)[0];
+            var probeEmails = await idDb.Users
+                .Where(u => EF.Functions.ILike(((string)(object)u.Email), $"%{localPart}%"))
+                .Select(u => ((string)(object)u.Email))
+                .Take(20)
+                .ToListAsync(ct);
+            return Problem(
+                detail: $"No exact-ILike match for '{body.Email}'. Substring '{localPart}' matches {probeEmails.Count}: {string.Join(", ", probeEmails)}",
+                statusCode: 404,
+                title: "User not found (diagnostic)");
         }
         foreach (var u in usersWithEmail)
         {
