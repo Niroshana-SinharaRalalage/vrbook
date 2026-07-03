@@ -41,18 +41,54 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<Use
             {
                 try
                 {
-                    var email = ctx.User.FindFirstValue("emails")
-                                ?? ctx.User.FindFirstValue(ClaimTypes.Email)
-                                ?? ctx.User.FindFirstValue("email")
-                                ?? $"{oid}@unknown.local";
+                    // Slice OPS.M.13.6 walk fix — broadened claim-name coverage.
+                    // Entra External ID user flows that don't include email
+                    // claim in the "Application Claims" config emit the user's
+                    // email in preferred_username / upn instead. Order goes
+                    // most-specific → most-fallback; the synthetic
+                    // '@unknown.local' is a last-resort that must never win
+                    // when a real email claim is available (previous
+                    // signature-ordering bug shipped rows keyed on the fake
+                    // email; see LA trace 3c4bff266643b848dec1b075a9c9a5b3).
+                    var rawEmail = ctx.User.FindFirstValue("emails")
+                                   ?? ctx.User.FindFirstValue("email")
+                                   ?? ctx.User.FindFirstValue(ClaimTypes.Email)
+                                   ?? ctx.User.FindFirstValue("preferred_username")
+                                   ?? ctx.User.FindFirstValue("upn");
+                    // Reject synthetic-looking values (e.g. a raw oid mistakenly
+                    // put in preferred_username) before falling to the last
+                    // resort. If we still don't have anything, use the synthetic
+                    // but log at Warning so the token-config gap is visible.
+                    string email;
+                    if (!string.IsNullOrWhiteSpace(rawEmail) && rawEmail.Contains('@', StringComparison.Ordinal))
+                    {
+                        email = rawEmail;
+                    }
+                    else
+                    {
+                        email = $"{oid}@unknown.local";
+                        logger.LogWarning(
+                            "Entra token missing email/emails/preferred_username/upn claim for oid {Oid}. Falling back to synthetic '{Email}'. " +
+                            "Fix at Entra user flow → Application Claims (add Email + Email Verified).",
+                            oid, email);
+                    }
 
                     var displayName = ctx.User.FindFirstValue("name")
                                       ?? ctx.User.FindFirstValue(ClaimTypes.Name)
                                       ?? "User";
 
-                    var emailVerified = string.Equals(
-                        ctx.User.FindFirstValue("email_verified"), "true",
-                        StringComparison.OrdinalIgnoreCase);
+                    // Slice OPS.M.13.6 walk fix — email_verified handling.
+                    // Entra External ID's built-in local-account signup flow
+                    // requires OTP email verification before the account
+                    // becomes active. So when we see provider='entra' and no
+                    // explicit email_verified claim, treat it as verified
+                    // (verified => the signup completed). If the claim IS
+                    // present, respect its value (federated Google could set
+                    // it to false for un-verified Google emails). Federated
+                    // providers land in OPS.M.12 with per-provider policy.
+                    var emailVerifiedRaw = ctx.User.FindFirstValue("email_verified");
+                    var emailVerified = emailVerifiedRaw is null
+                        || string.Equals(emailVerifiedRaw, "true", StringComparison.OrdinalIgnoreCase);
 
                     var userId = await mediator.Send(new ProvisionOrLinkUserCommand(
                         Provider: "entra",
