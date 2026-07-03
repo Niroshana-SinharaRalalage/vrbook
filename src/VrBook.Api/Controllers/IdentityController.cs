@@ -382,7 +382,20 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
         var tenantExists = await idDb.Tenants.AnyAsync(t => t.Id == body.TenantId, ct);
         if (!tenantExists)
         {
-            return NotFound(new { detail = $"Tenant '{body.TenantId}' not found." });
+            var tenantList = await idDb.Tenants
+                .Select(t => new { t.Id, t.Slug, t.DisplayName })
+                .Take(30)
+                .ToListAsync(ct);
+            opLogger.LogWarning(
+                "bootstrap-operator diagnostic: TENANT_NOT_FOUND requested={Requested}. " +
+                "AvailableCount={Count} Tenants={Tenants}",
+                body.TenantId,
+                tenantList.Count,
+                string.Join("|", tenantList.Select(t => $"{t.Id}={t.Slug}({t.DisplayName})")));
+            return Problem(
+                detail: "Tenant not found — see Log Analytics 'Ops.BootstrapOperator' for tenant list.",
+                statusCode: 404,
+                title: "Tenant not found");
         }
 
         // Loop across every user row so the current session's row gets its
