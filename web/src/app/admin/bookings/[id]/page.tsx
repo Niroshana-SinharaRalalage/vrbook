@@ -125,7 +125,17 @@ const AdminBookingDetailPage = () => {
     );
   }
 
-  const refresh = () => qc.invalidateQueries({ queryKey: [...QK] });
+  // Slice OPS.M.13.6 walk fix — invalidate BOTH the single-booking query
+  // (this page's data) AND the list query (['admin', 'bookings', filter]
+  // used by /admin/bookings) so navigating back to the list shows fresh
+  // status without a manual refresh. Match by prefix so every filter
+  // variant + subview stays in sync.
+  const refresh = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: [...QK] }),
+      qc.invalidateQueries({ queryKey: ['admin', 'bookings'] }),
+    ]);
+  };
 
   const onConfirm = async () => {
     setActing(true);
