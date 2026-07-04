@@ -43,7 +43,7 @@ public interface ICurrentUser
     /// (SPA-injected from sessionStorage per the tenant picker in M.13.5) if
     /// present and matching an active membership; falls back to the caller's
     /// <c>IsPrimary=true</c> membership stamped by <c>UserProvisioningMiddleware</c>
-    /// for DevAuth + non-SPA callers. Null for guests and any caller without a
+    /// for non-SPA callers (curl, integration tests). Null for guests and any caller without a
     /// resolvable membership.</para>
     /// </summary>
     Guid? TenantId { get; }

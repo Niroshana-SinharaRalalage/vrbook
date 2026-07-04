@@ -20,7 +20,7 @@ namespace VrBook.Modules.Identity.Infrastructure.Auth;
 /// "always the caller's IsPrimary membership" to "X-Active-Tenant header if
 /// present and valid, else IsPrimary membership fallback". The tenant-picker
 /// SPA sets the header from sessionStorage on every non-anonymous request;
-/// DevAuth cookies + curl callers hit the fallback and behave as before.</para>
+/// non-SPA callers (curl, integration tests) hit the fallback path.</para>
 ///
 /// <para>Slice OPS.M.13.6 — the per-membership <c>ClaimTypes.Role</c> loop
 /// was dropped. Downstream tenant-role checks read
@@ -125,7 +125,7 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<Use
                     ctx.Items[HttpCurrentUser.MembershipRolesItemKey] = membershipRoles;
 
                     // Slice OPS.M.13.6 — active tenant resolution.
-                    // Priority: X-Active-Tenant header (SPA) → IsPrimary fallback (DevAuth + tests).
+                    // Priority: X-Active-Tenant header (SPA) → IsPrimary fallback (curl + tests).
                     Guid? activeTenantId = null;
                     var headerValue = ctx.Request.Headers[HttpCurrentUser.ActiveTenantHeader]
                         .ToString();

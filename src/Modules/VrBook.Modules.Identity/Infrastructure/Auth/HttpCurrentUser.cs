@@ -47,7 +47,7 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
     /// active tenant id (Guid). Set by <c>UserProvisioningMiddleware</c>
     /// from the <c>X-Active-Tenant</c> header when that header names a
     /// valid membership; falls back to the caller's <c>IsPrimary=true</c>
-    /// membership so DevAuth + non-SPA callers keep resolving.
+    /// membership so non-SPA callers (curl, tests) keep resolving.
     /// </summary>
     public const string ActiveTenantItemKey = "VrBook:ActiveTenantId";
 

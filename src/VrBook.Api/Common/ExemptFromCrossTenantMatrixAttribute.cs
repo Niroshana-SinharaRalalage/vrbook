@@ -7,7 +7,7 @@ namespace VrBook.Api.Common;
 /// outside the cross-tenant test matrix.
 ///
 /// <para>The <see cref="Reason"/> string is the documentation. Common
-/// reasons: <c>"public anonymous endpoint"</c>, <c>"DevAuth-only diagnostic"</c>,
+/// reasons: <c>"public anonymous endpoint"</c>,
 /// <c>"platform-admin own-tenant-only"</c>. Future M.10 maintainers grep
 /// the exempt set to verify the reason still holds.</para>
 ///

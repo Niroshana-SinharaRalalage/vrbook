@@ -33,9 +33,8 @@ internal sealed class GetPaymentIntentForBookingHandler(
         // ClientSecret by guessing the bookingId. The post-load check
         // is the safety net.
         //
-        // Guest persona (no TenantId, signed in via DevAuth/Entra) is
-        // unaffected — the check only fires for callers with a tenant
-        // membership.
+        // Guest sign-ins (no tenant membership) are unaffected — the check
+        // only fires for callers with a resolved TenantId.
         if (currentUser.TenantId is { } tid && pi.TenantId != tid)
         {
             return null;
