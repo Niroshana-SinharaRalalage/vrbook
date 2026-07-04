@@ -37,6 +37,14 @@ public static class TwoTenantTestAuthHandler
         {
             ["OwnerA"] = new(OwnerAOid, "owner-a@vrbook.test", "Owner A", IsOwner: true, IsAdmin: true),
             ["OwnerB"] = new(OwnerBOid, "owner-b@vrbook.test", "Owner B", IsOwner: true, IsAdmin: true),
-            ["PlatformAdmin"] = new(PlatformAdminOid, "platform-admin@vrbook.test", "Platform Admin", IsOwner: false, IsAdmin: false),
+            // PlatformAdmin gets IsOwner + IsAdmin true purely so the token
+            // carries the ClaimTypes.Role values that pre-M.15
+            // [Authorize(Roles = "Owner,Admin")] decorators still gate on.
+            // The DB is_platform_admin flag is what actually gives this
+            // persona its cross-tenant enumeration privilege — the role
+            // claims are here only to pass the token-level gate.
+            // Drops entirely when M.15 replaces those decorators with
+            // MembershipRoles-based checks.
+            ["PlatformAdmin"] = new(PlatformAdminOid, "platform-admin@vrbook.test", "Platform Admin", IsOwner: true, IsAdmin: true),
         };
 }
