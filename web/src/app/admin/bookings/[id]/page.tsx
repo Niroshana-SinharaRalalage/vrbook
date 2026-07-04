@@ -1,14 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, CheckCircle2, XCircle, Clock, AlertCircle, MessageSquare } from 'lucide-react';
 
 import {
   adminGetBooking,
-  backdateCheckedOutAt,
   checkInBooking,
   checkOutBooking,
   confirmBooking,
@@ -17,7 +16,6 @@ import {
   type BookingStatus,
 } from '@/lib/api/booking';
 import { ApiProblemError } from '@/lib/api/client';
-import { getDevPersonas } from '@/lib/api/devAuth';
 import { listThreads, type Thread } from '@/lib/api/messaging';
 import { formatCurrency } from '@/lib/utils/currency';
 import { useAuthedQuery } from '@/hooks/useAuthedQuery';
@@ -38,7 +36,6 @@ const STATUS_PILL: Record<BookingStatus, string> = {
 };
 
 const AdminBookingDetailPage = () => {
-  const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
 
@@ -52,10 +49,6 @@ const AdminBookingDetailPage = () => {
     queryFn: () => adminGetBooking(id),
   });
 
-  // Slice OPS.M.10.2 F11.7.5.9 — modal state now includes per-modal error
-  // slots so the reject modal (and the new confirm-booking + backdate
-  // modals) can surface their error INSIDE the popup instead of leaking
-  // to the page-level banner while the modal stays open.
   const [acting, setActing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -63,24 +56,10 @@ const AdminBookingDetailPage = () => {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
-  const [backdateOpen, setBackdateOpen] = useState(false);
-  const [backdateError, setBackdateError] = useState<string | null>(null);
-  // True only when /dev-auth/personas returns 200 (DevAuth:AllowAnonymous=true).
-  // Same gate the existing DevPersonaSwitcher uses to hide itself in production,
-  // so the Backdate dev shortcut is invisible to real users.
-  const [devAuth, setDevAuth] = useState(false);
   // Slice 6 C5: the thread auto-created on BookingConfirmed. Resolved via the
   // new `?bookingId=` filter on GET /api/v1/threads. Null while loading or
   // when this booking has no thread yet.
   const [thread, setThread] = useState<Thread | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getDevPersonas()
-      .then(() => { if (!cancelled) setDevAuth(true); })
-      .catch(() => { /* 404 in production — leave devAuth=false */ });
-    return () => { cancelled = true; };
-  }, []);
 
   useEffect(() => {
     if (!id || !booking) return;
@@ -178,30 +157,6 @@ const AdminBookingDetailPage = () => {
     }
   };
 
-  const onBackdate = async () => {
-    setActing(true);
-    setBackdateError(null);
-    try {
-      await backdateCheckedOutAt(booking.id, 25);
-      await refresh();
-      setBackdateOpen(false);
-      window.alert(
-        'Backdate applied. Now trigger the completion sweep in Azure:\n\n' +
-          'az containerapp job start -n caj-vrbook-completion-staging -g rg-vrbook-staging',
-      );
-    } catch (err) {
-      setBackdateError(
-        err instanceof ApiProblemError
-          ? err.problem.detail ?? err.message
-          : err instanceof Error
-            ? err.message
-            : 'Backdate failed',
-      );
-    } finally {
-      setActing(false);
-    }
-  };
-
   const runAction = async (
     label: string,
     fn: (id: string) => Promise<Booking | void>,
@@ -254,10 +209,6 @@ const AdminBookingDetailPage = () => {
                 clock for the daily completion sweep — 24h later the booking
                 flips to Completed and the post-stay loop fires (review email,
                 loyalty count).
-                {devAuth && booking.status === 'CheckedOut' && (
-                  <> The Backdate button is a dev-only shortcut so the
-                  completion sweep can run today.</>
-                )}
               </p>
             </div>
           </div>
@@ -278,15 +229,6 @@ const AdminBookingDetailPage = () => {
                 className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 <CheckCircle2 className="h-4 w-4" aria-hidden /> Check out
-              </button>
-            )}
-            {booking.status === 'CheckedOut' && devAuth && (
-              <button
-                onClick={() => setBackdateOpen(true)}
-                disabled={acting}
-                className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50 dark:text-blue-300 dark:hover:bg-blue-950/30"
-              >
-                <Clock className="h-4 w-4" aria-hidden /> Backdate -25h (dev)
               </button>
             )}
           </div>
@@ -403,24 +345,6 @@ const AdminBookingDetailPage = () => {
           </div>
         </div>
       )}
-
-      {/* Slice OPS.M.10.2 F11.7.5.9 — backdate modal (replaces window.confirm). */}
-      <ConfirmActionModal
-        open={backdateOpen}
-        title="Backdate CheckedOutAt by 25h?"
-        description="This is a dev-only shortcut so the completion sweep can run today. Only available while DevAuth is enabled."
-        confirmLabel="Backdate -25h"
-        busyLabel="Applying…"
-        confirmVariant="default"
-        busy={acting}
-        error={backdateError}
-        onCancel={() => {
-          if (acting) return;
-          setBackdateOpen(false);
-          setBackdateError(null);
-        }}
-        onConfirm={() => void onBackdate()}
-      />
 
       {actionError && (
         <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">

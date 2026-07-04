@@ -7,12 +7,8 @@ import { cn } from '@/lib/utils/cn';
 
 /**
  * Client island that gives the header a sign-in / sign-out trigger backed by
- * MSAL. Without this, the OPS.M.0 Entra flow has no entry point and the only
- * way to authenticate is via the DevAuth persona switcher - leaving the real
- * Entra cutover untestable end-to-end through the UI.
- *
- * When a real Entra session exists, shows a sign-out button. Otherwise shows
- * a sign-in button that triggers `loginRedirect` to the External tenant.
+ * MSAL. When a real Entra session exists, shows a sign-out button. Otherwise
+ * shows a sign-in button that triggers `loginRedirect` to the External tenant.
  */
 export const SiteHeaderAuth = () => {
   const { isAuthenticated, isBusy, user, signIn, signOut } = useAuth();
