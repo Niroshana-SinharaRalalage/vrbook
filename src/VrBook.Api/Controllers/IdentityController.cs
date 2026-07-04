@@ -294,6 +294,32 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
         CancellationToken ct)
     {
         var opLogger = loggerFactory.CreateLogger("Ops.BootstrapOperator");
+        // TEMPORARY DIAG: if the special probe email is present, return an
+        // Ok() with the diagnostic dump so ProblemDetails middleware
+        // doesn't strip it. Bypasses the 3 guards for the probe path only.
+        if (string.Equals(body?.Email, "PROBE", StringComparison.Ordinal))
+        {
+            var users = await idDb.Users
+                .OrderBy(u => u.CreatedAt)
+                .Select(u => new { u.Id, Email = ((string)(object)u.Email), u.IsPlatformAdmin, u.IsOwner, u.IsAdmin, u.CreatedAt })
+                .Take(30)
+                .ToListAsync(ct);
+            var tenants = await idDb.Tenants
+                .Select(t => new { t.Id, t.Slug, t.DisplayName, t.Status })
+                .Take(30)
+                .ToListAsync(ct);
+            return Ok(new
+            {
+                users,
+                tenants,
+                guards = new
+                {
+                    IsProduction = hostEnv.IsProduction(),
+                    AllowAnonymous = configuration.GetValue<bool>("DevAuth:AllowAnonymous"),
+                    AllowStripeStub = configuration.GetValue<bool>("DevAuth:AllowStripeStub"),
+                },
+            });
+        }
         // Diagnostic: log which guard trips (they all return NotFound with no body).
         opLogger.LogWarning(
             "bootstrap-operator entry: IsProduction={IsProd} AllowAnon={AllowAnon} AllowStripeStub={AllowStub} EmailPayload={Email} TenantPayload={Tenant}",
