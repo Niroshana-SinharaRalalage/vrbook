@@ -87,7 +87,7 @@ internal sealed class PlaceBookingHandler(
         var quote = await mediator.Send(new ComputeQuoteCommand(r.PropertyId, quoteReq), cancellationToken);
 
         var stay = new Stay(r.CheckinDate, r.CheckoutDate);
-        var guestName = currentUser.Email ?? currentUser.B2CObjectId ?? "Guest";
+        var guestName = currentUser.Email ?? currentUser.ExternalObjectId ?? "Guest";
 
         var lineItems = new List<(string kind, string label, int qty, decimal unit, decimal lineTotal)>();
         foreach (var n in quote.Nightly)

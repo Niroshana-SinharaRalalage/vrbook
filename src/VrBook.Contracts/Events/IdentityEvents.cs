@@ -14,10 +14,10 @@ public sealed record UserPlatformAdminRevoked(Guid UserId, Guid ActorId) : Domai
 
 /// <summary>
 /// Slice OPS.M.10.2 F11.7.6 — raised when the provisioning handler rebinds an
-/// existing user row's B2CObjectId to a new incoming oid. Occurs when a
-/// fresh oid arrives with an email that already matches an existing row
-/// (typical: DevAuth-provisioned row being reclaimed by a real Entra
-/// sign-in, or a social-IdP migration). Audit trail only — no downstream
-/// reactions per <c>docs/OPS_M_10_2_F11_7_6_MULTI_ROW_USER_FIX.md §9.4</c>.
+/// existing user row's external-identity oid to a new incoming oid. Fires when a
+/// fresh oid arrives with an email that already matches an existing row (typical:
+/// a social-IdP migration where the user was originally provisioned under a
+/// different provider oid). Audit trail only — no downstream reactions per
+/// <c>docs/OPS_M_10_2_F11_7_6_MULTI_ROW_USER_FIX.md §9.4</c>.
 /// </summary>
 public sealed record UserOidRebound(Guid UserId, string OldOid, string NewOid) : DomainEvent;

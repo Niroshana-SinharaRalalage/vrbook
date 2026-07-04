@@ -40,7 +40,7 @@ public sealed class PricingRuleEndpointsTests
 
         var user = Substitute.For<ICurrentUser>();
         user.UserId.Returns(OwnerUserId);
-        user.B2CObjectId.Returns(OwnerB2C);
+        user.ExternalObjectId.Returns(OwnerB2C);
         user.IsAuthenticated.Returns(true);
         user.IsOwner.Returns(true);
         user.IsAdmin.Returns(false);

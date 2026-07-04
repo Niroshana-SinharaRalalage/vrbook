@@ -91,7 +91,7 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
         }
     }
 
-    public string? B2CObjectId =>
+    public string? ExternalObjectId =>
         accessor.HttpContext?.User.FindFirstValue("oid")
         ?? accessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier);
 

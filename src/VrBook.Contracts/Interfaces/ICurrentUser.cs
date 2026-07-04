@@ -6,11 +6,15 @@ namespace VrBook.Contracts.Interfaces;
 /// </summary>
 public interface ICurrentUser
 {
-    /// <summary>App-side user id (NOT the B2C object id).</summary>
+    /// <summary>App-side user id (NOT the identity-provider oid).</summary>
     Guid? UserId { get; }
 
-    /// <summary>B2C object id from the JWT <c>oid</c> claim.</summary>
-    string? B2CObjectId { get; }
+    /// <summary>
+    /// External identity provider's object id from the JWT <c>oid</c> claim.
+    /// Today this is the Entra External ID oid (per ADR-0012); OPS.M.12 will
+    /// add per-social-IdP oids resolved through <c>identity.user_identities</c>.
+    /// </summary>
+    string? ExternalObjectId { get; }
 
     string? Email { get; }
     bool IsAuthenticated { get; }

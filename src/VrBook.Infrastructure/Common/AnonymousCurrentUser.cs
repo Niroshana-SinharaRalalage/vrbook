@@ -12,7 +12,7 @@ public sealed class AnonymousCurrentUser : ICurrentUser
         new Dictionary<Guid, IReadOnlySet<string>>();
 
     public Guid? UserId => null;
-    public string? B2CObjectId => null;
+    public string? ExternalObjectId => null;
     public string? Email => null;
     public bool IsAuthenticated => false;
     public bool IsOwner => false;

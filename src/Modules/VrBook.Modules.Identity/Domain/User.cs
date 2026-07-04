@@ -74,18 +74,6 @@ public sealed class User : AggregateRoot
         Phone = phone;
     }
 
-    /// <summary>
-    /// Slice 4 dev bridge: lets the dev "set persona email" endpoint
-    /// repoint a DevAuth persona at a real inbox (e.g. so a queued
-    /// notification actually lands in Gmail). NOT exposed via the user-facing
-    /// profile editor — that flow goes through Entra in production.
-    /// </summary>
-    public void SetEmail(Email newEmail)
-    {
-        Email = newEmail;
-        EmailVerified = true;
-    }
-
     public void RefreshFromLogin(string displayName, bool emailVerified)
     {
         if (!string.IsNullOrWhiteSpace(displayName))
