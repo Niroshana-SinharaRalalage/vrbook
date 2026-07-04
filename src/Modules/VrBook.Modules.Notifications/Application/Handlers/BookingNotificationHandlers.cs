@@ -84,11 +84,7 @@ internal sealed class BookingNotificationHandlers(
 
     private string BuildReviewDeepLink(Guid bookingId)
     {
-        // OPS.M.14.2 — reads App:WebBaseUrl (renamed from DevAuth:WebBaseUrl).
-        // Fallback to the legacy key for one deploy cycle while the Bicep
-        // rename rolls; M.14.6 drops the fallback after infra is redeployed.
-        var webBase = (configuration["App:WebBaseUrl"] ?? configuration["DevAuth:WebBaseUrl"])
-                ?.TrimEnd('/')
+        var webBase = configuration["App:WebBaseUrl"]?.TrimEnd('/')
             ?? "https://example.com";
         return $"{webBase}/account/bookings/{bookingId}/review";
     }
