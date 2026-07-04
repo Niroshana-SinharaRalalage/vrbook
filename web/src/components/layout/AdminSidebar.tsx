@@ -66,10 +66,14 @@ export const AdminSidebar = () => {
   const showPlatform = me?.isPlatformAdmin === true;
   return (
     <aside className="hidden border-r border-border bg-muted/30 md:flex md:w-60 md:flex-col">
-      <div className="flex h-16 items-center gap-2 border-b border-border px-4 font-semibold">
+      <Link
+        href="/"
+        className="flex h-16 items-center gap-2 border-b border-border px-4 font-semibold hover:bg-muted/40"
+        aria-label="VrBook — back to landing page"
+      >
         <span className="inline-block h-5 w-5 rounded bg-brand-maroon-600" aria-hidden />
         VrBook Admin
-      </div>
+      </Link>
       <nav className="flex-1 space-y-0.5 p-2" aria-label="Admin">
         {tenant?.status === 'Suspended' && (
           <div
