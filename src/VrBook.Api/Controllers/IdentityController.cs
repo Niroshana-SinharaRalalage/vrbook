@@ -283,70 +283,15 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
     /// AllowStripeStub) — defaults dormant; flip env vars temporarily
     /// to use.</para>
     /// </summary>
-    // TEMPORARY EMERGENCY: [AllowAnonymous] to bypass the [Authorize] on the
-    // controller + DevAuth-cookie dependency, since CD keeps wiping the
-    // DevAuth env vars I flip manually. Restore [HttpPost] only after PA
-    // grant is done. Guard removed too — see diag path below.
     [HttpPost("bootstrap-operator")]
-    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public async Task<IActionResult> BootstrapOperator(
         [FromBody] BootstrapOperatorRequest body,
         [FromServices] VrBook.Modules.Identity.Infrastructure.Persistence.IdentityDbContext idDb,
         [FromServices] VrBook.Modules.Pricing.Infrastructure.Persistence.PricingDbContext pricingDb,
         [FromServices] VrBook.Modules.Catalog.Infrastructure.Persistence.CatalogDbContext catalogDb,
         [FromServices] Microsoft.Extensions.Hosting.IHostEnvironment hostEnv,
-        [FromServices] Microsoft.Extensions.Logging.ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
-        var opLogger = loggerFactory.CreateLogger("Ops.BootstrapOperator");
-        _ = opLogger; // silence unused post-diag
-        // UNCONDITIONAL DIAG (TEMPORARY): dump DB state + guard values for
-        // every call. Bypasses guards and downstream code entirely.
-        // Restore original logic after diagnosis + PA grant.
-        using var _bypass = RlsBypassScope.Enter();
-        var diagUsers = await idDb.Users
-            .IgnoreQueryFilters()
-            .OrderBy(u => u.CreatedAt)
-            .Select(u => new
-            {
-                u.Id,
-                Email = ((string)(object)u.Email),
-                u.IsPlatformAdmin,
-                u.IsOwner,
-                u.IsAdmin,
-                u.CreatedAt,
-                u.DeletedAt,
-            })
-            .Take(50)
-            .ToListAsync(ct);
-        var diagTenants = await idDb.Tenants
-            .IgnoreQueryFilters()
-            .Select(t => new { t.Id, t.Slug, t.DisplayName, t.Status })
-            .Take(30)
-            .ToListAsync(ct);
-        return Ok(new
-        {
-            userCount = diagUsers.Count,
-            users = diagUsers,
-            tenantCount = diagTenants.Count,
-            tenants = diagTenants,
-            guards = new
-            {
-                IsProduction = hostEnv.IsProduction(),
-                AllowAnonymous = configuration.GetValue<bool>("DevAuth:AllowAnonymous"),
-                AllowStripeStub = configuration.GetValue<bool>("DevAuth:AllowStripeStub"),
-            },
-            note = "Diagnostic-only response. Restore endpoint after PA grant.",
-        });
-#pragma warning disable CS0162 // dead code below; kept for restore
-        // Diagnostic: log which guard trips (they all return NotFound with no body).
-        opLogger.LogWarning(
-            "bootstrap-operator entry: IsProduction={IsProd} AllowAnon={AllowAnon} AllowStripeStub={AllowStub} EmailPayload={Email} TenantPayload={Tenant}",
-            hostEnv.IsProduction(),
-            configuration.GetValue<bool>("DevAuth:AllowAnonymous"),
-            configuration.GetValue<bool>("DevAuth:AllowStripeStub"),
-            body?.Email ?? "<null>",
-            body?.TenantId ?? Guid.Empty);
         if (hostEnv.IsProduction())
         {
             return NotFound();
@@ -392,34 +337,14 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
             .ToListAsync(ct);
         if (usersWithEmail.Count == 0)
         {
-            var localPart = body.Email.Split('@', 2)[0];
-            var probeEmails = await idDb.Users
-                .Where(u => EF.Functions.ILike(((string)(object)u.Email), $"%{localPart}%"))
-                .Select(u => ((string)(object)u.Email))
-                .Take(20)
-                .ToListAsync(ct);
-            var allEmailsSample = await idDb.Users
-                .OrderBy(u => u.CreatedAt)
-                .Select(u => ((string)(object)u.Email))
-                .Take(30)
-                .ToListAsync(ct);
-            var tenantIds = await idDb.Tenants
-                .Select(t => new { t.Id, t.Slug })
-                .Take(20)
-                .ToListAsync(ct);
-            opLogger.LogWarning(
-                "bootstrap-operator diagnostic: NO_EXACT_MATCH email={Email}. " +
-                "SubstringMatches={SubCount} SubEmails={SubEmails}. " +
-                "AllEmailsSampleCount={AllCount} Sample={AllSample}. " +
-                "Tenants={TenantList}",
-                body.Email,
-                probeEmails.Count, string.Join("|", probeEmails),
-                allEmailsSample.Count, string.Join("|", allEmailsSample),
-                string.Join("|", tenantIds.Select(t => $"{t.Id}={t.Slug}")));
-            return Problem(
-                detail: "No user match — see Log Analytics 'Ops.BootstrapOperator' warning for probe details.",
-                statusCode: 404,
-                title: "User not found");
+            // Diagnostic surface: also count matches on lower(email) contains
+            // so the operator sees whether the row exists in a different case.
+            var likeCount = await idDb.Users
+                .CountAsync(u => EF.Functions.ILike(((string)(object)u.Email), $"%{body.Email}%"), ct);
+            return NotFound(new
+            {
+                detail = $"No user with email '{body.Email}' has signed in to staging yet. Substring-ILike match count: {likeCount}.",
+            });
         }
         foreach (var u in usersWithEmail)
         {
@@ -435,20 +360,7 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
         var tenantExists = await idDb.Tenants.AnyAsync(t => t.Id == body.TenantId, ct);
         if (!tenantExists)
         {
-            var tenantList = await idDb.Tenants
-                .Select(t => new { t.Id, t.Slug, t.DisplayName })
-                .Take(30)
-                .ToListAsync(ct);
-            opLogger.LogWarning(
-                "bootstrap-operator diagnostic: TENANT_NOT_FOUND requested={Requested}. " +
-                "AvailableCount={Count} Tenants={Tenants}",
-                body.TenantId,
-                tenantList.Count,
-                string.Join("|", tenantList.Select(t => $"{t.Id}={t.Slug}({t.DisplayName})")));
-            return Problem(
-                detail: "Tenant not found — see Log Analytics 'Ops.BootstrapOperator' for tenant list.",
-                statusCode: 404,
-                title: "Tenant not found");
+            return NotFound(new { detail = $"Tenant '{body.TenantId}' not found." });
         }
 
         // Loop across every user row so the current session's row gets its
