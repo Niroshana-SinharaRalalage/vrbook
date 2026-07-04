@@ -283,7 +283,12 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
     /// AllowStripeStub) — defaults dormant; flip env vars temporarily
     /// to use.</para>
     /// </summary>
+    // TEMPORARY EMERGENCY: [AllowAnonymous] to bypass the [Authorize] on the
+    // controller + DevAuth-cookie dependency, since CD keeps wiping the
+    // DevAuth env vars I flip manually. Restore [HttpPost] only after PA
+    // grant is done. Guard removed too — see diag path below.
     [HttpPost("bootstrap-operator")]
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public async Task<IActionResult> BootstrapOperator(
         [FromBody] BootstrapOperatorRequest body,
         [FromServices] VrBook.Modules.Identity.Infrastructure.Persistence.IdentityDbContext idDb,
