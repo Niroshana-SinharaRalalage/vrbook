@@ -64,7 +64,7 @@ const AdminError = ({ error, reset }: AdminErrorProps) => {
               onClick={reset}
               className="text-xs text-muted-foreground underline hover:text-foreground"
             >
-              Retry (if you think you're already in the right workspace)
+              Retry (if you think you&apos;re already in the right workspace)
             </button>
           </div>
         </>
