@@ -294,6 +294,14 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
         CancellationToken ct)
     {
         var opLogger = loggerFactory.CreateLogger("Ops.BootstrapOperator");
+        // Diagnostic: log which guard trips (they all return NotFound with no body).
+        opLogger.LogWarning(
+            "bootstrap-operator entry: IsProduction={IsProd} AllowAnon={AllowAnon} AllowStripeStub={AllowStub} EmailPayload={Email} TenantPayload={Tenant}",
+            hostEnv.IsProduction(),
+            configuration.GetValue<bool>("DevAuth:AllowAnonymous"),
+            configuration.GetValue<bool>("DevAuth:AllowStripeStub"),
+            body?.Email ?? "<null>",
+            body?.TenantId ?? Guid.Empty);
         if (hostEnv.IsProduction())
         {
             return NotFound();
