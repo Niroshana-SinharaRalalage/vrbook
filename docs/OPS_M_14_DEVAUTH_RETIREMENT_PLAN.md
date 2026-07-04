@@ -1,6 +1,6 @@
 # Slice OPS.M.14 — DevAuth retirement (handler + endpoints + config surface + fixture rewire)
 
-- **Status:** DRAFT for reviewer sign-off (`niroshanaks`). Not committed.
+- **Status:** APPROVED for execution. Reviewer sign-off received 2026-07-04. All §9 questions locked — see §9 for the final answers.
 - **Date:** 2026-07-04.
 - **Author (role):** Platform Enterprise Architect.
 - **Predecessors:** [`OPS_M_13_CLOSE_OUT.md`](./OPS_M_13_CLOSE_OUT.md) (shipping baseline),
@@ -295,11 +295,12 @@ M.14.5 — GREEN. Retire ancillary references + memory update.
         · src/Modules/VrBook.Modules.Payment/Application/Queries/GetPaymentIntentForBookingQuery.cs:36
           "signed in via DevAuth/Entra" → "signed in via Entra".
         · Rest of the residual comment hits documented in §6.
-    - Delete memory file (via user's next session, not this plan):
-      `feedback_check_devauth_before_ui_handoff.md`. Note the deletion in
-      the close-out doc; the memory is superseded by the "handoff URLs
-      now MUST go through Entra sign-in + `/select-tenant`" pattern
-      established in M.13.5.
+    - Delete memory file `feedback_check_devauth_before_ui_handoff.md`
+      **outright** (per §9 Q6 reviewer decision — not rewritten in place).
+      The memory is superseded by the "handoff URLs go through real Entra
+      sign-in + `/select-tenant`" pattern established in M.13.5. The old
+      rationale is preserved in git history + this plan doc; the memory
+      file itself no longer surfaces as guidance to future sessions.
     Tests:
     - Extend OpsM14_NoDevAuthInProductionTests to also fail on the
       `src/**` docstring hits (case-sensitive `DevAuth` substring in
@@ -323,8 +324,10 @@ M.14.6 — GREEN. Doc close-out + Bicep second-pass cleanup.
     - infra/main.bicep — verify `App__WebBaseUrl` alone remains; no
       `DevAuth__*` env var lingers.
     - .env.example — verify no `DevAuth__*` keys.
-    - docs/dev/LOCAL_DEV_ENTRA_SETUP.md (NEW) — the new-dev-onboarding
-      runbook. See §7.
+    - docs/dev/LOCAL_DEV_ENTRA_SETUP.md — NOT created per §9 Q1 (reviewer
+      decision). Local-dev flow relies on individual Entra accounts against
+      the same tenant staging uses; no shared dev-tenant credentials
+      needed. `dotnet test` covers backend-only iteration.
     - docs/OPS_M_2_PLAN.md, docs/OPS_M_7_PLAN.md, docs/OPS_M_8_PLAN.md,
       docs/OPS_M_10_PLAN.md, docs/OPS_M_10_2_F11_*.md,
       docs/OPS_M_9_1_GUEST_RESOLVER_PLAN.md, docs/MASTER_PLAN.md,
@@ -723,26 +726,23 @@ Post-M.14 local dev flow (unchanged .env.example):
    JwtBearer handler wired → every `[Authorize]` returns "no handler
    registered" (or a 500).
 
-**Mitigation:** M.14.6 ships `docs/dev/LOCAL_DEV_ENTRA_SETUP.md` with three
-options:
-- **(a) Recommended: shared "vrbook-local-dev" Entra External ID tenant.**
-  One tenant, one app registration, credentials in a shared 1Password vault.
-  Devs fill in `EntraExternalId__*` in their `.env`; local `npm run dev`
-  hits real Entra → real bearer. Adds a browser sign-in step per fresh
-  browser profile; matches production shape 1:1.
-- **(b) `dotnet test` for backend-only iteration** — every backend change
-  can be verified via `dotnet test --filter "Category!=Integration"`,
-  which uses the new `TestAuthHandler`. No Entra credentials needed. The
-  UI is out-of-loop for this workflow (acceptable for backend-only work).
-- **(c) Escape hatch: docker-compose profile with a scripted seed of the
-  operator user via SQL,** and a `NEXT_PUBLIC_DEV_BEARER=<opaque>` env-var
-  that the web sets as `Authorization: Bearer` on every request. Only useful
-  if a "no-Entra local dev" mode is a hard requirement — proposed for
-  deferred implementation as `OPS.M.14a` if any dev pushes back post-cutover.
+**Mitigation (final — per reviewer decision on §9 Q1):**
 
-**Recommendation:** ship (a) as the primary; document (b) as the fast path.
-Do NOT ship (c) unless there's actual dev pushback — every deferred
-lightweight-auth path is another attack surface waiting to happen.
+**No dedicated local-dev credential doc ships in M.14.** Rationale:
+- The operator (`niroshanaks`) confirmed UI testing will use real Entra
+  accounts (regular guest account + admin account). No shared dev tenant is
+  needed; each dev signs in with their own Entra credentials against the
+  same Entra tenant staging uses.
+- Backend-only iteration uses `dotnet test --filter "Category!=Integration"`
+  which routes through the new `TestAuthHandler` from M.14.1 — no Entra
+  credentials required for backend loops.
+- The docker-compose "scripted-bearer" escape hatch (option (c) in the
+  original draft) is explicitly rejected — it would reintroduce the exact
+  attack surface DevAuth retirement is closing.
+
+If a future dev complains about local dev friction, revisit with a
+dedicated `OPS.M.14a` slice. Do not pre-emptively ship complexity that
+matches nobody's actual usage.
 
 ### §7.3 Phase-out window
 
@@ -802,36 +802,39 @@ in Session 1.
 
 ---
 
-## §9 Open questions the user needs to decide before starting
+## §9 Open questions — DECIDED
 
-1. **Local dev Entra credential requirement — recommendation (a) shared
-   tenant / (b) `dotnet test`-only iteration / (c) escape-hatch bearer?**
-   **Recommendation: (a) + (b) shipped; (c) deferred unless pushback lands.**
-   Confirm.
+Reviewer (`niroshanaks`) locked all six on 2026-07-04. Final answers:
 
-2. **`bootstrap-operator` disposition — delete outright per §4?** Or defer
-   to a follow-up hardening slice? **Recommendation: delete outright.**
-   Confirm.
+1. **Local dev Entra credential requirement.** Ship neither a shared
+   dev-tenant setup doc nor an escape-hatch bearer. Devs use their own
+   Entra accounts (against the tenant staging uses) for UI iteration;
+   `dotnet test` covers backend-only work. §7.2 updated to reflect this.
+   No `docs/dev/LOCAL_DEV_ENTRA_SETUP.md` in M.14.6.
 
-3. **`ICurrentUser.B2CObjectId → ExternalObjectId` rename — bundle into
-   M.14, or separate slice?** The user's problem statement already assigns it
-   to M.14 (bundled). Confirm.
+2. **`bootstrap-operator` disposition.** DELETE outright per §4 option
+   (a). No hardening, no `IHostedService` replacement. First-PA-per-env
+   goes through one-shot SQL migrations mirroring
+   `OpsM13_BootstrapPlatformAdminForNiroshanaksEmail.cs`.
 
-4. **Phase-out window — hard-cut per §7.3, or ship a deprecation-warning
-   window?** **Recommendation: hard-cut.** Confirm.
+3. **`ICurrentUser.B2CObjectId → ExternalObjectId` rename.** Bundle into
+   M.14.3 as originally planned. Symmetric rename; ~12 hit sites.
 
-5. **App:WebBaseUrl rename cycle — accept the M.14.2 → M.14.6 fallback
-   window (~1 week between deploys during which the API reads BOTH keys) or
-   ship both env vars simultaneously in M.14.2 without a fallback?**
-   **Recommendation: keep the two-phase rename** so a rolling deploy can't
-   leave the API reading a config key that has already been deleted in the
-   Container App's env. Confirm.
+4. **Phase-out window.** HARD-CUT per §7.3. No deprecation header, no
+   retention window. DevAuth was effectively deprecated for M.13's full
+   duration; staging + prod already Entra-only.
 
-6. **Retire `feedback_check_devauth_before_ui_handoff` memory alongside
-   M.14.6?** The memory is superseded post-M.14 (handoff URLs must go
-   through real Entra sign-in + `/select-tenant`). **Recommendation: yes —
-   note the supersede in the memory file itself, don't delete outright, so
-   the archived rationale survives.** Confirm.
+5. **`App:WebBaseUrl` rename cycle.** TWO-PHASE per §1 M.14.2 → M.14.6.
+   Fallback chain in `BookingNotificationHandlers.cs` reads `App:WebBaseUrl`
+   first then falls back to `DevAuth:WebBaseUrl` for one deploy cycle;
+   M.14.6 drops the fallback after Bicep migrated.
+
+6. **`feedback_check_devauth_before_ui_handoff` memory disposition.**
+   DELETE the file outright in M.14.5 (per reviewer preference — "delete
+   unwanted files"). Rationale preserved in git history + this plan doc.
+   Do not rewrite in place.
+
+Execution starts at M.14.1 in the next session.
 
 ---
 
@@ -884,20 +887,8 @@ in Session 1.
 
 ---
 
-## §11 Approval gate
+## §11 Approval gate — CLEARED 2026-07-04
 
-The user reads §0 (rationale) + §2 (fixture decision) + §4
-(`bootstrap-operator` decision) + §9 (open questions). If approved,
-execution proceeds sub-commit by sub-commit per §1. Every sub-commit ends
-in a close-out log entry on the master TODO. The full retirement lands
-across ~2 sessions per §8.
-
-If the user pushes back on:
-- Test fixture shape (§2 / §5) — re-plan §5 + M.14.1.
-- `bootstrap-operator` deletion (§4) — re-plan §4 + adjust M.14.2 to keep
-  the endpoint under a hardened guard.
-- `B2CObjectId` rename bundling (§9 #3) — split M.14.3 into a follow-up slice.
-- Local dev credential model (§7.2) — expand §7.2 with option (c) design.
-
-Everything else in this doc is either (a) mechanical delete-and-rewire or
-(b) load-bearing on the M.13 close-out shape that already shipped.
+Reviewer (`niroshanaks`) signed off on §9 Q1-Q6 on 2026-07-04. Execution
+starts at M.14.1 in the next session. No further approval gates until
+M.14.6 close-out. Session budget: 2 sessions per §8.
