@@ -40,15 +40,15 @@ WITH niroshanaks_user AS (
      LIMIT 1
 ),
 main_tenant AS (
+    -- Oldest active tenant. Simpler than 'tenant that owns the most
+    -- properties' — that would need a cross-schema reference to
+    -- catalog.properties which doesn't exist yet when this migration
+    -- runs on a fresh testcontainer (IdentityDbContext migrations
+    -- run BEFORE CatalogDbContext). Same trap as M.13.4 fixup 4857454.
     SELECT t.""Id"" AS tenant_id
       FROM identity.tenants t
      WHERE t.deleted_at IS NULL
-     ORDER BY
-         (SELECT COUNT(*)
-            FROM catalog.properties p
-           WHERE p.tenant_id = t.""Id""
-             AND p.deleted_at IS NULL) DESC,
-         t.created_at
+     ORDER BY t.created_at
      LIMIT 1
 ),
 inserted AS (
