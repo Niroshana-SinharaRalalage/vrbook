@@ -3,11 +3,19 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { useMsal } from '@azure/msal-react';
+import { clearActiveTenantId } from '@/lib/tenants/activeTenant';
 
 const SignOutPage = () => {
   const { instance } = useMsal();
 
   useEffect(() => {
+    // Slice OPS.M.13.7 — double-safety: clear the per-tab active tenant
+    // regardless of how the user landed here (button flow, deep link,
+    // manual URL). useAuth.signOut also clears it, but this handles the
+    // path where MSAL logoutRedirect brought the user back with the
+    // active-tenant still in sessionStorage.
+    clearActiveTenantId();
+
     const accounts = instance.getAllAccounts();
     if (accounts.length > 0) {
       void instance.logoutRedirect({ postLogoutRedirectUri: '/' });

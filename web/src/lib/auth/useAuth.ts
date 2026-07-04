@@ -8,6 +8,7 @@ import {
 } from '@azure/msal-react';
 import { InteractionStatus, type AccountInfo } from '@azure/msal-browser';
 import { loginRequest, silentRequest } from './msalConfig';
+import { clearActiveTenantId } from '../tenants/activeTenant';
 
 export interface AuthUser {
   readonly oid: string;
@@ -45,6 +46,12 @@ export const useAuth = () => {
   }, [instance]);
 
   const signOut = useCallback(() => {
+    // Slice OPS.M.13.7 — clear the per-tab active tenant BEFORE MSAL's
+    // redirect so a subsequent sign-in in the same tab doesn't inherit
+    // the previous account's picked workspace (would silently show
+    // "wrong" data or trigger a Cross-tenant write rejected 403 on the
+    // first mutation).
+    clearActiveTenantId();
     void instance.logoutRedirect();
   }, [instance]);
 
