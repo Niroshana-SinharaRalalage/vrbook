@@ -265,14 +265,11 @@ var apiEnvVars = [
   { name: 'EntraExternalId__Instance', secretRef: 'entra-instance' }
   { name: 'EntraExternalId__TenantId', secretRef: 'entra-tenant-id' }
   { name: 'EntraExternalId__ClientId', secretRef: 'entra-api-client-id' }
-  // DevAuth: enabled in DEV only. Staging flipped to 'false' as part of OPS.M.0
-  // close-out (2026-06-26) once Entra App Roles verified end-to-end. Without
-  // this, the DevAuth cookie silently authorizes /admin even after a successful
-  // Entra sign-in, masking real authorization bugs.
-  { name: 'DevAuth__AllowAnonymous', value: isDev ? 'true' : 'false' }
-  // Same-origin redirect target for /dev-auth/switch?redirect=/foo so demo
-  // handoff URLs land back on the web app. Empty when DevAuth is off (staging + prod).
-  { name: 'DevAuth__WebBaseUrl', value: isDev ? 'https://ca-vrbook-web-${env}.${cae.outputs.defaultDomain}' : '' }
+  // App:WebBaseUrl — same-origin base URL for outbound deep links (review
+  // notification etc.). Empty in staging + prod so links fall through to the
+  // handler's built-in fallback; populated in dev so notification templates
+  // resolve to the local web container.
+  { name: 'App__WebBaseUrl', value: isDev ? 'https://ca-vrbook-web-${env}.${cae.outputs.defaultDomain}' : '' }
   // CORS - allow the deployed web Container App + localhost for dev. Same-cluster
   // ingress means we know the FQDN deterministically: ca-vrbook-web-{env}.{caeDomain}.
   { name: 'Cors__AllowedOrigins__0', value: 'http://localhost:3000' }

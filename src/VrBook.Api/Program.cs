@@ -89,9 +89,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerConfigured();
 
 // ---- AuthN / AuthZ — owned by the Identity module (proposal §14). ----
-// Real AD B2C JWT bearer when AzureAdB2C:* is configured; falls through to the
-// synthetic DevAuth principal when DevAuth:AllowAnonymous=true. Authorization
-// policies (OwnerOrAdmin, Admin) registered inside.
+// JwtBearer against Entra External ID per ADR-0012. Authorization policies
+// (OwnerOrAdmin, Admin) registered inside.
 builder.Services.AddVrBookAuthentication(builder.Configuration);
 
 // ---- App + infra cores ----

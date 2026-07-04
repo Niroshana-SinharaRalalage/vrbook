@@ -9,11 +9,10 @@ namespace VrBook.Modules.Identity.Infrastructure.Auth;
 public static class AuthExtensions
 {
     /// <summary>
-    /// Wires authentication for the API host. If <c>EntraExternalId:TenantId</c> is set,
-    /// registers JWT bearer validation against the External tenant. If
-    /// <c>DevAuth:AllowAnonymous</c> is true, registers the dev synthetic scheme — every
-    /// request authenticates as a synthetic owner. Both can coexist; <c>DevAuth</c> wins
-    /// when enabled. See ADR-0012 for the pivot from AD B2C to Entra External ID.
+    /// Wires authentication for the API host. Registers JWT bearer validation against
+    /// the Entra External tenant when <c>EntraExternalId:*</c> is configured; ADR-0012
+    /// pinned the identity provider to Entra External ID. Test hosts replace the scheme
+    /// via <c>ConfigureTestServices</c> — see <c>TestAuthHandler</c>.
     /// </summary>
     public static IServiceCollection AddVrBookAuthentication(
         this IServiceCollection services, IConfiguration configuration)
@@ -26,12 +25,7 @@ public static class AuthExtensions
         var entraTenantId = configuration["EntraExternalId:TenantId"];     // GUID of the External tenant
         var entraClientId = configuration["EntraExternalId:ClientId"];     // vrbook-api app registration id (audience)
 
-        var devAuthEnabled = configuration.GetValue<bool>("DevAuth:AllowAnonymous");
-        var defaultScheme = devAuthEnabled
-            ? DevAuthHandler.SchemeName
-            : JwtBearerDefaults.AuthenticationScheme;
-
-        var auth = services.AddAuthentication(defaultScheme);
+        var auth = services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme);
 
         if (!string.IsNullOrWhiteSpace(entraInstance) &&
             !string.IsNullOrWhiteSpace(entraTenantId) &&
@@ -104,16 +98,6 @@ public static class AuthExtensions
                         return Task.CompletedTask;
                     },
                 };
-            });
-        }
-
-        if (devAuthEnabled)
-        {
-            // Persona claims are now resolved per-request from the
-            // vrbook-dev-persona cookie inside DevAuthHandler (Owner default).
-            auth.AddScheme<DevAuthOptions, DevAuthHandler>(DevAuthHandler.SchemeName, opts =>
-            {
-                opts.Enabled = true;
             });
         }
 

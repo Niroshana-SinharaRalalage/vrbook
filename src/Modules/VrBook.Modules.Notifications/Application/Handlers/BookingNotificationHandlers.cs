@@ -84,9 +84,11 @@ internal sealed class BookingNotificationHandlers(
 
     private string BuildReviewDeepLink(Guid bookingId)
     {
-        // DevAuth:WebBaseUrl is the existing config key (used by the persona-
-        // switch redirect handoff). Phase 2 renames to App:WebBaseUrl.
-        var webBase = configuration["DevAuth:WebBaseUrl"]?.TrimEnd('/')
+        // OPS.M.14.2 — reads App:WebBaseUrl (renamed from DevAuth:WebBaseUrl).
+        // Fallback to the legacy key for one deploy cycle while the Bicep
+        // rename rolls; M.14.6 drops the fallback after infra is redeployed.
+        var webBase = (configuration["App:WebBaseUrl"] ?? configuration["DevAuth:WebBaseUrl"])
+                ?.TrimEnd('/')
             ?? "https://example.com";
         return $"{webBase}/account/bookings/{bookingId}/review";
     }
