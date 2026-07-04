@@ -1,10 +1,13 @@
 using System.Net.Http.Headers;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
+using VrBook.Api.IntegrationTests.Auth;
 using VrBook.Modules.Identity.Infrastructure.Persistence;
 
 namespace VrBook.Api.IntegrationTests;
@@ -12,18 +15,34 @@ namespace VrBook.Api.IntegrationTests;
 /// <summary>
 /// Postgres container + WebApplicationFactory&lt;Program&gt; fixture. xUnit drives the
 /// lifecycle; one shared fixture per collection keeps the container warm across tests.
+///
+/// <para>Slice OPS.M.14.1 — auth is served by <see cref="TestAuthHandler"/>
+/// registered under the JwtBearer scheme via <c>ConfigureTestServices</c>.
+/// Two personas are seeded: <c>"Owner"</c> (isOwner + isAdmin true) and
+/// <c>"Anonymous"</c> (no persona → 401 for authenticated routes).</para>
 /// </summary>
 public sealed class IdentityApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    /// <summary>Stable Owner OID reused by tests that assert on it.</summary>
+    public const string OwnerOid = "test-owner-aaaa";
+
+    private static readonly IReadOnlyDictionary<string, TestPersona> DefaultPersonas =
+        new Dictionary<string, TestPersona>
+        {
+            ["Owner"] = new(
+                Oid: OwnerOid,
+                Email: "owner@vrbook.test",
+                DisplayName: "Test Owner",
+                IsOwner: true,
+                IsAdmin: true),
+        };
+
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
         .WithImage("postgres:16-alpine")
         .WithDatabase("vrbook_test")
         .WithUsername("vrbook")
         .WithPassword("vrbook")
         .Build();
-
-    /// <summary>Set via individual tests before <see cref="CreateClient()"/> to flip auth modes.</summary>
-    public bool DevAuthEnabled { get; set; } = true;
 
     public async Task InitializeAsync()
     {
@@ -50,20 +69,24 @@ public sealed class IdentityApiFixture : WebApplicationFactory<Program>, IAsyncL
             {
                 ["ConnectionStrings:Postgres"] = _postgres.GetConnectionString(),
                 ["ConnectionStrings:Redis"] = string.Empty, // skip Redis in tests
-                // Blank out all three Entra keys so AuthExtensions skips JwtBearer
-                // registration entirely (otherwise it would try to fetch the OIDC
-                // discovery document over the network during test startup).
+                // Entra keys blank so AuthExtensions doesn't wire real JwtBearer
+                // (avoids startup-time OIDC discovery fetch); ConfigureTestServices
+                // below registers TestAuthHandler under the same scheme name.
                 ["EntraExternalId:Instance"] = string.Empty,
                 ["EntraExternalId:TenantId"] = string.Empty,
                 ["EntraExternalId:ClientId"] = string.Empty,
-                ["DevAuth:AllowAnonymous"] = DevAuthEnabled ? "true" : "false",
-                ["DevAuth:FakeOid"] = "test-owner-aaaa",
-                ["DevAuth:FakeEmail"] = "owner@vrbook.test",
-                ["DevAuth:FakeDisplayName"] = "Test Owner",
-                ["DevAuth:IsOwner"] = "true",
-                ["DevAuth:IsAdmin"] = "true",
                 ["Cors:AllowedOrigins:0"] = "http://localhost:3000",
             });
+        });
+        builder.ConfigureTestServices(services =>
+        {
+            // Slice OPS.M.14.1 — see TwoTenantApiFixture for rationale.
+            // ConfigureTestServices runs AFTER app ConfigureServices so this
+            // handler-type replacement wins.
+            services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                .AddScheme<TestAuthOptions, TestAuthHandler>(
+                    JwtBearerDefaults.AuthenticationScheme,
+                    opts => opts.Personas = DefaultPersonas);
         });
     }
 
@@ -79,20 +102,23 @@ public sealed class IdentityApiFixture : WebApplicationFactory<Program>, IAsyncL
             "TRUNCATE TABLE identity.users, identity.audit_log, identity.tenant_memberships CASCADE;");
     }
 
-    public HttpClient CreateClientWith(bool devAuth)
+    /// <summary>
+    /// Create a fresh <see cref="HttpClient"/>.
+    /// <para><c>authenticated=true</c> stamps <c>Authorization: Bearer test</c>
+    /// + <c>X-Test-Persona: Owner</c> so <see cref="TestAuthHandler"/> resolves
+    /// the Owner persona.</para>
+    /// <para><c>authenticated=false</c> leaves both headers off — the auth
+    /// pipeline sees no bearer and challenges with 401 for authenticated
+    /// routes.</para>
+    /// </summary>
+    public HttpClient CreateClientWith(bool authenticated)
     {
-        DevAuthEnabled = devAuth;
         var client = CreateClient();
-        if (!devAuth)
+        if (authenticated)
         {
-            // No-op — leaving authorization header off so we get the unauthenticated path.
-            client.DefaultRequestHeaders.Authorization = null;
-        }
-        else
-        {
-            // DevAuth ignores the bearer entirely, but we still set one so any header logging
-            // shows a non-empty value.
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "dev");
+            client.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", "test");
+            client.DefaultRequestHeaders.Add(TestAuthHandler.PersonaHeader, "Owner");
         }
         return client;
     }

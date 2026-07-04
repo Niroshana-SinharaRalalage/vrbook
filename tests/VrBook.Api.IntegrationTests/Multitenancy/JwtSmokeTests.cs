@@ -68,7 +68,7 @@ public sealed class JwtSmokeTests(TwoTenantApiFixture fixture)
     {
         var issuer = JwtTestIssuer ?? throw new InvalidOperationException("JWT issuer unset");
         var key = JwtTestKey ?? throw new InvalidOperationException("JWT key unset");
-        var jwt = MintJwt(issuer, key, TwoTenantDevAuthHandler.OwnerAOid);
+        var jwt = MintJwt(issuer, key, TwoTenantTestAuthHandler.OwnerAOid);
 
         using var client = fixture.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);

@@ -1,5 +1,5 @@
 using System.Net.Http.Headers;
-using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
+using VrBook.Api.IntegrationTests.Auth;
 using VrBook.Contracts.Enums;
 using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Booking;
@@ -16,7 +17,6 @@ using VrBook.Modules.Catalog.Domain;
 using VrBook.Modules.Catalog.Infrastructure.Persistence;
 using VrBook.Modules.Identity;
 using VrBook.Modules.Identity.Domain;
-using VrBook.Modules.Identity.Infrastructure.Auth;
 using VrBook.Modules.Identity.Infrastructure.Persistence;
 using VrBook.Modules.Loyalty;
 using VrBook.Modules.Loyalty.Infrastructure.Persistence;
@@ -47,10 +47,14 @@ namespace VrBook.Api.IntegrationTests.Multitenancy;
 ///   <item>One <c>Property</c> per tenant</item>
 /// </list>
 ///
-/// <para>Replaces the production <c>DevAuthHandler</c> with
-/// <see cref="TwoTenantDevAuthHandler"/> via <c>ConfigureTestServices</c>,
-/// so the persona cookie resolves to OwnerA / OwnerB / PlatformAdmin
-/// instead of the production Owner / Guest / Admin set.</para>
+/// <para>Slice OPS.M.14.1 — replaces the production JwtBearer scheme with
+/// <see cref="TestAuthHandler"/> via <c>ConfigureTestServices</c>. Tests
+/// call <c>CreateClientAs("OwnerA"|"OwnerB"|"PlatformAdmin")</c> which sets
+/// the <c>X-Test-Persona</c> header + a <c>Bearer test</c> Authorization;
+/// the handler synthesizes an Entra-shaped <c>ClaimsPrincipal</c> that
+/// downstream production middleware (<c>UserProvisioningMiddleware</c>,
+/// <c>TenantAuthorizationBehavior</c>) treats identically to a real
+/// Entra token.</para>
 ///
 /// <para>Seeds run under <see cref="RlsBypassScope"/> because the seed
 /// crosses tenant boundaries — the M.9 policies would otherwise reject the
@@ -211,9 +215,9 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
         // and every request would 403.
         var seedNow = DateTimeOffset.UtcNow.AddMinutes(-1);
         idDb.Set<UserIdentity>().AddRange(
-            UserIdentity.Create(ownerA.Id, "entra", TwoTenantDevAuthHandler.OwnerAOid, seedNow),
-            UserIdentity.Create(ownerB.Id, "entra", TwoTenantDevAuthHandler.OwnerBOid, seedNow),
-            UserIdentity.Create(platformAdmin.Id, "entra", TwoTenantDevAuthHandler.PlatformAdminOid, seedNow));
+            UserIdentity.Create(ownerA.Id, "entra", TwoTenantTestAuthHandler.OwnerAOid, seedNow),
+            UserIdentity.Create(ownerB.Id, "entra", TwoTenantTestAuthHandler.OwnerBOid, seedNow),
+            UserIdentity.Create(platformAdmin.Id, "entra", TwoTenantTestAuthHandler.PlatformAdminOid, seedNow));
 
         await idDb.SaveChangesAsync();
 
@@ -306,31 +310,36 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
             {
                 ["ConnectionStrings:Postgres"] = ConnectionString,
                 ["ConnectionStrings:Redis"] = string.Empty,
+                // Entra keys blank so AuthExtensions doesn't register a real
+                // JwtBearer handler upstream; ConfigureTestServices below
+                // registers TestAuthHandler under the same scheme name.
                 ["EntraExternalId:Instance"] = string.Empty,
                 ["EntraExternalId:TenantId"] = string.Empty,
                 ["EntraExternalId:ClientId"] = string.Empty,
-                ["DevAuth:AllowAnonymous"] = "true",
                 ["Cors:AllowedOrigins:0"] = "http://localhost:3000",
             });
         });
 
         builder.ConfigureTestServices(services =>
         {
-            // Replace the production DevAuthHandler with our test-only one.
-            // Both register under the same SchemeName so [Authorize] still
-            // routes through it. ConfigureTestServices runs AFTER the app's
-            // own ConfigureServices, so the AuthenticationOptions builder's
-            // handler-type registration is the LAST one to win.
-            services.AddAuthentication(DevAuthHandler.SchemeName)
-                .AddScheme<AuthenticationSchemeOptions, TwoTenantDevAuthHandler>(
-                    DevAuthHandler.SchemeName, _ => { });
+            // Slice OPS.M.14.1 — register TestAuthHandler under the
+            // JwtBearer scheme name so the production [Authorize] decorator
+            // (which routes to the default scheme = JwtBearer) hits our
+            // handler. ConfigureTestServices runs AFTER the app's own
+            // ConfigureServices, so this registration wins.
+            services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                .AddScheme<TestAuthOptions, TestAuthHandler>(
+                    JwtBearerDefaults.AuthenticationScheme,
+                    opts => opts.Personas = TwoTenantTestAuthHandler.Personas);
         });
     }
 
     /// <summary>
-    /// Create a fresh <see cref="HttpClient"/> with the persona cookie set
-    /// to one of <c>"OwnerA"</c>, <c>"OwnerB"</c>, <c>"PlatformAdmin"</c>,
-    /// or <c>null</c> (anonymous).
+    /// Create a fresh <see cref="HttpClient"/> stamped with the persona's
+    /// <c>X-Test-Persona</c> header and a fake <c>Bearer test</c>
+    /// Authorization header. Persona names: <c>"OwnerA"</c>, <c>"OwnerB"</c>,
+    /// <c>"PlatformAdmin"</c>, or <c>null</c> (anonymous — no persona
+    /// header, no bearer).
     /// </summary>
     public HttpClient CreateClientAs(string? persona)
     {
@@ -338,10 +347,12 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
         {
             AllowAutoRedirect = false,
         });
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "test");
         if (!string.IsNullOrEmpty(persona))
         {
-            client.DefaultRequestHeaders.Add("Cookie", $"{DevAuthPersonas.CookieName}={persona}");
+            client.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", "test");
+            client.DefaultRequestHeaders.Add(
+                TestAuthHandler.PersonaHeader, persona);
         }
         return client;
     }

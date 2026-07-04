@@ -17,7 +17,7 @@ public sealed class IdentityFlowTests(IdentityApiFixture fixture)
     public async Task GET_me_anonymously_returns_401()
     {
         await fixture.ResetAsync();
-        var client = fixture.CreateClientWith(devAuth: false);
+        var client = fixture.CreateClientWith(authenticated: false);
 
         var response = await client.GetAsync("/api/v1/me");
 
@@ -28,7 +28,7 @@ public sealed class IdentityFlowTests(IdentityApiFixture fixture)
     public async Task GET_me_with_DevAuth_provisions_user_and_returns_200()
     {
         await fixture.ResetAsync();
-        var client = fixture.CreateClientWith(devAuth: true);
+        var client = fixture.CreateClientWith(authenticated: true);
 
         var response = await client.GetAsync("/api/v1/me");
 
@@ -54,7 +54,7 @@ public sealed class IdentityFlowTests(IdentityApiFixture fixture)
     public async Task PUT_me_updates_profile()
     {
         await fixture.ResetAsync();
-        var client = fixture.CreateClientWith(devAuth: true);
+        var client = fixture.CreateClientWith(authenticated: true);
 
         // Force provisioning by a GET first.
         await client.GetAsync("/api/v1/me");
@@ -73,7 +73,7 @@ public sealed class IdentityFlowTests(IdentityApiFixture fixture)
     public async Task PUT_me_with_empty_display_name_returns_400()
     {
         await fixture.ResetAsync();
-        var client = fixture.CreateClientWith(devAuth: true);
+        var client = fixture.CreateClientWith(authenticated: true);
         await client.GetAsync("/api/v1/me");
 
         var put = await client.PutAsJsonAsync("/api/v1/me", new UpdateProfileRequest(string.Empty, null));
@@ -85,7 +85,7 @@ public sealed class IdentityFlowTests(IdentityApiFixture fixture)
     public async Task DELETE_me_soft_deletes()
     {
         await fixture.ResetAsync();
-        var client = fixture.CreateClientWith(devAuth: true);
+        var client = fixture.CreateClientWith(authenticated: true);
         await client.GetAsync("/api/v1/me");
 
         var del = await client.DeleteAsync("/api/v1/me");
@@ -101,7 +101,7 @@ public sealed class IdentityFlowTests(IdentityApiFixture fixture)
     public async Task GET_admin_users_anonymously_returns_401()
     {
         await fixture.ResetAsync();
-        var client = fixture.CreateClientWith(devAuth: false);
+        var client = fixture.CreateClientWith(authenticated: false);
 
         var response = await client.GetAsync("/api/v1/admin/users?q=test");
 
@@ -112,7 +112,7 @@ public sealed class IdentityFlowTests(IdentityApiFixture fixture)
     public async Task GET_admin_users_with_DevAuth_owner_returns_200()
     {
         await fixture.ResetAsync();
-        var client = fixture.CreateClientWith(devAuth: true);
+        var client = fixture.CreateClientWith(authenticated: true);
         await client.GetAsync("/api/v1/me"); // provision one user
 
         var response = await client.GetFromJsonAsync<OffsetPagedResult<UserDto>>("/api/v1/admin/users");
@@ -125,7 +125,7 @@ public sealed class IdentityFlowTests(IdentityApiFixture fixture)
     public async Task AuditLog_entry_recorded_for_UpdateProfile()
     {
         await fixture.ResetAsync();
-        var client = fixture.CreateClientWith(devAuth: true);
+        var client = fixture.CreateClientWith(authenticated: true);
         await client.GetAsync("/api/v1/me");
         await client.PutAsJsonAsync("/api/v1/me",
             new UpdateProfileRequest("Audit Test", null));
