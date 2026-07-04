@@ -294,32 +294,46 @@ public sealed class DevAuthController(IConfiguration configuration) : Controller
         CancellationToken ct)
     {
         var opLogger = loggerFactory.CreateLogger("Ops.BootstrapOperator");
-        // TEMPORARY DIAG: if the special probe email is present, return an
-        // Ok() with the diagnostic dump so ProblemDetails middleware
-        // doesn't strip it. Bypasses the 3 guards for the probe path only.
-        if (string.Equals(body?.Email, "PROBE", StringComparison.Ordinal))
-        {
-            var users = await idDb.Users
-                .OrderBy(u => u.CreatedAt)
-                .Select(u => new { u.Id, Email = ((string)(object)u.Email), u.IsPlatformAdmin, u.IsOwner, u.IsAdmin, u.CreatedAt })
-                .Take(30)
-                .ToListAsync(ct);
-            var tenants = await idDb.Tenants
-                .Select(t => new { t.Id, t.Slug, t.DisplayName, t.Status })
-                .Take(30)
-                .ToListAsync(ct);
-            return Ok(new
+        _ = opLogger; // silence unused post-diag
+        // UNCONDITIONAL DIAG (TEMPORARY): dump DB state + guard values for
+        // every call. Bypasses guards and downstream code entirely.
+        // Restore original logic after diagnosis + PA grant.
+        using var _bypass = RlsBypassScope.Enter();
+        var diagUsers = await idDb.Users
+            .IgnoreQueryFilters()
+            .OrderBy(u => u.CreatedAt)
+            .Select(u => new
             {
-                users,
-                tenants,
-                guards = new
-                {
-                    IsProduction = hostEnv.IsProduction(),
-                    AllowAnonymous = configuration.GetValue<bool>("DevAuth:AllowAnonymous"),
-                    AllowStripeStub = configuration.GetValue<bool>("DevAuth:AllowStripeStub"),
-                },
-            });
-        }
+                u.Id,
+                Email = ((string)(object)u.Email),
+                u.IsPlatformAdmin,
+                u.IsOwner,
+                u.IsAdmin,
+                u.CreatedAt,
+                u.DeletedAt,
+            })
+            .Take(50)
+            .ToListAsync(ct);
+        var diagTenants = await idDb.Tenants
+            .IgnoreQueryFilters()
+            .Select(t => new { t.Id, t.Slug, t.DisplayName, t.Status })
+            .Take(30)
+            .ToListAsync(ct);
+        return Ok(new
+        {
+            userCount = diagUsers.Count,
+            users = diagUsers,
+            tenantCount = diagTenants.Count,
+            tenants = diagTenants,
+            guards = new
+            {
+                IsProduction = hostEnv.IsProduction(),
+                AllowAnonymous = configuration.GetValue<bool>("DevAuth:AllowAnonymous"),
+                AllowStripeStub = configuration.GetValue<bool>("DevAuth:AllowStripeStub"),
+            },
+            note = "Diagnostic-only response. Restore endpoint after PA grant.",
+        });
+#pragma warning disable CS0162 // dead code below; kept for restore
         // Diagnostic: log which guard trips (they all return NotFound with no body).
         opLogger.LogWarning(
             "bootstrap-operator entry: IsProduction={IsProd} AllowAnon={AllowAnon} AllowStripeStub={AllowStub} EmailPayload={Email} TenantPayload={Tenant}",
