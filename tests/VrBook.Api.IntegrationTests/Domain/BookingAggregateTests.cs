@@ -330,6 +330,136 @@ public sealed class BookingAggregateTests
         act.Should().Throw<BusinessRuleViolationException>();
     }
 
+    // ----- Slice OPS.M.16 turnover-aware completion -----
+
+    [Fact]
+    public void CheckOut_stamps_CompletionDueAt_using_property_turnover_hours()
+    {
+        var b = PlaceCheckedIn();
+        b.DequeueEvents();
+
+        b.CheckOut(propertyTurnoverHours: 36);
+
+        b.CompletionDueAt.Should().NotBeNull();
+        b.CompletionDueAt!.Value.Should().BeCloseTo(
+            b.CheckedOutAt!.Value.AddHours(36),
+            TimeSpan.FromSeconds(1));
+        b.TurnoverHoursOverride.Should().BeNull("no override set — property default applied");
+    }
+
+    [Fact]
+    public void CheckOut_uses_zero_turnover_hours_when_property_default_is_zero()
+    {
+        var b = PlaceCheckedIn();
+        b.CheckOut(propertyTurnoverHours: 0);
+        b.CompletionDueAt.Should().BeCloseTo(b.CheckedOutAt!.Value, TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public void CheckOut_rejects_negative_propertyTurnoverHours()
+    {
+        var b = PlaceCheckedIn();
+        var act = () => b.CheckOut(propertyTurnoverHours: -1);
+        act.Should().Throw<BusinessRuleViolationException>()
+            .WithMessage("*turnover_hours_negative*");
+    }
+
+    [Fact]
+    public void ScheduleCompletion_recomputes_CompletionDueAt_from_CheckedOutAt()
+    {
+        var b = PlaceCheckedIn();
+        b.CheckOut(propertyTurnoverHours: 24);
+        b.DequeueEvents();
+
+        b.ScheduleCompletion(hoursFromCheckedOutAt: 48);
+
+        b.TurnoverHoursOverride.Should().Be(48);
+        b.CompletionDueAt.Should().BeCloseTo(b.CheckedOutAt!.Value.AddHours(48), TimeSpan.FromSeconds(1));
+        var evt = b.DequeueEvents().OfType<BookingCompletionRescheduled>().Single();
+        evt.BookingId.Should().Be(b.Id);
+        evt.HoursFromCheckedOutAt.Should().Be(48);
+        evt.DueAt.Should().Be(b.CompletionDueAt!.Value);
+        evt.TenantId.Should().Be(b.TenantId);
+    }
+
+    [Fact]
+    public void ScheduleCompletion_requires_CheckedOut_state()
+    {
+        var b = PlaceCheckedIn();
+        var act = () => b.ScheduleCompletion(24);
+        act.Should().Throw<BusinessRuleViolationException>()
+            .WithMessage("*Cannot transition from CheckedIn*");
+    }
+
+    [Fact]
+    public void ScheduleCompletion_rejects_negative_hours()
+    {
+        var b = PlaceCheckedIn();
+        b.CheckOut();
+        var act = () => b.ScheduleCompletion(-1);
+        act.Should().Throw<BusinessRuleViolationException>()
+            .WithMessage("*turnover_hours_out_of_range*");
+    }
+
+    [Fact]
+    public void ScheduleCompletion_rejects_hours_over_upper_bound_168()
+    {
+        var b = PlaceCheckedIn();
+        b.CheckOut();
+        var act = () => b.ScheduleCompletion(169);
+        act.Should().Throw<BusinessRuleViolationException>()
+            .WithMessage("*turnover_hours_out_of_range*");
+    }
+
+    [Fact]
+    public void ScheduleCompletion_accepts_boundary_values_0_and_168()
+    {
+        var b = PlaceCheckedIn();
+        b.CheckOut();
+
+        b.ScheduleCompletion(0);
+        b.TurnoverHoursOverride.Should().Be(0);
+
+        b.ScheduleCompletion(168);
+        b.TurnoverHoursOverride.Should().Be(168);
+        b.CompletionDueAt.Should().BeCloseTo(b.CheckedOutAt!.Value.AddHours(168), TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public void CompleteManually_from_CheckedOut_transitions_and_raises_manual_trigger()
+    {
+        var b = PlaceCheckedIn();
+        b.CheckOut();
+        b.DequeueEvents();
+
+        b.CompleteManually();
+
+        b.Status.Should().Be(BookingStatus.Completed);
+        var evt = b.DequeueEvents().OfType<BookingCompleted>().Single();
+        evt.Trigger.Should().Be("manual");
+    }
+
+    [Fact]
+    public void CompleteManually_from_CheckedIn_throws()
+    {
+        var b = PlaceCheckedIn();
+        var act = () => b.CompleteManually();
+        act.Should().Throw<BusinessRuleViolationException>();
+    }
+
+    [Fact]
+    public void Complete_from_sweep_raises_sweep_trigger()
+    {
+        var b = PlaceCheckedIn();
+        b.CheckOut();
+        b.DequeueEvents();
+
+        b.Complete();
+
+        var evt = b.DequeueEvents().OfType<BookingCompleted>().Single();
+        evt.Trigger.Should().Be("sweep");
+    }
+
     // ----- Full happy-path lifecycle -----
 
     [Fact]

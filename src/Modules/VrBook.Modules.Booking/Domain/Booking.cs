@@ -47,6 +47,24 @@ public sealed class Booking : AggregateRoot
     public string? CancellationReason { get; private set; }
     public string? SpecialRequests { get; private set; }
 
+    /// <summary>
+    /// Slice OPS.M.16 — per-booking override of the property's default
+    /// <c>TurnoverHours</c>. Null when the property default applies. Set
+    /// via <see cref="ScheduleCompletion(int)"/> after check-out to push
+    /// the auto-completion window out (e.g. damage-check delayed).
+    /// </summary>
+    public int? TurnoverHoursOverride { get; private set; }
+
+    /// <summary>
+    /// Slice OPS.M.16 — snapshotted absolute timestamp when the daily
+    /// completion sweep will flip this booking <c>CheckedOut → Completed</c>.
+    /// Stamped at CheckOut time from <c>CheckedOutAt + TurnoverHoursOverride
+    /// ?? property.TurnoverHours</c>. Rewritten by <see cref="ScheduleCompletion"/>.
+    /// Snapshot semantics: changing the property's default mid-stay does NOT
+    /// shift in-flight due-ats.
+    /// </summary>
+    public DateTimeOffset? CompletionDueAt { get; private set; }
+
     private readonly List<BookingLineItem> _lineItems = new();
     public IReadOnlyList<BookingLineItem> LineItems => _lineItems;
 
@@ -185,28 +203,87 @@ public sealed class Booking : AggregateRoot
         Raise(new BookingCheckedIn(Id, Reference));
     }
 
-    public void CheckOut()
+    /// <summary>
+    /// Slice OPS.M.16 — CheckOut now takes the property's turnover default
+    /// so we can snapshot <see cref="CompletionDueAt"/> at the moment the
+    /// stay ends. If a prior <see cref="ScheduleCompletion"/> call set
+    /// <see cref="TurnoverHoursOverride"/>, that override wins; otherwise
+    /// <paramref name="propertyTurnoverHours"/> is used.
+    /// <para>The default of 24 is a M.16.1 → M.16.3 bridge: the parameter
+    /// becomes required once <c>CheckOutBookingHandler</c> is wired to
+    /// read the property's actual default (M.16.3).</para>
+    /// </summary>
+    public void CheckOut(int propertyTurnoverHours = 24)
     {
         Require(BookingStatus.CheckedIn);
+        if (propertyTurnoverHours < 0)
+        {
+            throw new BusinessRuleViolationException(
+                "booking.turnover_hours_negative",
+                $"propertyTurnoverHours must be >= 0; got {propertyTurnoverHours}.");
+        }
         Status = BookingStatus.CheckedOut;
         CheckedOutAt = DateTimeOffset.UtcNow;
+        var effective = TurnoverHoursOverride ?? propertyTurnoverHours;
+        CompletionDueAt = CheckedOutAt.Value.AddHours(effective);
         Raise(new BookingCheckedOut(Id, Reference));
     }
 
     /// <summary>
+    /// Slice OPS.M.16 — override the auto-completion window after check-out.
+    /// Recomputes <see cref="CompletionDueAt"/> from
+    /// <see cref="CheckedOutAt"/> + <paramref name="hoursFromCheckedOutAt"/>.
+    /// Domain caps at 168h (one week). 0h means "auto-complete on next
+    /// sweep tick" — use <see cref="CompleteManually"/> for truly-immediate.
+    /// </summary>
+    public void ScheduleCompletion(int hoursFromCheckedOutAt)
+    {
+        Require(BookingStatus.CheckedOut);
+        if (hoursFromCheckedOutAt < 0 || hoursFromCheckedOutAt > 168)
+        {
+            throw new BusinessRuleViolationException(
+                "booking.turnover_hours_out_of_range",
+                $"hoursFromCheckedOutAt must be between 0 and 168 (one week); got {hoursFromCheckedOutAt}.");
+        }
+        if (CheckedOutAt is null)
+        {
+            throw new BusinessRuleViolationException(
+                "booking.checked_out_at_missing",
+                "Cannot schedule completion — CheckedOutAt is missing though status is CheckedOut. Data integrity bug.");
+        }
+        TurnoverHoursOverride = hoursFromCheckedOutAt;
+        CompletionDueAt = CheckedOutAt.Value.AddHours(hoursFromCheckedOutAt);
+        Raise(new BookingCompletionRescheduled(Id, CompletionDueAt.Value, hoursFromCheckedOutAt, TenantId));
+    }
+
+    /// <summary>
     /// Slice 5: the post-stay terminal transition. Called by the daily
-    /// <c>BookingCompletionWorker</c> (cron <c>0 6 * * *</c>) once
-    /// <see cref="CheckedOutAt"/> is at least a day old. Raises
+    /// <c>BookingCompletionWorker</c> (cron <c>0 6 * * *</c>) when
+    /// <see cref="CompletionDueAt"/> is in the past. Raises
     /// <see cref="BookingCompleted"/> so Loyalty increments the stay count
     /// and Notifications enqueues the "thanks for staying" + review-request
     /// emails. CheckOut no longer raises this — the daily sweep is the sole
-    /// trigger so the post-stay loop is rate-limited.
+    /// automatic trigger; admin-initiated manual completion goes through
+    /// <see cref="CompleteManually"/> (M.16).
     /// </summary>
     public void Complete()
     {
         Require(BookingStatus.CheckedOut);
         Status = BookingStatus.Completed;
-        Raise(new BookingCompleted(Id, Reference, GuestUserId, TenantId));
+        Raise(new BookingCompleted(Id, Reference, GuestUserId, TenantId, Trigger: "sweep"));
+    }
+
+    /// <summary>
+    /// Slice OPS.M.16 — admin-initiated manual completion. Distinct from
+    /// the sweep-triggered <see cref="Complete"/> so the emitted event
+    /// carries <c>Trigger = "manual"</c> for observability; downstream
+    /// handlers (Loyalty, Notifications) treat both triggers identically.
+    /// </summary>
+    public void CompleteManually()
+    {
+        Require(BookingStatus.CheckedOut);
+        Status = BookingStatus.Completed;
+        Raise(new BookingCompleted(Id, Reference, GuestUserId, TenantId, Trigger: "manual"));
     }
 
     private void Require(BookingStatus expected)

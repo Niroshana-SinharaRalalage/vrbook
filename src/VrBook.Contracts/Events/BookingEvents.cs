@@ -63,6 +63,19 @@ public sealed record BookingCompleted(
     Guid BookingId,
     string Reference,
     Guid GuestUserId,
+    Guid TenantId,
+    string Trigger = "sweep") : DomainEvent; // Trigger: "sweep" | "manual" (OPS.M.16 discriminator; legacy outbox rows default to "sweep")
+
+/// <summary>
+/// Slice OPS.M.16 — raised when an admin reschedules a CheckedOut booking's
+/// auto-completion window (POST /api/v1/bookings/{id}/schedule-completion).
+/// Audit-trail only today; the housekeeping module (future slice) is the
+/// intended downstream consumer.
+/// </summary>
+public sealed record BookingCompletionRescheduled(
+    Guid BookingId,
+    DateTimeOffset DueAt,
+    int HoursFromCheckedOutAt,
     Guid TenantId) : DomainEvent;
 
 public sealed record BookingDisputed(

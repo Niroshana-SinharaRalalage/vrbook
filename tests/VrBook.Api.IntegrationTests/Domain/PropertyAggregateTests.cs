@@ -118,6 +118,91 @@ public sealed class PropertyAggregateTests
         p.DequeueEvents().Should().ContainSingle().Which.Should().BeOfType<PropertyUpdated>();
     }
 
+    // ---- Slice OPS.M.16 TurnoverHours ----
+
+    [Fact]
+    public void Create_default_TurnoverHours_is_24()
+    {
+        Create().TurnoverHours.Should().Be(24);
+    }
+
+    [Fact]
+    public void Create_accepts_explicit_TurnoverHours()
+    {
+        var p = Property.Create(
+            tenantId: AnyTenantId,
+            ownerUserId: Guid.NewGuid(),
+            title: "T",
+            description: "D",
+            type: PropertyType.Cabin,
+            address: AnyAddress(),
+            capacity: AnyCapacity(),
+            checkIn: AnyCheckInWindow(),
+            houseRules: [],
+            amenityIds: [],
+            slug: "s",
+            turnoverHours: 48);
+        p.TurnoverHours.Should().Be(48);
+    }
+
+    [Fact]
+    public void Create_rejects_negative_TurnoverHours()
+    {
+        var act = () => Property.Create(
+            tenantId: AnyTenantId,
+            ownerUserId: Guid.NewGuid(),
+            title: "T", description: "D", type: PropertyType.Cabin,
+            address: AnyAddress(), capacity: AnyCapacity(),
+            checkIn: AnyCheckInWindow(),
+            houseRules: [], amenityIds: [], slug: "s",
+            turnoverHours: -1);
+        act.Should().Throw<BusinessRuleViolationException>()
+            .WithMessage("*turnover_hours_out_of_range*");
+    }
+
+    [Fact]
+    public void Create_rejects_TurnoverHours_over_upper_bound_168()
+    {
+        var act = () => Property.Create(
+            tenantId: AnyTenantId,
+            ownerUserId: Guid.NewGuid(),
+            title: "T", description: "D", type: PropertyType.Cabin,
+            address: AnyAddress(), capacity: AnyCapacity(),
+            checkIn: AnyCheckInWindow(),
+            houseRules: [], amenityIds: [], slug: "s",
+            turnoverHours: 169);
+        act.Should().Throw<BusinessRuleViolationException>();
+    }
+
+    [Fact]
+    public void UpdateBasics_updates_TurnoverHours()
+    {
+        var p = Create();
+        p.DequeueEvents();
+
+        p.UpdateBasics(
+            title: "T2", description: "D2",
+            address: AnyAddress(), capacity: AnyCapacity(),
+            checkIn: AnyCheckInWindow(),
+            reviewsEnabled: true, dynamicPricingEnabled: false, messagingEnabled: true,
+            turnoverHours: 12);
+
+        p.TurnoverHours.Should().Be(12);
+    }
+
+    [Fact]
+    public void UpdateBasics_rejects_TurnoverHours_over_upper_bound()
+    {
+        var p = Create();
+        var act = () => p.UpdateBasics(
+            title: "T2", description: "D2",
+            address: AnyAddress(), capacity: AnyCapacity(),
+            checkIn: AnyCheckInWindow(),
+            reviewsEnabled: true, dynamicPricingEnabled: false, messagingEnabled: true,
+            turnoverHours: 200);
+        act.Should().Throw<BusinessRuleViolationException>();
+    }
+
     // ---- House rules + amenity replace ----
 
     [Fact]

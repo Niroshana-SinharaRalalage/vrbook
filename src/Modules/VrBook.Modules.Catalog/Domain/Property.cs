@@ -35,6 +35,15 @@ public sealed class Property : AggregateRoot
     public bool DynamicPricingEnabled { get; private set; }
     public bool MessagingEnabled { get; private set; }
 
+    /// <summary>
+    /// Slice OPS.M.16 — default turnover window (hours). Booking.CheckOut()
+    /// snapshots this into <c>Booking.CompletionDueAt</c> unless the booking
+    /// carries a per-instance override. Owners tune this per-inventory:
+    /// downtown studios may set 6-12h; beach villas may set 48h. Domain
+    /// caps at 168h (7 days) — see M.16.1 validation.
+    /// </summary>
+    public int TurnoverHours { get; private set; } = 24;
+
     public decimal? RatingAvg { get; private set; }
     public int RatingCount { get; private set; }
 
@@ -71,7 +80,8 @@ public sealed class Property : AggregateRoot
         CheckInWindow checkIn,
         IEnumerable<string> houseRules,
         IEnumerable<Guid> amenityIds,
-        string slug)
+        string slug,
+        int turnoverHours = 24)
     {
         if (tenantId == Guid.Empty)
         {
@@ -80,6 +90,7 @@ public sealed class Property : AggregateRoot
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
         ArgumentException.ThrowIfNullOrWhiteSpace(slug);
+        ValidateTurnoverHours(turnoverHours);
 
         var p = new Property
         {
@@ -97,6 +108,7 @@ public sealed class Property : AggregateRoot
             ReviewsEnabled = true,
             DynamicPricingEnabled = false,
             MessagingEnabled = true,
+            TurnoverHours = turnoverHours,
         };
         var i = 0;
         foreach (var r in houseRules)
@@ -125,10 +137,12 @@ public sealed class Property : AggregateRoot
         CheckInWindow checkIn,
         bool reviewsEnabled,
         bool dynamicPricingEnabled,
-        bool messagingEnabled)
+        bool messagingEnabled,
+        int turnoverHours = 24)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
+        ValidateTurnoverHours(turnoverHours);
         Title = title.Trim();
         Description = description.Trim();
         Address = address;
@@ -137,7 +151,18 @@ public sealed class Property : AggregateRoot
         ReviewsEnabled = reviewsEnabled;
         DynamicPricingEnabled = dynamicPricingEnabled;
         MessagingEnabled = messagingEnabled;
+        TurnoverHours = turnoverHours;
         Raise(new PropertyUpdated(Id));
+    }
+
+    private static void ValidateTurnoverHours(int turnoverHours)
+    {
+        if (turnoverHours < 0 || turnoverHours > 168)
+        {
+            throw new BusinessRuleViolationException(
+                "property.turnover_hours_out_of_range",
+                $"TurnoverHours must be between 0 and 168 (one week); got {turnoverHours}.");
+        }
     }
 
     public void ReplaceHouseRules(IEnumerable<string> rules)
