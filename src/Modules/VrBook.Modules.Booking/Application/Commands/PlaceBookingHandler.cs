@@ -145,13 +145,20 @@ internal sealed class PlaceBookingHandler(
             //     Also: SELECT COUNT(*) ... FOR UPDATE is rejected (0A000); select the
             //     ids and check HasRows. "Id" is quoted because EF preserves PascalCase
             //     for the PK (Postgres folds unquoted identifiers to lowercase, 42703).
+            // Slice OPS.M.16 — same conditional-on-CheckedOut turnover-day
+            // block as BookingRepository.FindOverlapsAsync. This SQL path is
+            // the race-safe primary check (serializable-tx + FOR UPDATE);
+            // the repository query is the async duplicate. Both must agree.
             const string overlapSql = """
                 SELECT "Id" FROM booking.bookings
                 WHERE property_id = @p0
                   AND status NOT IN ('Cancelled', 'Rejected', 'Refunded')
                   AND deleted_at IS NULL
                   AND checkin_date < @p2
-                  AND @p1 < checkout_date
+                  AND (
+                        (status = 'CheckedOut' AND @p1 <= checkout_date)
+                     OR (status <> 'CheckedOut' AND @p1 < checkout_date)
+                  )
                 FOR UPDATE
                 """;
             await using var cmd = db.Database.GetDbConnection().CreateCommand();

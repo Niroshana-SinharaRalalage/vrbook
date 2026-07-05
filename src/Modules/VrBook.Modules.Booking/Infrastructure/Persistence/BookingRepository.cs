@@ -36,13 +36,25 @@ internal sealed class BookingRepository(BookingDbContext db) : IBookingRepositor
         await db.Bookings
             .AsNoTracking()
             .Where(b => b.PropertyId == propertyId
-                // Anything but Cancelled / Rejected blocks the calendar. CheckedOut /
-                // Completed are kept because their stay may still be in the future
-                // (test-only timing, but also defensive in prod).
+                // Slice OPS.M.16 — overlap rule:
+                //   * For CheckedOut bookings, block same-day turnover
+                //     (checkin_new <= checkout_existing). This prevents a
+                //     guest checking in on the day housekeeping is still
+                //     in progress. Unblocks once the admin flips the
+                //     booking to Completed OR the daily sweep does so at
+                //     the snapshotted CompletionDueAt.
+                //   * For every other still-active status (Tentative,
+                //     Confirmed, CheckedIn, Completed), keep the strict
+                //     half-open [checkin, checkout) hospitality standard
+                //     — turnover-day shared arrivals ARE allowed.
+                //   * Cancelled / Rejected / Refunded never block.
                 && b.Status != BookingStatus.Cancelled
                 && b.Status != BookingStatus.Rejected
+                && b.Status != BookingStatus.Refunded
                 && b.Stay.CheckinDate < checkout
-                && checkin < b.Stay.CheckoutDate)
+                && (b.Status == BookingStatus.CheckedOut
+                        ? checkin <= b.Stay.CheckoutDate
+                        : checkin < b.Stay.CheckoutDate))
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<(DateOnly Checkin, DateOnly Checkout)>> ListBlockedRangesAsync(Guid propertyId, DateOnly fromDate, DateOnly toDate, CancellationToken cancellationToken = default)
@@ -57,8 +69,17 @@ internal sealed class BookingRepository(BookingDbContext db) : IBookingRepositor
                     || b.Status == BookingStatus.Completed)
                 && b.Stay.CheckinDate < toDate
                 && fromDate < b.Stay.CheckoutDate)
-            .Select(b => new { b.Stay.CheckinDate, b.Stay.CheckoutDate })
+            .Select(b => new { b.Stay.CheckinDate, b.Stay.CheckoutDate, b.Status })
             .ToListAsync(cancellationToken);
-        return rows.Select(r => (r.CheckinDate, r.CheckoutDate)).ToArray();
+
+        // Slice OPS.M.16 — for CheckedOut bookings, extend the blocked range
+        // by one day so the guest availability calendar reflects the
+        // turnover-day soft block. DateOnly.AddDays translated poorly in
+        // EF for this composite projection so we materialize first and
+        // reshape in memory.
+        return rows.Select(r => (
+            r.CheckinDate,
+            r.Status == BookingStatus.CheckedOut ? r.CheckoutDate.AddDays(1) : r.CheckoutDate
+        )).ToArray();
     }
 }

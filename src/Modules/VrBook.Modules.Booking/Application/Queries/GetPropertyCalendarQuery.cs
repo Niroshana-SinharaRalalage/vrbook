@@ -53,6 +53,9 @@ internal sealed class GetPropertyCalendarHandler(
 
         // Direct bookings overlapping the window. Anything not Cancelled/Rejected
         // (matches the conflict-check rule).
+        // Slice OPS.M.16 — AwaitingTurnover=true iff Status==CheckedOut so the
+        // admin calendar can render a turnover-day overlay on Checkout without
+        // the DTO having to lie about the booking's actual dates.
         var bookings = await db.Bookings
             .AsNoTracking()
             .Where(b => b.PropertyId == request.PropertyId)
@@ -64,7 +67,8 @@ internal sealed class GetPropertyCalendarHandler(
                 b.Stay.CheckinDate,
                 b.Stay.CheckoutDate,
                 b.Status,
-                b.GuestDisplayName))
+                b.GuestDisplayName,
+                b.Status == BookingStatus.CheckedOut))
             .ToListAsync(cancellationToken);
 
         // External (AirBnB / VRBO) reservations via the Sync module's checker.

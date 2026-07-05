@@ -22,7 +22,11 @@ public sealed record CalendarBookingEntry(
     DateOnly Checkin,
     DateOnly Checkout,
     BookingStatus Status,
-    string GuestDisplayName);
+    string GuestDisplayName,
+    // Slice OPS.M.16 — true when Status == CheckedOut. Signals the web UI
+    // to render a turnover-day overlay on Checkout since new same-day
+    // arrivals are blocked until the admin flips the booking to Completed.
+    bool AwaitingTurnover = false);
 
 public sealed record CalendarExternalEntry(
     Guid ExternalReservationId,
