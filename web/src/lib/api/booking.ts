@@ -71,6 +71,10 @@ export interface Booking {
   readonly guests: readonly BookingGuest[];
   readonly specialRequests: string | null;
   readonly createdAt: string;
+  // Slice OPS.M.16 — turnover-aware completion.
+  readonly checkedOutAt?: string | null;
+  readonly completionDueAt?: string | null;
+  readonly turnoverHoursOverride?: number | null;
 }
 
 export interface PagedResult<T> {
@@ -182,6 +186,20 @@ export const checkInBooking = (id: string): Promise<Booking> =>
 
 export const checkOutBooking = (id: string): Promise<Booking> =>
   apiFetch<Booking>(`/api/v1/bookings/${encodeURIComponent(id)}/check-out`, { method: 'POST' });
+
+// Slice OPS.M.16 — manual admin completion (bypasses the auto-complete sweep).
+export const completeBookingManually = (id: string): Promise<Booking> =>
+  apiFetch<Booking>(`/api/v1/bookings/${encodeURIComponent(id)}/complete`, { method: 'POST' });
+
+// Slice OPS.M.16 — reschedule the auto-completion window. Domain caps at 168h.
+export const scheduleBookingCompletion = (
+  id: string,
+  hoursFromCheckedOutAt: number,
+): Promise<Booking> =>
+  apiFetch<Booking>(`/api/v1/bookings/${encodeURIComponent(id)}/schedule-completion`, {
+    method: 'POST',
+    body: { hoursFromCheckedOutAt },
+  });
 
 // ---- Payment ------------------------------------------------------------
 export interface PaymentIntent {

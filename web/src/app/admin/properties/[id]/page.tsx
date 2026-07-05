@@ -41,6 +41,7 @@ interface FormState {
   dynamicPricingEnabled: boolean;
   messagingEnabled: boolean;
   isActive: boolean;
+  turnoverHours: number;
 }
 
 const detailToForm = (p: PropertyDetail): FormState => ({
@@ -67,6 +68,7 @@ const detailToForm = (p: PropertyDetail): FormState => ({
   dynamicPricingEnabled: p.dynamicPricingEnabled,
   messagingEnabled: p.messagingEnabled,
   isActive: p.isActive,
+  turnoverHours: p.turnoverHours ?? 24,
 });
 
 const AdminPropertyEditPage = () => {
@@ -166,6 +168,7 @@ const AdminPropertyEditPage = () => {
         dynamicPricingEnabled: form.dynamicPricingEnabled,
         messagingEnabled: form.messagingEnabled,
         isActive: form.isActive,
+        turnoverHours: form.turnoverHours,
       };
       await updateProperty(id, body);
       router.push('/admin/properties');
@@ -247,6 +250,28 @@ const AdminPropertyEditPage = () => {
             value={form.messagingEnabled}
             onChange={(v) => setForm({ ...form, messagingEnabled: v })}
           />
+        </Section>
+
+        <Section title="Booking rules">
+          <Field label="Turnover hours" required>
+            <input
+              type="number"
+              min={0}
+              max={168}
+              step={1}
+              required
+              value={form.turnoverHours}
+              onChange={(e) =>
+                setForm({ ...form, turnoverHours: Number(e.target.value) })
+              }
+              className={inputCls}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              How long after check-out before a new guest can check in on the
+              same turnover day. Defaults to 24 hours. Individual bookings can
+              override this. Allowed range: 0&ndash;168h (one week).
+            </p>
+          </Field>
         </Section>
 
         <Section title="Basics">

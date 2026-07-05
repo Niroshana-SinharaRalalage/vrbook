@@ -36,6 +36,7 @@ interface FormState {
   checkoutBy: string;
   houseRules: string;
   amenityIds: Set<string>;
+  turnoverHours: number;
 }
 
 const emptyForm = (): FormState => ({
@@ -58,6 +59,7 @@ const emptyForm = (): FormState => ({
   checkoutBy: '11:00',
   houseRules: '',
   amenityIds: new Set<string>(),
+  turnoverHours: 24,
 });
 
 const AdminPropertyCreatePage = () => {
@@ -119,6 +121,7 @@ const AdminPropertyCreatePage = () => {
           .map((r) => r.trim())
           .filter((r) => r.length > 0),
         amenityIds: Array.from(form.amenityIds),
+        turnoverHours: form.turnoverHours,
       };
       const created = await createProperty(body);
 
@@ -129,6 +132,7 @@ const AdminPropertyCreatePage = () => {
           dynamicPricingEnabled: created.dynamicPricingEnabled,
           messagingEnabled: created.messagingEnabled,
           isActive: true,
+          turnoverHours: form.turnoverHours,
         });
       }
 
@@ -376,6 +380,28 @@ const AdminPropertyCreatePage = () => {
               className={inputCls}
               placeholder={'No smoking\nNo pets\nQuiet hours after 10pm'}
             />
+          </Field>
+        </Section>
+
+        <Section title="Booking rules">
+          <Field label="Turnover hours" required>
+            <input
+              type="number"
+              min={0}
+              max={168}
+              step={1}
+              required
+              value={form.turnoverHours}
+              onChange={(e) =>
+                setForm({ ...form, turnoverHours: Number(e.target.value) })
+              }
+              className={inputCls}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              How long after check-out before a new guest can check in on the
+              same turnover day. Defaults to 24 hours. Individual bookings can
+              override this. Allowed range: 0&ndash;168h (one week).
+            </p>
           </Field>
         </Section>
 

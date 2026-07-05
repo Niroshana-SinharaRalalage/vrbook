@@ -10,8 +10,10 @@ import {
   adminGetBooking,
   checkInBooking,
   checkOutBooking,
+  completeBookingManually,
   confirmBooking,
   rejectBooking,
+  scheduleBookingCompletion,
   type Booking,
   type BookingStatus,
 } from '@/lib/api/booking';
@@ -56,6 +58,9 @@ const AdminBookingDetailPage = () => {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  // Slice OPS.M.16 — turnover reschedule state.
+  const [rescheduleHours, setRescheduleHours] = useState<number>(24);
+  const [rescheduleError, setRescheduleError] = useState<string | null>(null);
   // Slice 6 C5: the thread auto-created on BookingConfirmed. Resolved via the
   // new `?bookingId=` filter on GET /api/v1/threads. Null while loading or
   // when this booking has no thread yet.
@@ -157,6 +162,46 @@ const AdminBookingDetailPage = () => {
     }
   };
 
+  // Slice OPS.M.16 — manual completion (skip the sweep window).
+  const onCompleteNow = async () => {
+    setActing(true);
+    setActionError(null);
+    try {
+      await completeBookingManually(booking.id);
+      await refresh();
+    } catch (err) {
+      setActionError(
+        err instanceof ApiProblemError
+          ? err.problem.detail ?? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Complete failed',
+      );
+    } finally {
+      setActing(false);
+    }
+  };
+
+  // Slice OPS.M.16 — reschedule the auto-complete window.
+  const onReschedule = async () => {
+    setActing(true);
+    setRescheduleError(null);
+    try {
+      await scheduleBookingCompletion(booking.id, rescheduleHours);
+      await refresh();
+    } catch (err) {
+      setRescheduleError(
+        err instanceof ApiProblemError
+          ? err.problem.detail ?? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Reschedule failed',
+      );
+    } finally {
+      setActing(false);
+    }
+  };
+
   const runAction = async (
     label: string,
     fn: (id: string) => Promise<Booking | void>,
@@ -198,17 +243,17 @@ const AdminBookingDetailPage = () => {
         </span>
       </div>
 
-      {(booking.status === 'Confirmed' || booking.status === 'CheckedIn' || booking.status === 'CheckedOut') && (
+      {(booking.status === 'Confirmed' || booking.status === 'CheckedIn') && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-300 bg-blue-50 p-4 dark:border-blue-700 dark:bg-blue-900/20">
           <div className="flex items-start gap-3">
             <Clock className="mt-0.5 h-5 w-5 text-blue-700 dark:text-blue-300" aria-hidden />
             <div className="text-sm">
               <p className="font-medium text-blue-900 dark:text-blue-100">Stay lifecycle</p>
               <p className="text-blue-800 dark:text-blue-200">
-                Move the booking through the stay lifecycle. CheckOut sets the
-                clock for the daily completion sweep — 24h later the booking
-                flips to Completed and the post-stay loop fires (review email,
-                loyalty count).
+                Move the booking through the stay lifecycle. After Check-out, a
+                turnover window (property default, admin-adjustable) elapses
+                before the booking auto-completes; you can also complete it
+                manually once housekeeping is ready.
               </p>
             </div>
           </div>
@@ -232,6 +277,75 @@ const AdminBookingDetailPage = () => {
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Slice OPS.M.16 — CheckedOut "Awaiting turnover" panel. */}
+      {booking.status === 'CheckedOut' && (
+        <div className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20">
+          <div className="flex items-start gap-3">
+            <Clock className="mt-0.5 h-5 w-5 text-amber-700 dark:text-amber-300" aria-hidden />
+            <div className="text-sm">
+              <p className="font-medium text-amber-900 dark:text-amber-100">
+                Awaiting turnover
+              </p>
+              <p className="text-amber-800 dark:text-amber-200">
+                {booking.checkedOutAt && (
+                  <>Checked out at {new Date(booking.checkedOutAt).toLocaleString()}. </>
+                )}
+                {booking.completionDueAt ? (
+                  <>Auto-completes at {new Date(booking.completionDueAt).toLocaleString()}.</>
+                ) : (
+                  <>Auto-completion is not scheduled — use &quot;Complete now&quot; below.</>
+                )}
+                {' '}
+                This property is unavailable for same-day arrivals on the checkout date until you complete the stay.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs text-amber-900 dark:text-amber-100">
+              Reschedule auto-complete:
+              <input
+                type="number"
+                min={0}
+                max={168}
+                step={1}
+                value={rescheduleHours}
+                onChange={(e) => setRescheduleHours(Number.parseInt(e.target.value, 10) || 0)}
+                disabled={acting}
+                className="ml-2 w-20 rounded-md border border-amber-400 bg-white px-2 py-1 text-sm text-amber-900 focus:outline-none focus:ring-1 focus:ring-amber-600 dark:bg-amber-950/40 dark:text-amber-100"
+                aria-label="Hours after checkout before auto-complete"
+              />
+              <span className="ml-1 text-xs">h after checkout</span>
+            </label>
+            <button
+              onClick={() => void onReschedule()}
+              disabled={acting}
+              className="inline-flex items-center gap-1.5 rounded-md border border-amber-500 px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:text-amber-200 dark:hover:bg-amber-900/40"
+            >
+              Update schedule
+            </button>
+            <div className="grow" />
+            <button
+              onClick={() => void onCompleteNow()}
+              disabled={acting}
+              className="inline-flex items-center gap-1.5 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              <CheckCircle2 className="h-4 w-4" aria-hidden /> Complete now
+            </button>
+          </div>
+          {rescheduleError && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
+              {rescheduleError}
+            </div>
+          )}
+          <p className="text-xs text-amber-800 dark:text-amber-200">
+            Allowed range: 0&ndash;168 hours (one week).
+            {booking.turnoverHoursOverride != null && (
+              <> Current override: {booking.turnoverHoursOverride}h.</>
+            )}
+          </p>
         </div>
       )}
 

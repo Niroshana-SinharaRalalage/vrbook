@@ -67,6 +67,10 @@ export interface PropertyDetail {
   readonly images: readonly PropertyImage[];
   readonly amenities: readonly Amenity[];
   readonly houseRules: readonly string[];
+  // Slice OPS.M.16 — property-default turnover window (hours). Falls back
+  // to the domain default of 24 when the wire payload omits it (older API
+  // versions or an unpopulated field).
+  readonly turnoverHours?: number;
 }
 
 export interface PagedResult<T> {
@@ -222,6 +226,7 @@ export interface CreatePropertyBody {
   readonly checkoutBy: string;
   readonly houseRules: readonly string[];
   readonly amenityIds: readonly string[];
+  readonly turnoverHours?: number; // Slice OPS.M.16 — [0, 168]; defaults to 24 server-side.
 }
 
 export interface UpdatePropertyBody extends CreatePropertyBody {
