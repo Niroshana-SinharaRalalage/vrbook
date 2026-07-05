@@ -1,7 +1,7 @@
 # Slice OPS.INFRA.1 — Blue/green rebuild of staging Postgres as public-access server
 
-- **Status:** DRAFT for owner approval before execution.
-- **Date:** 2026-07-05 (rev 2 — supersedes straight-line rebuild).
+- **Status:** APPROVED for execution 2026-07-05 (rev 2.a). All §9 verifications complete; A1/A3/A5/A6/A7 passed empirically, A2 resolved via plan change to local-migrator shadow (§3 step 6), A8/A9 verified at execution time.
+- **Date:** 2026-07-05 (rev 2.a — Option A shadow path locked; rev 2 authored the blue/green shape; rev 1 straight-line was superseded).
 - **Owner-approved intent:** rebuild staging Postgres with `publicNetworkAccess: Enabled` + IP-firewalled access matching LankaConnect posture. Prod stays private.
 - **Failure mode being avoided (rev 2):** the straight-line plan (delete → deploy → migrate) leaves staging with no DB for hours if the Bicep deploy fails. Rev 2 keeps `psql-vrbook-staging` alive until the replacement is proven end-to-end.
 - **Prior analysis:** scoping agent proved 2026-07-05 that public-vs-private is fixed at server-create time — no in-place toggle. Rebuild is the only path.
@@ -86,20 +86,31 @@ Each step lists: (a) command / action, (b) what proves it worked, (c) what a fai
 - **Success:** `az keyvault secret show --vault-name kv-vrbook-staging --name postgres-cs-v2 --query value -o tsv` returns the connection string.
 - **Failure:** KV RBAC missing for operator → fix the role assignment, retry. This does not affect running apps.
 
-### Step 6 — Shadow migrator run against V2 (validates schema without traffic impact)
+### Step 6 — Run the migrator LOCALLY against V2 (shadow phase, pre-cutover)
 
-- **Do NOT touch `postgres-cs`.** Instead, temporarily override the migrator job's env var to point at `postgres-cs-v2` by patching the job in place. Preferred CLI shape (verify A2 before running):
-  ```
-  az containerapp job update -n caj-vrbook-migrator-staging -g rg-vrbook-staging \
-      --set-env-vars 'ConnectionStrings__Postgres=secretref:postgres-cs-v2' \
-      --secrets postgres-cs-v2=keyvaultref:https://kv-vrbook-staging.vault.azure.net/secrets/postgres-cs-v2,identity=<mi-resource-id>
-  ```
-  Fallback if the Job CLI is stricter: export current YAML (`az containerapp job show -n caj-vrbook-migrator-staging -g rg-vrbook-staging --output yaml > job.yaml`), patch, re-apply (`az containerapp job update --yaml job.yaml`).
-- Run: `az containerapp job start -n caj-vrbook-migrator-staging -g rg-vrbook-staging`.
-- Watch the execution to `Succeeded` (typically ~2 min).
-- The migrator connects to V2 via the public FQDN. Container App Job outbound traffic reaches V2 through the internet — covered by the `AllowAzureServices` (0.0.0.0-0.0.0.0) firewall rule per A3. If not, add a firewall rule for CAE's static outbound IP (`az containerapp env show -n cae-vrbook-staging -g rg-vrbook-staging --query properties.staticIp`).
-- **Success:** job execution `Succeeded`. Connect via DBeaver to V2 → `\dn` shows module schemas (`identity`, `catalog`, `booking`, etc.) and `__EFMigrationsHistory` table has ~20+ rows including `20260705034250_OpsM16_Booking_CompletionDueAt`.
-- **Failure:** migrator fails → V2 is broken but old server still serving. Revert the job env-var change (see rollback R6). Fix the underlying issue (missing migration, connectivity, credentials) and re-run.
+**Path decision (rev 2.a, 2026-07-05):** the container-app-job env-var override approach is dropped. `az containerapp job update` has no `--secrets` flag (A2 blocker); the YAML export/patch/apply workaround gets reconciled away on the next CD deploy of `infra/main.bicep` (`container-app-job.bicep:129-146` does full-property replace on `configuration.secrets` and `template.containers[0].env` from `apiSecrets`/`apiEnvVars`), so the shadow test would validate a state that never sees production traffic. Option A local-run wins by simpler execution + zero infra state to revert; the container-app-job path is exercised post-cutover under §9-A8.
+
+Run the migrator locally from the operator workstation against V2. The migrator (`src/VrBook.Migrator/Program.cs`) reads `ConnectionStrings__Postgres` from env vars and V2 is public-network + operator IP is in `pgFirewallRules` per §3 step 3 — no Azure infra plumbing needed for this shadow pass.
+
+```bash
+# 6.a — Fetch admin password from KV (same value on V1 + V2 per A7).
+PGPWD=$(az keyvault secret show \
+    --vault-name kv-vrbook-staging \
+    --name postgres-admin-password \
+    --query value -o tsv)
+
+# 6.b — Point migrator at V2. Note: username is vrbook_admin per A1.
+export ConnectionStrings__Postgres="Host=psql-vrbook-staging-v2.postgres.database.azure.com;Database=vrbook;Username=vrbook_admin;Password=${PGPWD};SSL Mode=Require;Trust Server Certificate=true"
+export DOTNET_ENVIRONMENT=Staging
+
+# 6.c — Run the exact code path the container-app-job would.
+dotnet run --project src/VrBook.Migrator --configuration Release
+```
+
+Expected: one "Migrating {DbContext}" / "Migrated" line pair per module DbContext (Identity, Catalog, Pricing, Booking, Payment, Reviews, Sync, Messaging, Loyalty, Notifications — 10 contexts), then "Migrator complete." Exit code 0.
+
+- **Success:** exit 0. Connect via DBeaver → `\dn` shows module schemas; `__EFMigrationsHistory` in each schema has all migrations including `20260705034250_OpsM16_Booking_CompletionDueAt`.
+- **Failure:** connection times out / firewall reject (SQLSTATE 28000, "no pg_hba.conf entry for host") → operator IP allowlist rule from §3 step 3 didn't take. Diagnose that first: `az postgres flexible-server firewall-rule list -n psql-vrbook-staging-v2 -g rg-vrbook-staging`. Fix + retry. Migration-time errors → V2 is broken but V1 still serving; drop `psql-vrbook-staging-v2` via `az postgres flexible-server delete` and restart from step 3 after fixing the migration bug.
 
 ### Step 7 — End-to-end validation of V2 via a shadow API smoke (optional but cheap)
 
@@ -180,9 +191,10 @@ Do NOT commit this file.
 | R2 (Bicep syntax) | Alive | Doesn't exist yet | Fix Bicep. No infra rollback. |
 | R3 (deploy V2 fails) | Alive | Partial or absent | `az deployment group create` again after fixing root cause (quota / SKU / config). No infra rollback needed — Bicep is idempotent, partial V2 shell can be deleted via `az postgres flexible-server delete -n psql-vrbook-staging-v2 --yes`. |
 | R4 (owner can't reach V2) | Alive | Alive but firewalled | Adjust `pgFirewallRules` in `main.bicep`, redeploy. No effect on old server. |
-| R6 (shadow migrator fails on V2) | Alive | Alive but bad schema | (a) Revert migrator job env var to `secretref:postgres-cs`. (b) Investigate migration failure locally. (c) Fix + redeploy migrator image + retry step 6. (d) If V2 is beyond salvage, `az postgres flexible-server delete -n psql-vrbook-staging-v2 --yes` + restart from step 3. |
-| R7 (shadow API smoke fails) | Alive | Alive with schema | Same as R6 plus check network path (firewall rule for CAE outbound IP, A3). |
+| R6 (local migrator fails on V2) | Alive | Alive but bad/no schema | Ctrl-C the local `dotnet run`. No Azure state to revert. Diagnose: (a) connection issue → check firewall rule from §3 step 3; (b) migration bug → fix + rebuild + retry, or if V2 is beyond salvage `az postgres flexible-server delete -n psql-vrbook-staging-v2 --yes` + restart from step 3. |
+| R7 (shadow API smoke fails) | Alive | Alive with schema | Same as R6. |
 | R8 (post-cutover API failing) | Alive | Serving | (a) `az keyvault secret set --name postgres-cs --value "$(cat /tmp/postgres-cs-preexist.txt)"` (b) `az containerapp update -n ca-vrbook-api-staging -g rg-vrbook-staging --revision-suffix rollback-$(date +%s)` — new revision reads the reverted secret, points at old server. (c) V2 stays running but idle; investigate + retry step 8, or delete V2 if wrong. |
+| R9-new (first post-cutover migrator job run fails: KV RBAC / secretref plumbing latent-broken) | Alive | Serving | This is the residual risk Option A accepts. Same as R8: revert `postgres-cs` KV secret to V1 value, bump API revision. V1 keeps serving; investigate the container-app-job → KV → V2 wiring separately. Note: the plumbing (MI, KV secret name) is unchanged from what V1 uses today, so failure would be surprising. |
 | R10 (old-server delete fails) | Broken | Serving | Retry delete via portal. No functional impact. |
 | Post-cutover, days later, latent V2 bug discovered | Deleted, backups retained 14 days | Serving but broken | Restore old server from backup: `az postgres flexible-server restore --source-server psql-vrbook-staging --name psql-vrbook-staging-restored --restore-time <ISO>`. Update `postgres-cs` to the restored FQDN. Full recovery path — costs 1-2h of downtime but not "no DB for hours during rebuild". |
 
@@ -229,8 +241,10 @@ These are the assumptions the plan depends on. Each must be verified with a docs
 | A5 | Postgres Flexible Server does NOT support rename. | `az postgres flexible-server --help` — no `rename` verb. ARM `name` is immutable. |
 | A6 | `main.bicep` can invoke `postgres-flexible.bicep` twice in one deployment with different `serverNameOverride` values. | `az deployment group what-if` at step 2 will show. Fallback: duplicate module file `postgres-flexible-v2.bicep` hardcoding V2 name. |
 | A7 | `postgres-admin-password` KV secret is the same on both servers (both `pg` and `pgV2` reference it via `getSecret()` in `staging.bicepparam`). | Read `staging.bicepparam` — parameterized. Both server invocations receive the same password. |
+| A8 (new) | CAE → V2 connectivity via `AllowAzureServices` (0.0.0.0-0.0.0.0) is sufficient — no need to pre-add CAE outbound IP `135.18.171.52`. | Assumed based on: (a) live V1 works today under identical AllowAzureServices rule; (b) Azure Postgres Flex docs treat 0.0.0.0-0.0.0.0 as "all in-region Azure-internal traffic". Verify empirically at first post-cutover migrator job execution (step 9 tail). If SQLSTATE 28000 fires, add `{ name: 'CAE-Outbound', startIp: '135.18.171.52', endIp: '135.18.171.52' }` to `pgFirewallRules` in `main.bicep` and redeploy. |
+| A9 (new) | The `Username=` field in step 8's `postgres-cs` KV update uses `vrbook_admin`, not `vrbook` or `vrbookadmin`. | Cross-check with A1. Grep the plan `Username=vrbook[^_]` — must return no hits. |
 
-**Any A1-A7 that fails on verification blocks execution until resolved.** Do NOT execute step 3 until A1-A6 pass.
+**Any A1-A9 that fails on verification blocks execution until resolved.** A1, A3, A5, A7 verified 2026-07-05. A2 resolved via plan change. A4, A6 confirmed. A8, A9 empirically-verified during execution.
 
 ---
 
