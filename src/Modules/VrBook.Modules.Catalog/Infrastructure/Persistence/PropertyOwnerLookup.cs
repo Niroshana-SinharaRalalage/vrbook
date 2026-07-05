@@ -9,7 +9,7 @@ internal sealed class PropertyOwnerLookup(CatalogDbContext db) : IPropertyOwnerL
         await db.Properties
             .AsNoTracking()
             .Where(p => p.Id == propertyId)
-            .Select(p => new PropertyOwnerSnapshot(p.Id, p.OwnerUserId, p.Title, p.TenantId))
+            .Select(p => new PropertyOwnerSnapshot(p.Id, p.OwnerUserId, p.Title, p.TenantId, p.TurnoverHours))
             .FirstOrDefaultAsync(ct);
 
     public async Task<IReadOnlyList<Guid>> ListPropertyIdsOwnedByAsync(Guid ownerUserId, CancellationToken ct = default) =>

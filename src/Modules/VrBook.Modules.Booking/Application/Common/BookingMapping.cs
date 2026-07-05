@@ -46,7 +46,10 @@ internal static class BookingMapping
                 .Select(g => new BookingGuestDto(g.FullName, g.IsPrimary))
                 .ToArray(),
             SpecialRequests: b.SpecialRequests,
-            CreatedAt: b.CreatedAt);
+            CreatedAt: b.CreatedAt,
+            CheckedOutAt: b.CheckedOutAt,
+            CompletionDueAt: b.CompletionDueAt,
+            TurnoverHoursOverride: b.TurnoverHoursOverride);
 
     public static BookingSummaryDto ToSummary(this DomainBooking b) =>
         new(

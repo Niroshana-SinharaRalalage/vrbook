@@ -28,7 +28,19 @@ public sealed record BookingDto(
     decimal? LoyaltyDiscountPct,
     IReadOnlyList<BookingGuestDto> Guests,
     string? SpecialRequests,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    // Slice OPS.M.16 — turnover-aware completion. Consumed by admin
+    // booking-detail Stay-lifecycle panel to render "Awaiting turnover"
+    // + Complete-now button + Reschedule dropdown.
+    DateTimeOffset? CheckedOutAt = null,
+    DateTimeOffset? CompletionDueAt = null,
+    int? TurnoverHoursOverride = null);
+
+/// <summary>
+/// Slice OPS.M.16 — body of POST /api/v1/bookings/{id}/schedule-completion.
+/// HoursFromCheckedOutAt in [0, 168] (one week).
+/// </summary>
+public sealed record ScheduleCompletionRequest(int HoursFromCheckedOutAt);
 
 public sealed record BookingSummaryDto(
     Guid Id,

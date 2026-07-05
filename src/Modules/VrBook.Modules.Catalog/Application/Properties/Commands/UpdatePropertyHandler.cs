@@ -77,6 +77,16 @@ internal sealed class UpdatePropertyHandler(
 
         // Update Property + owned-type columns via raw ExecuteUpdate. No
         // tracking, no concurrency check, no row_version drama.
+        // Slice OPS.M.16 — validate turnover-hours range before the raw
+        // UPDATE so the caller gets a 400 rather than the row silently
+        // clamping to a bad value.
+        if (r.TurnoverHours < 0 || r.TurnoverHours > 168)
+        {
+            throw new BusinessRuleViolationException(
+                "property.turnover_hours_out_of_range",
+                $"TurnoverHours must be between 0 and 168 (one week); got {r.TurnoverHours}.");
+        }
+
         var updated = await db.Properties.Where(p => p.Id == request.Id)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(p => p.Title, r.Title.Trim())
@@ -85,6 +95,7 @@ internal sealed class UpdatePropertyHandler(
                 .SetProperty(p => p.ReviewsEnabled, r.ReviewsEnabled)
                 .SetProperty(p => p.DynamicPricingEnabled, r.DynamicPricingEnabled)
                 .SetProperty(p => p.MessagingEnabled, r.MessagingEnabled)
+                .SetProperty(p => p.TurnoverHours, r.TurnoverHours)
                 .SetProperty(p => p.UpdatedAt, now)
                 .SetProperty(p => p.UpdatedBy, (Guid?)currentUser.UserId.Value),
                 cancellationToken);

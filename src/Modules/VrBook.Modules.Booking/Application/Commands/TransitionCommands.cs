@@ -22,3 +22,12 @@ public sealed record RejectBookingCommand(Guid Id, string Reason, Guid TenantId)
 public sealed record CheckInBookingCommand(Guid Id, Guid TenantId) : IRequest<BookingDto>, ITenantScoped;
 
 public sealed record CheckOutBookingCommand(Guid Id, Guid TenantId) : IRequest<BookingDto>, ITenantScoped;
+
+// Slice OPS.M.16 — admin manually flips a CheckedOut booking to Completed
+// (bypasses the auto-complete sweep window).
+public sealed record CompleteBookingCommand(Guid Id, Guid TenantId) : IRequest<BookingDto>, ITenantScoped;
+
+// Slice OPS.M.16 — admin reschedules the auto-completion window on a
+// CheckedOut booking. HoursFromCheckedOutAt in [0, 168].
+public sealed record ScheduleCompletionCommand(Guid Id, int HoursFromCheckedOutAt, Guid TenantId)
+    : IRequest<BookingDto>, ITenantScoped;

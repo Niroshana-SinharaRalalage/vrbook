@@ -70,6 +70,7 @@ internal abstract class OwnerActionHandler(
     BookingDbContext db)
 {
     protected IMediator Mediator => mediator;
+    protected IBookingRepository Bookings => bookings; // Slice OPS.M.16 — subclasses (CheckOutBookingHandler) need to pre-load the booking so they can dispatch cross-module lookups before the transition.
 
     protected async Task<BookingDto> TransitionAsync(Guid bookingId, Action<Domain.Booking> transition, CancellationToken cancellationToken)
     {
@@ -175,9 +176,51 @@ internal sealed class CheckInBookingHandler(
 }
 
 internal sealed class CheckOutBookingHandler(
-    ICurrentUser currentUser, IMediator mediator, IBookingRepository bookings, BookingDbContext db)
+    ICurrentUser currentUser,
+    IMediator mediator,
+    IBookingRepository bookings,
+    BookingDbContext db,
+    IPropertyOwnerLookup propertyOwners)
     : OwnerActionHandler(currentUser, mediator, bookings, db), IRequestHandler<CheckOutBookingCommand, BookingDto>
 {
-    public Task<BookingDto> Handle(CheckOutBookingCommand request, CancellationToken cancellationToken) =>
-        TransitionAsync(request.Id, b => b.CheckOut(), cancellationToken);
+    public async Task<BookingDto> Handle(CheckOutBookingCommand request, CancellationToken cancellationToken)
+    {
+        // Slice OPS.M.16 — CheckOut needs the property's default turnover
+        // window to snapshot Booking.CompletionDueAt. Read the property via
+        // the existing cross-module IPropertyOwnerLookup rather than
+        // embedding the Catalog DbContext. The snapshot is stored on the
+        // booking, so any subsequent property config change doesn't shift
+        // in-flight completion times (§2.2 snapshot semantics).
+        var booking = await Bookings.GetByIdAsync(request.Id, cancellationToken)
+            ?? throw new NotFoundException("Booking", request.Id);
+        var property = await propertyOwners.GetAsync(booking.PropertyId, cancellationToken)
+            ?? throw new NotFoundException("Property", booking.PropertyId);
+        return await TransitionAsync(
+            request.Id,
+            b => b.CheckOut(property.TurnoverHours),
+            cancellationToken);
+    }
+}
+
+internal sealed class CompleteBookingHandler(
+    ICurrentUser currentUser, IMediator mediator, IBookingRepository bookings, BookingDbContext db)
+    : OwnerActionHandler(currentUser, mediator, bookings, db), IRequestHandler<CompleteBookingCommand, BookingDto>
+{
+    // Slice OPS.M.16 — manual completion by admin.
+    public Task<BookingDto> Handle(CompleteBookingCommand request, CancellationToken cancellationToken) =>
+        TransitionAsync(request.Id, b => b.CompleteManually(), cancellationToken);
+}
+
+internal sealed class ScheduleCompletionHandler(
+    ICurrentUser currentUser, IMediator mediator, IBookingRepository bookings, BookingDbContext db)
+    : OwnerActionHandler(currentUser, mediator, bookings, db), IRequestHandler<ScheduleCompletionCommand, BookingDto>
+{
+    // Slice OPS.M.16 — reschedule the auto-completion window on a
+    // CheckedOut booking. Domain caps at 168h; validation echoed on the
+    // API layer for the 400/422 payload distinction.
+    public Task<BookingDto> Handle(ScheduleCompletionCommand request, CancellationToken cancellationToken) =>
+        TransitionAsync(
+            request.Id,
+            b => b.ScheduleCompletion(request.HoursFromCheckedOutAt),
+            cancellationToken);
 }

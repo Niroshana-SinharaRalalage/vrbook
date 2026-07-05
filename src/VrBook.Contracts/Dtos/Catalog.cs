@@ -26,7 +26,12 @@ public sealed record PropertyDto(
     int RatingCount,
     IReadOnlyList<PropertyImageDto> Images,
     IReadOnlyList<AmenityDto> Amenities,
-    IReadOnlyList<string> HouseRules);
+    IReadOnlyList<string> HouseRules,
+    // Slice OPS.M.16 — default turnover window in hours. Nullable-default
+    // on the DTO for wire-format compatibility while the web form fills
+    // out the field; production reads never return null (column is NOT
+    // NULL DEFAULT 24 per M.16.2 migration).
+    int TurnoverHours = 24);
 
 /// <summary>
 /// Slice 1 — admin list view of a property. Adds <c>IsActive</c> (so the UI can
@@ -109,7 +114,8 @@ public sealed record CreatePropertyRequest(
     TimeOnly CheckinTo,
     TimeOnly CheckoutBy,
     IReadOnlyList<string> HouseRules,
-    IReadOnlyList<Guid> AmenityIds);
+    IReadOnlyList<Guid> AmenityIds,
+    int TurnoverHours = 24); // Slice OPS.M.16 — per-property turnover default (hours).
 
 public sealed record UpdatePropertyRequest(
     string Title,
@@ -127,7 +133,8 @@ public sealed record UpdatePropertyRequest(
     bool ReviewsEnabled,
     bool DynamicPricingEnabled,
     bool MessagingEnabled,
-    bool IsActive);
+    bool IsActive,
+    int TurnoverHours = 24); // Slice OPS.M.16.
 
 public sealed record ReorderImagesRequest(IReadOnlyList<Guid> OrderedImageIds);
 

@@ -65,7 +65,8 @@ internal sealed class CreatePropertyHandler(
             checkIn: checkIn,
             houseRules: r.HouseRules ?? Array.Empty<string>(),
             amenityIds: validIds,
-            slug: slug);
+            slug: slug,
+            turnoverHours: r.TurnoverHours);
 
         await properties.AddAsync(p, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);

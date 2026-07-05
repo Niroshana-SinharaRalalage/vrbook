@@ -148,7 +148,7 @@ public sealed class BookingAggregateTests
         Action op = opName switch
         {
             nameof(DomainBooking.CheckIn) => () => b.CheckIn(),     // Tentative != Confirmed
-            nameof(DomainBooking.CheckOut) => () => b.CheckOut(),   // Tentative != CheckedIn
+            nameof(DomainBooking.CheckOut) => () => b.CheckOut(propertyTurnoverHours: 24),   // Tentative != CheckedIn
             _ => () => b.Reject("test"),                            // just to satisfy switch
         };
 
@@ -274,7 +274,7 @@ public sealed class BookingAggregateTests
         var b = PlaceCheckedIn();
         b.DequeueEvents();
 
-        b.CheckOut();
+        b.CheckOut(propertyTurnoverHours: 24);
 
         b.Status.Should().Be(BookingStatus.CheckedOut);
         b.CheckedOutAt.Should().NotBeNull();
@@ -290,7 +290,7 @@ public sealed class BookingAggregateTests
     public void CheckOut_from_confirmed_throws()
     {
         var b = PlaceConfirmed();
-        var act = () => b.CheckOut();
+        var act = () => b.CheckOut(propertyTurnoverHours: 24);
         act.Should().Throw<BusinessRuleViolationException>();
     }
 
@@ -395,7 +395,7 @@ public sealed class BookingAggregateTests
     public void ScheduleCompletion_rejects_negative_hours()
     {
         var b = PlaceCheckedIn();
-        b.CheckOut();
+        b.CheckOut(propertyTurnoverHours: 24);
         var act = () => b.ScheduleCompletion(-1);
         act.Should().Throw<BusinessRuleViolationException>()
             .WithMessage("*turnover_hours_out_of_range*");
@@ -405,7 +405,7 @@ public sealed class BookingAggregateTests
     public void ScheduleCompletion_rejects_hours_over_upper_bound_168()
     {
         var b = PlaceCheckedIn();
-        b.CheckOut();
+        b.CheckOut(propertyTurnoverHours: 24);
         var act = () => b.ScheduleCompletion(169);
         act.Should().Throw<BusinessRuleViolationException>()
             .WithMessage("*turnover_hours_out_of_range*");
@@ -415,7 +415,7 @@ public sealed class BookingAggregateTests
     public void ScheduleCompletion_accepts_boundary_values_0_and_168()
     {
         var b = PlaceCheckedIn();
-        b.CheckOut();
+        b.CheckOut(propertyTurnoverHours: 24);
 
         b.ScheduleCompletion(0);
         b.TurnoverHoursOverride.Should().Be(0);
@@ -429,7 +429,7 @@ public sealed class BookingAggregateTests
     public void CompleteManually_from_CheckedOut_transitions_and_raises_manual_trigger()
     {
         var b = PlaceCheckedIn();
-        b.CheckOut();
+        b.CheckOut(propertyTurnoverHours: 24);
         b.DequeueEvents();
 
         b.CompleteManually();
@@ -451,7 +451,7 @@ public sealed class BookingAggregateTests
     public void Complete_from_sweep_raises_sweep_trigger()
     {
         var b = PlaceCheckedIn();
-        b.CheckOut();
+        b.CheckOut(propertyTurnoverHours: 24);
         b.DequeueEvents();
 
         b.Complete();
@@ -468,7 +468,7 @@ public sealed class BookingAggregateTests
         var b = PlaceTentative();
         b.Confirm();
         b.CheckIn();
-        b.CheckOut();
+        b.CheckOut(propertyTurnoverHours: 24);
         b.Complete();
 
         var events = b.DequeueEvents();
@@ -486,7 +486,7 @@ public sealed class BookingAggregateTests
     private static DomainBooking CheckedOut()
     {
         var b = PlaceCheckedIn();
-        b.CheckOut();
+        b.CheckOut(propertyTurnoverHours: 24);
         return b;
     }
 

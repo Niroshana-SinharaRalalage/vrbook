@@ -39,7 +39,8 @@ internal static class PropertyMapping
                 .Select(i => new PropertyImageDto(i.Id, blobToUrl(i.BlobPath), i.Caption, i.SortOrder, i.IsPrimary))
                 .ToArray(),
             Amenities: amenities,
-            HouseRules: p.HouseRules.OrderBy(h => h.SortOrder).Select(h => h.RuleText).ToArray());
+            HouseRules: p.HouseRules.OrderBy(h => h.SortOrder).Select(h => h.RuleText).ToArray(),
+            TurnoverHours: p.TurnoverHours);
 
     public static AmenityDto ToDto(this Amenity a) =>
         new(a.Id, a.Code, a.Name, a.Icon, a.Category, a.IsActive);

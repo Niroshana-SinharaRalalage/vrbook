@@ -204,16 +204,13 @@ public sealed class Booking : AggregateRoot
     }
 
     /// <summary>
-    /// Slice OPS.M.16 — CheckOut now takes the property's turnover default
-    /// so we can snapshot <see cref="CompletionDueAt"/> at the moment the
-    /// stay ends. If a prior <see cref="ScheduleCompletion"/> call set
+    /// Slice OPS.M.16 — CheckOut takes the property's turnover default so
+    /// we can snapshot <see cref="CompletionDueAt"/> at the moment the stay
+    /// ends. If a prior <see cref="ScheduleCompletion"/> call set
     /// <see cref="TurnoverHoursOverride"/>, that override wins; otherwise
     /// <paramref name="propertyTurnoverHours"/> is used.
-    /// <para>The default of 24 is a M.16.1 → M.16.3 bridge: the parameter
-    /// becomes required once <c>CheckOutBookingHandler</c> is wired to
-    /// read the property's actual default (M.16.3).</para>
     /// </summary>
-    public void CheckOut(int propertyTurnoverHours = 24)
+    public void CheckOut(int propertyTurnoverHours)
     {
         Require(BookingStatus.CheckedIn);
         if (propertyTurnoverHours < 0)

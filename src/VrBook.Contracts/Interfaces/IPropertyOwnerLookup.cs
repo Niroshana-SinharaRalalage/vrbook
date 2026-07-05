@@ -29,4 +29,5 @@ public sealed record PropertyOwnerSnapshot(
     Guid PropertyId,
     Guid OwnerUserId,
     string Title,
-    Guid TenantId);
+    Guid TenantId,
+    int TurnoverHours = 24); // Slice OPS.M.16 — property-default turnover window, read by Booking.CheckOut() to snapshot CompletionDueAt.
