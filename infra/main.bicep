@@ -136,27 +136,34 @@ module acr 'modules/acr.bicep' = {
 }
 
 // ---------- Data plane ----------
-// OPS.INFRA.1 — staging Postgres runs public-access with IP allowlist to give
-// the operator DBeaver-style observability (matches LankaConnect posture).
-// Prod stays VNet-injected + Disabled per the parameter default in the module.
-var pgPublicAccess = env == 'staging' ? 'Enabled' : 'Disabled'
-var pgFirewallRules = env == 'staging' ? [
-  // Owner IP from LankaConnect staging allowlist. Update this list to add
-  // laptops / offices; each change re-deploys the parent module.
+// OPS.INFRA.1 rev 2 (blue/green) — the LIVE Postgres server stays on its current
+// VNet-injected shape via the primary `pg` module below. In parallel, a
+// staging-only `pgV2` module (gated by `deployStagingPgV2`) stands up
+// psql-vrbook-staging-v2 with publicNetworkAccess=Enabled + IP allowlist for
+// operator DBeaver observability. Post-cutover (see
+// docs/OPS_INFRA_1_STAGING_POSTGRES_PUBLIC_REBUILD_PLAN.md §3 step 12) the
+// primary module gains serverNameOverride='psql-vrbook-staging-v2' and this
+// pgV2 block is removed. Prod is never touched.
+@description('OPS.INFRA.1 rev 2 — set true to stand up psql-vrbook-staging-v2 alongside the live private server. Cleared after cutover.')
+param deployStagingPgV2 bool = false
+
+var pgV2FirewallRules = [
+  // Owner IP from LankaConnect staging allowlist (verified A1 alignment 2026-07-05).
   {
     name: 'Owner-Home-Office'
     startIp: '174.104.204.213'
     endIp: '174.104.204.213'
   }
-  // Portal convention: 0.0.0.0-0.0.0.0 = allow ALL Azure services (in-region).
-  // Not the internet — Azure filters this to internal Azure networks.
+  // 0.0.0.0-0.0.0.0 = allow all in-region Azure-internal traffic (NOT the internet).
+  // Covers CAE outbound to Postgres per A8 empirical.
   {
     name: 'AllowAzureServices'
     startIp: '0.0.0.0'
     endIp: '0.0.0.0'
   }
-] : []
+]
 
+// Primary — live server (unchanged shape; stays VNet-private on both staging + prod).
 module pg 'modules/postgres-flexible.bicep' = {
   name: 'pg'
   params: {
@@ -172,8 +179,29 @@ module pg 'modules/postgres-flexible.bicep' = {
     haEnabled: isProd
     administratorLogin: pgAdminLogin
     administratorLoginPassword: pgAdminPassword
-    publicNetworkAccess: pgPublicAccess
-    firewallRules: pgFirewallRules
+  }
+}
+
+// OPS.INFRA.1 rev 2 — blue/green replacement server for staging.
+// Temporary: this module invocation is removed post-cutover (§3 step 12 of the plan).
+module pgV2 'modules/postgres-flexible.bicep' = if (deployStagingPgV2 && env == 'staging') {
+  name: 'pgV2'
+  params: {
+    env: env
+    location: location
+    tags: tags
+    subnetId: net.outputs.pgSubnetId       // ignored when publicNetworkAccess=Enabled
+    privateDnsZoneId: net.outputs.pgPrivateDnsZoneId  // ditto
+    skuName: pgSku
+    skuTier: pgTier
+    storageSizeGB: pgStorageGB
+    backupRetentionDays: pgBackupRetention
+    haEnabled: isProd
+    administratorLogin: pgAdminLogin
+    administratorLoginPassword: pgAdminPassword
+    publicNetworkAccess: 'Enabled'
+    firewallRules: pgV2FirewallRules
+    serverNameOverride: 'psql-vrbook-staging-v2'
   }
 }
 

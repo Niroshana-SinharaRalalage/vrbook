@@ -39,6 +39,9 @@ param publicNetworkAccess string = 'Disabled'
 @description('OPS.INFRA.1 — IP allowlist for the public-access mode. Each entry is { name, startIp, endIp }. Ignored when publicNetworkAccess=Disabled.')
 param firewallRules array = []
 
+@description('OPS.INFRA.1 rev 2 — override the derived server name. Empty (default) = psql-vrbook-{env}. Set to e.g. psql-vrbook-staging-v2 for the blue/green rebuild.')
+param serverNameOverride string = ''
+
 @description('SKU name without tier prefix (e.g. Standard_B2s, Standard_D2ds_v5, Standard_D4ds_v5).')
 param skuName string = 'Standard_D2ds_v5'
 
@@ -72,7 +75,7 @@ param administratorLoginPassword string
 @description('Postgres major version.')
 param postgresVersion string = '16'
 
-var serverName = 'psql-vrbook-${env}'
+var serverName = empty(serverNameOverride) ? 'psql-vrbook-${env}' : serverNameOverride
 
 resource pg 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
   name: serverName
