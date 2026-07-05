@@ -136,6 +136,27 @@ module acr 'modules/acr.bicep' = {
 }
 
 // ---------- Data plane ----------
+// OPS.INFRA.1 — staging Postgres runs public-access with IP allowlist to give
+// the operator DBeaver-style observability (matches LankaConnect posture).
+// Prod stays VNet-injected + Disabled per the parameter default in the module.
+var pgPublicAccess = env == 'staging' ? 'Enabled' : 'Disabled'
+var pgFirewallRules = env == 'staging' ? [
+  // Owner IP from LankaConnect staging allowlist. Update this list to add
+  // laptops / offices; each change re-deploys the parent module.
+  {
+    name: 'Owner-Home-Office'
+    startIp: '174.104.204.213'
+    endIp: '174.104.204.213'
+  }
+  // Portal convention: 0.0.0.0-0.0.0.0 = allow ALL Azure services (in-region).
+  // Not the internet — Azure filters this to internal Azure networks.
+  {
+    name: 'AllowAzureServices'
+    startIp: '0.0.0.0'
+    endIp: '0.0.0.0'
+  }
+] : []
+
 module pg 'modules/postgres-flexible.bicep' = {
   name: 'pg'
   params: {
@@ -151,6 +172,8 @@ module pg 'modules/postgres-flexible.bicep' = {
     haEnabled: isProd
     administratorLogin: pgAdminLogin
     administratorLoginPassword: pgAdminPassword
+    publicNetworkAccess: pgPublicAccess
+    firewallRules: pgFirewallRules
   }
 }
 

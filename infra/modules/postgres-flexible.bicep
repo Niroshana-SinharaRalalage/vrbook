@@ -1,4 +1,11 @@
-// postgres-flexible.bicep — PostgreSQL Flexible Server v16, VNet-injected.
+// postgres-flexible.bicep — PostgreSQL Flexible Server v16.
+// Two networking modes:
+//   * VNet-injected (default): publicNetworkAccess='Disabled', delegated subnet.
+//   * Public-access (staging only per OPS.INFRA.1): publicNetworkAccess='Enabled',
+//     no delegated subnet, IP firewall rules deployed as child resources.
+// The public variant matches LankaConnect's staging posture — internet-reachable
+// but IP-allowlisted. Prod stays VNet-injected (parameter default).
+//
 // HA toggle, sku, and storage are env-driven.
 // Admin password is taken from Key Vault (the caller passes a getSecret() reference
 // via a parameter — never a literal).
@@ -16,11 +23,21 @@ param tags object = {
   costCenter: 'product'
 }
 
-@description('Resource ID of the delegated/data subnet for VNet injection.')
+@description('Resource ID of the delegated/data subnet for VNet injection. Ignored when publicNetworkAccess=Enabled.')
 param subnetId string
 
-@description('Resource ID of the private DNS zone privatelink.postgres.database.azure.com.')
+@description('Resource ID of the private DNS zone privatelink.postgres.database.azure.com. Ignored when publicNetworkAccess=Enabled.')
 param privateDnsZoneId string
+
+@description('OPS.INFRA.1 — networking mode. Default Disabled = VNet-injected (private, prod-safe). Enabled = public with IP allowlist (staging LankaConnect parity).')
+@allowed([
+  'Enabled'
+  'Disabled'
+])
+param publicNetworkAccess string = 'Disabled'
+
+@description('OPS.INFRA.1 — IP allowlist for the public-access mode. Each entry is { name, startIp, endIp }. Ignored when publicNetworkAccess=Disabled.')
+param firewallRules array = []
 
 @description('SKU name without tier prefix (e.g. Standard_B2s, Standard_D2ds_v5, Standard_D4ds_v5).')
 param skuName string = 'Standard_D2ds_v5'
@@ -77,7 +94,9 @@ resource pg 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
       backupRetentionDays: backupRetentionDays
       geoRedundantBackup: geoRedundantBackup
     }
-    network: {
+    network: publicNetworkAccess == 'Enabled' ? {
+      publicNetworkAccess: 'Enabled'
+    } : {
       delegatedSubnetResourceId: subnetId
       privateDnsZoneArmResourceId: privateDnsZoneId
       publicNetworkAccess: 'Disabled'
@@ -92,6 +111,17 @@ resource pg 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
     }
   }
 }
+
+// OPS.INFRA.1 — IP firewall rules for public-access mode.
+// Empty array in private mode; caller passes the allowlist for staging.
+resource firewall 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2024-08-01' = [for rule in firewallRules: {
+  parent: pg
+  name: rule.name
+  properties: {
+    startIpAddress: rule.startIp
+    endIpAddress: rule.endIp
+  }
+}]
 
 resource requireSslConfig 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2024-08-01' = {
   parent: pg
