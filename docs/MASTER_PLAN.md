@@ -1,6 +1,6 @@
 # VrBook Master Plan — Single Source of Truth
 
-**Last revised**: 2026-06-27 (third revision today).
+**Last revised**: 2026-07-05.
 **Status**: Slices 0–3 ✅ shipped. Slice OPS.M.0–3 ✅ shipped (the Phase-1.5 schema half is done). Sequencing now **Option A** per architect re-evaluation 2026-06-27: complete Slice OPS.M.4 → M.10 fully → Slice 4 → Slice 5–7 → Slice OPS.1–8 → Phase 3 → Phase 4. Option A reverses the morning's Option C verdict after the Slice 4 plan review surfaced that Slice 4 was being asked to author multi-tenancy infrastructure that properly belongs to Slice OPS.M.4/M.7/M.9.
 
 This document is the single index. It points at the detailed plans for each phase; do not duplicate content here — update the linked plans and bump the date at the top of this file.
@@ -33,6 +33,10 @@ This document is the single index. It points at the detailed plans for each phas
 | | Slice OPS.M.8 — Super Admin console | ✅ | `998bba4` → `3b89ac0` | promotion is manual SQL until cmdlet ships; tenant-suspended enforcement deferred to Slice OPS.M.8.1 |
 | | Slice OPS.M.9 — RLS policies + `IRlsBypassDbContextFactory<TContext>` + bypass connection factory | ✅ | `d591afb` → `e826e3b` | per-statement binding locked; Postgres-fixture schema facts deferred to OPS.M.10's test pack |
 | | Slice OPS.M.10 — Cross-tenant isolation test pack | ✅ | `1ec66de` → `f0faccc` | Wave 1 (arch + schema facts + runbook) + Wave 2 (TwoTenantApiFixture + matrix + carve-out + bypass + audit + promote-revoke + AsyncLocal + JWT smoke) all shipped; 1 real cross-tenant leak in `SearchUsersHandler` documented as Slice OPS.M.10.1 follow-up |
+| | Slice OPS.M.13 — Email-canonical users + tenant picker + X-Active-Tenant pipeline | ✅ | `b5d2d2d` → `125d456` | staging; close-out at [`OPS_M_13_CLOSE_OUT.md`](OPS_M_13_CLOSE_OUT.md) |
+| | Slice OPS.M.14 — DevAuth retirement (handler + endpoints + test fixtures) | ✅ | `ff79389` → `c0654c7` | staging; close-out at [`OPS_M_14_CLOSE_OUT.md`](OPS_M_14_CLOSE_OUT.md) |
+| | Slice OPS.M.15 — App-role legacy claim reads + `[Authorize(Roles=)]` drop | ⏭ deferred | plan: TBD | Redirected by user to M.16 UX-driven work after 2026-07-04 staging walk; still open. No dependency on M.16 in either direction. |
+| | Slice OPS.M.16 — Turnover-aware completion + configurable turnover window | ✅ | `ff96e48` → M.16.7 | staging; close-out at [`OPS_M_16_CLOSE_OUT.md`](OPS_M_16_CLOSE_OUT.md); calendar UI overlay + integration test pack + runbook deferred to polish slice |
 | **Phase 1.5 ops** | Slice OPS.1 – Slice OPS.8 — Launch hardening (Pact, k6, ZAP, Trivy, key rotation, Entra, DKIM) | ⏭ | [`docs/EXECUTION_PLAN.md`](EXECUTION_PLAN.md) §8 | |
 | **Phase 3** | Slice 8 (P3.1) — Hotel-style rooms within a Property/Facility (purely additive: `rooms` child of `properties`, `BookingLineItem.ReservableKind=Room`) | ⏭ after Slice OPS.1–8 | plan: TBD — see [PHASE_3_RECONNAISSANCE](PHASE_3_RECONNAISSANCE.md) for the architect's verdict | |
 | | Slice 9 (P3.2) — Multi-unit cart (one guest books N properties/rooms in one atomic checkout; Stripe `transfer_data[]` multi-destination) | ⏭ after Slice 8 | plan: TBD | |
