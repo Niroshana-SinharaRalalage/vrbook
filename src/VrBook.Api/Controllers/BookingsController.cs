@@ -120,6 +120,39 @@ public sealed class BookingsController(
         return Ok(await mediator.Send(new CheckOutBookingCommand(id, tenantId), cancellationToken));
     }
 
+    /// <summary>
+    /// Slice OPS.M.16 — manual completion. Admin flips a CheckedOut booking
+    /// straight to Completed, bypassing the daily sweep window. Emits
+    /// <c>BookingCompleted(Trigger="manual")</c>. 422 when the booking is not
+    /// in the CheckedOut state.
+    /// </summary>
+    [HttpPost("{id:guid}/complete")]
+    [Authorize(Roles = "Owner,Admin")]
+    [SwaggerOperation(Summary = "Manually complete a CheckedOut booking.")]
+    public async Task<ActionResult<BookingDto>> Complete(Guid id, CancellationToken cancellationToken)
+    {
+        var tenantId = await ResolveBookingTenantAsync(id, cancellationToken);
+        return Ok(await mediator.Send(new CompleteBookingCommand(id, tenantId), cancellationToken));
+    }
+
+    /// <summary>
+    /// Slice OPS.M.16 — reschedule the auto-complete window. Sets the
+    /// per-booking <c>TurnoverHoursOverride</c> + recomputes the snapshotted
+    /// <c>CompletionDueAt</c>. HoursFromCheckedOutAt in [0, 168] (one week);
+    /// out-of-range values are rejected by the domain with 422.
+    /// </summary>
+    [HttpPost("{id:guid}/schedule-completion")]
+    [Authorize(Roles = "Owner,Admin")]
+    [SwaggerOperation(Summary = "Schedule when a CheckedOut booking auto-completes.")]
+    public async Task<ActionResult<BookingDto>> ScheduleCompletion(
+        Guid id, [FromBody] ScheduleCompletionRequest request, CancellationToken cancellationToken)
+    {
+        var tenantId = await ResolveBookingTenantAsync(id, cancellationToken);
+        return Ok(await mediator.Send(
+            new ScheduleCompletionCommand(id, request.HoursFromCheckedOutAt, tenantId),
+            cancellationToken));
+    }
+
     [HttpPost("{id:guid}/review")]
     [SwaggerOperation(Summary = "Submit a post-stay review. Only after CheckedOut.")]
     [ProducesResponseType(typeof(ReviewDto), StatusCodes.Status201Created)]

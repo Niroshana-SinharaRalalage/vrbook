@@ -300,6 +300,32 @@ paths:
       parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
       responses: { '200': { description: Checked out. } }
 
+  /bookings/{id}/complete:
+    post:
+      tags: [Booking]
+      summary: Manually complete a CheckedOut booking (OPS.M.16).
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      responses: { '200': { description: Completed. } }
+
+  /bookings/{id}/schedule-completion:
+    post:
+      tags: [Booking]
+      summary: Schedule when a CheckedOut booking auto-completes (OPS.M.16).
+      parameters: [ { name: id, in: path, required: true, schema: { type: string, format: uuid } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hoursFromCheckedOutAt]
+              properties:
+                hoursFromCheckedOutAt:
+                  type: integer
+                  minimum: 0
+                  maximum: 168
+      responses: { '200': { description: Rescheduled. } }
+
   /bookings/{id}/review:
     post:
       tags: [Reviews]
