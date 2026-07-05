@@ -1,81 +1,244 @@
-# Slice OPS.INFRA.1 — Rebuild staging Postgres as public-access server (LankaConnect parity)
+# Slice OPS.INFRA.1 — Blue/green rebuild of staging Postgres as public-access server
 
 - **Status:** DRAFT for owner approval before execution.
-- **Date:** 2026-07-05.
-- **Owner-approved intent:** rebuild staging Postgres with `publicNetworkAccess: Enabled` + IP-firewalled access for owner's DBeaver session. Trade-off explicitly accepted: internet-reachable + allowlisted, matching LankaConnect posture. Prod stays private (separate decision when prod stands up).
-- **Prior analysis:** a scoping agent proved 2026-07-05 that public-vs-private is fixed at server-create time for Postgres Flexible Server — no toggle, no in-place migration. Rebuild is the only path.
+- **Date:** 2026-07-05 (rev 2 — supersedes straight-line rebuild).
+- **Owner-approved intent:** rebuild staging Postgres with `publicNetworkAccess: Enabled` + IP-firewalled access matching LankaConnect posture. Prod stays private.
+- **Failure mode being avoided (rev 2):** the straight-line plan (delete → deploy → migrate) leaves staging with no DB for hours if the Bicep deploy fails. Rev 2 keeps `psql-vrbook-staging` alive until the replacement is proven end-to-end.
+- **Prior analysis:** scoping agent proved 2026-07-05 that public-vs-private is fixed at server-create time — no in-place toggle. Rebuild is the only path.
 - **Executes BEFORE OPS.M.12** so M.12's REFUSE-AT-PROVISIONING branch can be verified by direct `user_identities` inspection during the smoke walk.
 
 ---
 
-## §1 What ships
+## §1 Strategy: two servers coexist during cutover
 
-Single-slice, staging-only rebuild. Steps land in one commit that touches:
+Old server (`psql-vrbook-staging`, VNet-private) keeps serving container-app + migrator traffic through Key Vault secret `postgres-cs`. In parallel we stand up `psql-vrbook-staging-v2` (public-access, IP-allowlisted). We verify V2 end-to-end via a shadow migrator run + DBeaver + a temporary secondary connection-string secret. Only after all three checks pass do we flip the primary `postgres-cs` secret and restart the container apps. The old server is deleted last.
 
-1. **`infra/modules/postgres-flexible.bicep`** — public-access variant.
-   - Parameter `publicNetworkAccess string` (default `'Disabled'` for prod safety).
-   - Parameter `firewallAllowedIpRanges array` (default `[]`).
-   - When `publicNetworkAccess == 'Enabled'`:
-     - `network.publicNetworkAccess: 'Enabled'`.
-     - `network.delegatedSubnetResourceId: null` (Bicep expresses this by omitting the property inside a conditional block — see §2 for the technique).
-     - `network.privateDnsZoneArmResourceId: null` (same).
-   - Firewall rule child resources deployed per IP range:
-     - Owner's home/office IPs (fetched at plan time, checked into a Key Vault secret so the Bicep param comes through `getSecret()`, NOT hard-coded in-file).
-     - Azure services IP range (`0.0.0.0` → `0.0.0.0`) for CD-managed migrator + container-app access. This is Azure's convention for "allow all Azure resources"; verified against Azure docs. Locked to Bicep-driven so we never open 0.0.0.0/0 to the internet.
-   - **Prod safety guarantee:** because `publicNetworkAccess` defaults to `'Disabled'` at the parameter level, `main.bicep` for prod NEVER opts in. Staging-only opt-in via an explicit parameter override in `main.bicep`'s `env == 'staging'` branch.
-2. **`infra/main.bicep`** — flip the staging invocation of `postgres-flexible` to pass `publicNetworkAccess: 'Enabled'` + `firewallAllowedIpRanges: [...]`.
-3. **New Key Vault secret** `postgres-owner-ip-ranges` — a small JSON array of `[{startIp, endIp}, ...]` fetched via `getSecret()` and expanded to firewall rules.
+Coexistence is possible because:
+- Server name is different (`psql-vrbook-staging-v2`), so no ARM name conflict.
+- Old server is VNet-private, new server is public + firewalled — they share nothing but the resource group.
+- `postgres-cs` is a KV secret populated **manually** post-Bicep (verified 2026-07-05 by grep — `infra/scripts/10-store-secrets.ps1` line 69 seeds it with the placeholder `'pending-bicep-deploy'` and `main.bicep` never overwrites it). So Bicep can deploy V2 without touching the live connection string.
 
-Server NAME stays `psql-vrbook-staging` — but because the existing server can't flip its network mode, we delete the old server FIRST, then let Bicep create the new one. Same name, same DNS FQDN, so Key Vault `postgres-cs` connection string only needs the `Host=` part re-verified (should be unchanged — Postgres Flexible Server FQDN pattern is `<name>.postgres.database.azure.com`).
+**Assumptions flagged for empirical verification before execution (§9).**
 
-## §2 Execution sequence
+---
 
-The Bicep + delete + reapply dance:
+## §2 What ships in code (single commit)
 
-1. **Owner-side prep** — provide the current public IP(s) to allowlist. I read from a Key Vault secret; if the owner rotates ISP or adds a new location, they update the secret + re-deploy Bicep (a one-liner).
-2. **Snapshot the current schema + seed data** — dump `psql-vrbook-staging` → `.sql` file → checked into `scripts/staging-seed/2026-07-05-preinfra1-snapshot.sql`. Belt-and-braces so if the reseed misses anything, the owner has a rollback source. Runs from an Azure Cloud Shell inside the VNet (the only way to reach the current private server).
-3. **Delete the old server** — `az postgres flexible-server delete -n psql-vrbook-staging -g rg-vrbook-staging --yes`. Cascade-deletes the databases + firewall rules. Backups are retained per policy (14 days) — recovery path if the rebuild fails.
-4. **Deploy the updated Bicep** — `az deployment group create -g rg-vrbook-staging -f infra/main.bicep -p env=staging`. Creates the new server with `publicNetworkAccess: 'Enabled'` + firewall rules.
-5. **Verify Key Vault `postgres-cs` still reflects the new FQDN.** Should — Bicep resolves it via `pg.outputs.fqdn` and pipes into the same `postgres-cs` secret. If the resolution changed (e.g. Bicep now emits a different FQDN pattern), update `postgres-cs` explicitly.
-6. **Run the migrator against the fresh server** — `az containerapp job start -n caj-vrbook-migrator-staging -g rg-vrbook-staging`. Applies all EF migrations from scratch on an empty DB. This is where M.13's `user_identities` table etc. get created.
-7. **Reseed** — either (a) run the checked-in seed migration if there is one, or (b) apply the snapshot from step 2 if the operator wants historical data preserved. Recommend (a) — a clean fresh DB is easier for M.12's smoke walk.
-8. **Owner-side DBeaver verify** — `psql -h psql-vrbook-staging.postgres.database.azure.com -U vrbookadmin -d vrbook` from the owner's laptop → confirms `publicNetworkAccess` reachable + firewall lets the owner's IP through.
-9. **CD end-to-end smoke** — trigger a no-op CD run (bump a comment in `web/src/app/robots.txt` say, push) → verify the deploy pipeline still resolves `postgres-cs` + migrator + container-app health. If the CD pipeline reads from a stale connection-string cache, refresh.
+Touches:
 
-## §3 Rollback
+1. **`infra/modules/postgres-flexible.bicep`** — add `serverNameOverride string = ''` parameter. When empty, current behavior (`psql-vrbook-${env}`). When set, uses the override. This is the ONLY module change; the public-access + firewall params already landed in `c1cc693`.
+   - Alternative considered and rejected: a duplicate `postgres-flexible-blue-green.bicep` module. Rejected because it forks the SKU/HA/backup logic and leaves prod exposed to drift.
+2. **`infra/main.bicep`** — add a **temporary** second `pg` module invocation gated by a new param `deployStagingPgV2 bool = false`:
+   - Same params as the existing `pg` module (SKU/tier/storage/backup/HA), but `serverNameOverride: 'psql-vrbook-staging-v2'`, `publicNetworkAccess: 'Enabled'`, `firewallRules: pgFirewallRules`.
+   - The existing `pg` module KEEPS its current shape (private, name `psql-vrbook-staging`) until §3 step 10.
+   - Outputs `postgresV2Fqdn string = deployStagingPgV2 ? pgV2.outputs.fqdn : ''`.
+3. **`infra/environments/staging.bicepparam`** — flip `deployStagingPgV2 = true` for the deploy that creates V2. After cutover (§3 step 10) we remove the temporary module + param.
+4. **Key Vault secret `postgres-cs-v2`** — NEW temporary secret, populated manually after V2 exists (§3 step 5). The Bicep does not create it; the operator writes it via `az keyvault secret set`. Deleted after cutover.
+5. **No app-code changes.** `apiEnvVars` / `apiSecrets` in `main.bicep` continue to reference `postgres-cs`; the cutover happens by updating that KV secret's value in-place at step 8.
 
-If step 6 fails (migrator crashes on empty DB):
-- The old server is deleted (step 3). Restore via `az postgres flexible-server restore` from the 14-day backup retention. Restore creates a new server; rename or repoint Key Vault `postgres-cs` to it.
-- Cost: 1-2h of downtime + a name mismatch until Bicep is redeployed.
+Post-cutover cleanup commit (§3 step 12) removes the temporary `pgV2` module invocation + `deployStagingPgV2` param + `serverNameOverride` on the old `pg` invocation, and re-enables `publicNetworkAccess: 'Enabled'` on the primary `pg` module invocation with `serverNameOverride: 'psql-vrbook-staging-v2'` so subsequent deploys are idempotent against the promoted server.
 
-If step 4 fails (Bicep deploy error):
-- Old server already deleted. Restore from backup as above.
-- Post-mortem the Bicep error before retry.
+---
 
-## §4 What does NOT change
+## §3 Execution sequence (12 steps)
 
-- Prod remains VNet-injected + `publicNetworkAccess: 'Disabled'`. `main.bicep` for prod passes the default parameter.
-- SSL enforcement (`require_secure_transport = on`) remains.
-- Entra AD auth remains enabled alongside password auth.
-- `postgres-cs` Key Vault secret naming unchanged.
-- Application code, RLS policies, seed migration content — no change.
+Each step lists: (a) command / action, (b) what proves it worked, (c) what a failure looks like.
 
-## §5 What DOES change (small)
+### Step 1 — Owner-side prep + backup snapshot of the live server
 
-- Trigger for future infra-privacy discussion: once we stand up prod, we consciously decide whether prod matches staging's public model (probably NO — prod has real customer PII + higher assurance) or stays VNet-only. Documented in a follow-up ADR at prod-cutover time; not this slice.
+- Confirm owner's current outbound IP is `174.104.204.213` (already in `infra/main.bicep` `pgFirewallRules`). If it has changed, update in the same commit.
+- From Azure Cloud Shell (or a VM inside `vnet-vrbook-staging`), take a `pg_dump` of the current server:
+  ```
+  pg_dump --host=psql-vrbook-staging.postgres.database.azure.com --username=vrbook_admin --dbname=vrbook --format=custom --file=/home/$USER/vrbook-preinfra1-$(date +%Y%m%d).dump
+  ```
+  Persist the dump to a private blob (`scripts/staging-seed/` is source-controlled — do NOT check the dump in; owner-approved: test data is expendable, but keep the dump in a temp KV secret or private blob for 7 days).
+- **Success:** dump file created + size > 0.
+- **Failure:** if the private server is unreachable from Cloud Shell, the VNet has drifted; investigate before proceeding. Data loss on rebuild is acceptable per owner, so this step is belt-and-braces — do NOT block on it.
 
-## §6 Session budget + timeline
+### Step 2 — Land the Bicep change (Commit A)
 
-Single session, ~2 hours end-to-end:
-- Bicep edit + snapshot + delete: 30 min.
-- Deploy + migrator + verify: 45 min.
-- Owner DBeaver check + CD smoke: 30 min.
-- Buffer: 15 min.
+- Edit `infra/modules/postgres-flexible.bicep`: add `param serverNameOverride string = ''` and change `var serverName = empty(serverNameOverride) ? 'psql-vrbook-${env}' : serverNameOverride`.
+- Edit `infra/main.bicep`: add `param deployStagingPgV2 bool = false` and a conditional second module `pgV2` (see §2 item 2). The existing `pg` module invocation is UNCHANGED so the live server keeps deploying idempotently in its current form.
+- Edit `infra/environments/staging.bicepparam`: add `param deployStagingPgV2 = true`.
+- `az deployment group what-if -g rg-vrbook-staging -f infra/main.bicep -p infra/environments/staging.bicepparam` — expected diff: **create** `psql-vrbook-staging-v2` (+ its `firewallRules/*` + `configurations/require_secure_transport`); **no change** to `psql-vrbook-staging`.
+- **Success:** `what-if` shows exactly one net-new server + expected child resources, zero modifications to the primary Postgres.
+- **Failure:** unexpected diff on the primary server → stop, do NOT run `az deployment group create`. Investigate what changed (likely an API-version drift or a shared param that got pulled into both modules).
 
-## §7 Approval
+### Step 3 — Deploy V2 alongside the live server
+
+- `az deployment group create -g rg-vrbook-staging -f infra/main.bicep -p infra/environments/staging.bicepparam`.
+- Old server keeps serving; ARM stands up the new one in parallel (Postgres Flex Server provisioning takes ~10 min).
+- **Success:** `az postgres flexible-server show -n psql-vrbook-staging-v2 -g rg-vrbook-staging --query state -o tsv` returns `Ready`. Old server still `Ready` too. `az postgres flexible-server list -g rg-vrbook-staging -o table` shows both.
+- **Failure (the mode we set out to prevent):** V2 creation errors out (quota, SKU regional unavailability, Bicep syntax, transient Azure). Old server untouched → staging still healthy. Fix the Bicep or file a quota ticket, re-run step 3. **No rollback of anything else needed at this point.**
+
+### Step 4 — Verify V2 is reachable from owner's laptop (DBeaver check #1)
+
+- DBeaver → new connection: `psql-vrbook-staging-v2.postgres.database.azure.com`, port 5432, DB `vrbook`, user `vrbook_admin` (verify A1), password from KV `postgres-admin-password` (unchanged — both servers share the admin credential because it's a Bicep param sourced from the same KV secret).
+- Confirm connection succeeds. The DB will be empty (no databases, no schemas — Postgres Flex Server ships a default `postgres` DB but not `vrbook`).
+- Create the `vrbook` database: `CREATE DATABASE vrbook;` (the migrator does NOT create the DB, only migrations within it).
+- **Success:** DBeaver connects, `\l` shows `postgres` + `vrbook` databases.
+- **Failure:** firewall not letting owner IP through → check `az postgres flexible-server firewall-rule list -n psql-vrbook-staging-v2 -g rg-vrbook-staging`. Owner IP may have rotated; update `pgFirewallRules` in `main.bicep` + redeploy.
+
+### Step 5 — Populate temporary secondary KV secret `postgres-cs-v2`
+
+- `az keyvault secret set --vault-name kv-vrbook-staging --name postgres-cs-v2 --value 'Host=psql-vrbook-staging-v2.postgres.database.azure.com;Database=vrbook;Username=<verified-admin-login>;Password=<from-kv-postgres-admin-password>;SSL Mode=Require;Trust Server Certificate=true'`
+- Verify username via A1 (`az postgres flexible-server show --query administratorLogin`) — match V2 to whatever the live server actually uses.
+- **Success:** `az keyvault secret show --vault-name kv-vrbook-staging --name postgres-cs-v2 --query value -o tsv` returns the connection string.
+- **Failure:** KV RBAC missing for operator → fix the role assignment, retry. This does not affect running apps.
+
+### Step 6 — Shadow migrator run against V2 (validates schema without traffic impact)
+
+- **Do NOT touch `postgres-cs`.** Instead, temporarily override the migrator job's env var to point at `postgres-cs-v2` by patching the job in place. Preferred CLI shape (verify A2 before running):
+  ```
+  az containerapp job update -n caj-vrbook-migrator-staging -g rg-vrbook-staging \
+      --set-env-vars 'ConnectionStrings__Postgres=secretref:postgres-cs-v2' \
+      --secrets postgres-cs-v2=keyvaultref:https://kv-vrbook-staging.vault.azure.net/secrets/postgres-cs-v2,identity=<mi-resource-id>
+  ```
+  Fallback if the Job CLI is stricter: export current YAML (`az containerapp job show -n caj-vrbook-migrator-staging -g rg-vrbook-staging --output yaml > job.yaml`), patch, re-apply (`az containerapp job update --yaml job.yaml`).
+- Run: `az containerapp job start -n caj-vrbook-migrator-staging -g rg-vrbook-staging`.
+- Watch the execution to `Succeeded` (typically ~2 min).
+- The migrator connects to V2 via the public FQDN. Container App Job outbound traffic reaches V2 through the internet — covered by the `AllowAzureServices` (0.0.0.0-0.0.0.0) firewall rule per A3. If not, add a firewall rule for CAE's static outbound IP (`az containerapp env show -n cae-vrbook-staging -g rg-vrbook-staging --query properties.staticIp`).
+- **Success:** job execution `Succeeded`. Connect via DBeaver to V2 → `\dn` shows module schemas (`identity`, `catalog`, `booking`, etc.) and `__EFMigrationsHistory` table has ~20+ rows including `20260705034250_OpsM16_Booking_CompletionDueAt`.
+- **Failure:** migrator fails → V2 is broken but old server still serving. Revert the job env-var change (see rollback R6). Fix the underlying issue (missing migration, connectivity, credentials) and re-run.
+
+### Step 7 — End-to-end validation of V2 via a shadow API smoke (optional but cheap)
+
+- Do NOT redirect real traffic. Instead, from DBeaver, hand-insert a canary row: `INSERT INTO identity.users(...) VALUES(...);` then `SELECT` it back. This proves DDL + DML + SSL work against V2.
+- Skip if step 6 succeeded — the migrator's own DDL is a stronger proof than a hand-INSERT.
+- **Success:** row survives round-trip.
+- **Failure:** unlikely if step 6 passed; escalates to §5 rollback R7.
+
+### Step 8 — Cutover: flip primary `postgres-cs` to point at V2
+
+This is the moment of downtime. Aim for < 2 min.
+
+**PRE-STEP (non-negotiable):** capture current `postgres-cs` value for R8 rollback:
+```
+az keyvault secret show --vault-name kv-vrbook-staging --name postgres-cs --query value -o tsv > /tmp/postgres-cs-preexist.txt
+```
+Do NOT commit this file.
+
+- Restore the migrator job's env-var (undo step 6's temporary override) so it once again reads `ConnectionStrings__Postgres=secretref:postgres-cs`. This ensures the next CD run picks up V2 via the primary secret, not the temporary one.
+- `az keyvault secret set --vault-name kv-vrbook-staging --name postgres-cs --value '<same value as postgres-cs-v2>'`
+- Container Apps cache KV secret values per revision (A4). To make the API re-read: bump revision:
+  ```
+  az containerapp update -n ca-vrbook-api-staging -g rg-vrbook-staging \
+      --revision-suffix cutover-$(date +%s)
+  ```
+- Container App Jobs (migrator, sync, bookingexpiry, completion, notifdispatch) resolve `secretref:postgres-cs` at execution start, so they auto-cutover on next cron/manual trigger — no bump needed.
+- **Success:** `az containerapp revision list -n ca-vrbook-api-staging -g rg-vrbook-staging -o table` shows the new revision `Active` + `Running`. API health endpoint returns healthy. App Insights: no Npgsql exceptions in a 2-min window.
+- **Failure:** API cold-start fails against V2 → immediately roll back per §5 R8.
+
+### Step 9 — Post-cutover verification burn-in (15 min)
+
+- Trigger the migrator job manually: `az containerapp job start -n caj-vrbook-migrator-staging -g rg-vrbook-staging` — expected: no-op (all migrations already applied in step 6).
+- Sign in through the web UI (owner's `niroshanaks@gmail.com` Entra flow). This provisions the user via M.13's identity flow → hits V2 → completes.
+- Run the post-first-sign-in bootstrap in DBeaver:
+  ```sql
+  UPDATE identity.users SET is_platform_admin = true WHERE lower(email) LIKE '%niroshanaks%';
+  ```
+- Walk one property + one booking flow (create/list) → confirms DDL + DML + reads work against V2 through the running containers.
+- Watch App Insights for 15 min: zero DB-connection failures.
+- **Success:** clean 15-min window.
+- **Failure at any of these:** roll back per §5 R8. The old server is still Ready.
+
+### Step 10 — Delete the old server
+
+- `az postgres flexible-server delete -n psql-vrbook-staging -g rg-vrbook-staging --yes`.
+- 14-day backup retention persists on the deleted server per Azure policy — recovery still possible if something surfaces later.
+- **Success:** `az postgres flexible-server show -n psql-vrbook-staging -g rg-vrbook-staging` returns 404.
+- **Failure:** delete errors are rare; if it hangs, force-delete via the portal or retry.
+
+### Step 11 — Delete the temporary secondary KV secret
+
+- `az keyvault secret delete --vault-name kv-vrbook-staging --name postgres-cs-v2` (KV soft-delete retains it for 90 days — recovery still possible).
+- **Success:** `az keyvault secret show --name postgres-cs-v2` returns 404.
+
+### Step 12 — Cleanup commit (Commit B — post-cutover)
+
+- Edit `infra/main.bicep`:
+  - Remove the `pgV2` module invocation and the `deployStagingPgV2` param.
+  - On the primary `pg` module invocation, set `serverNameOverride: env == 'staging' ? 'psql-vrbook-staging-v2' : ''`. This locks the name so future Bicep deploys converge on the promoted server rather than trying to create `psql-vrbook-staging` again.
+  - Postgres Flexible Server does NOT support rename (A5), so we live with the `-v2` suffix. Cosmetic only.
+- Edit `infra/environments/staging.bicepparam`: remove `deployStagingPgV2 = true`.
+- `az deployment group what-if` — expected: **no changes** (V2 already exists and matches desired state; old server already deleted).
+- `az deployment group create` — no-op deploy that reconciles.
+- Commit both edits + close-out doc update.
+
+---
+
+## §4 Container-app / migrator connection-string plumbing (verified 2026-07-05)
+
+- API container app (`ca-vrbook-api-staging`) reads `ConnectionStrings__Postgres` from env var, wired via `secretRef: postgres-cs` in `infra/main.bicep` `apiEnvVars`. Container Apps resolve KV secrets **at revision create time** and cache per-revision. To pick up a new value: create a new revision.
+- All Container App Jobs (migrator, sync, bookingexpiry, completion, notifdispatch) resolve `secretref:postgres-cs` **at execution start** — each cron tick / manual start re-reads the KV secret. No revision bump needed for jobs.
+- The migrator's `Program.cs` reads config via `AddEnvironmentVariables()`, so the env-var override in §3 step 6 is sufficient — no code path baked at build time.
+
+## §5 Rollback matrix (explicit, per-step)
+
+| Failure at step | State of old server | State of V2 | Rollback action |
+|---|---|---|---|
+| R2 (Bicep syntax) | Alive | Doesn't exist yet | Fix Bicep. No infra rollback. |
+| R3 (deploy V2 fails) | Alive | Partial or absent | `az deployment group create` again after fixing root cause (quota / SKU / config). No infra rollback needed — Bicep is idempotent, partial V2 shell can be deleted via `az postgres flexible-server delete -n psql-vrbook-staging-v2 --yes`. |
+| R4 (owner can't reach V2) | Alive | Alive but firewalled | Adjust `pgFirewallRules` in `main.bicep`, redeploy. No effect on old server. |
+| R6 (shadow migrator fails on V2) | Alive | Alive but bad schema | (a) Revert migrator job env var to `secretref:postgres-cs`. (b) Investigate migration failure locally. (c) Fix + redeploy migrator image + retry step 6. (d) If V2 is beyond salvage, `az postgres flexible-server delete -n psql-vrbook-staging-v2 --yes` + restart from step 3. |
+| R7 (shadow API smoke fails) | Alive | Alive with schema | Same as R6 plus check network path (firewall rule for CAE outbound IP, A3). |
+| R8 (post-cutover API failing) | Alive | Serving | (a) `az keyvault secret set --name postgres-cs --value "$(cat /tmp/postgres-cs-preexist.txt)"` (b) `az containerapp update -n ca-vrbook-api-staging -g rg-vrbook-staging --revision-suffix rollback-$(date +%s)` — new revision reads the reverted secret, points at old server. (c) V2 stays running but idle; investigate + retry step 8, or delete V2 if wrong. |
+| R10 (old-server delete fails) | Broken | Serving | Retry delete via portal. No functional impact. |
+| Post-cutover, days later, latent V2 bug discovered | Deleted, backups retained 14 days | Serving but broken | Restore old server from backup: `az postgres flexible-server restore --source-server psql-vrbook-staging --name psql-vrbook-staging-restored --restore-time <ISO>`. Update `postgres-cs` to the restored FQDN. Full recovery path — costs 1-2h of downtime but not "no DB for hours during rebuild". |
+
+**Non-negotiable rule:** before step 8, the operator captures the current `postgres-cs` value (see §3 step 8 pre-step).
+
+---
+
+## §6 What does NOT change
+
+- Prod remains VNet-injected + `publicNetworkAccess: 'Disabled'`. Prod passes the default parameter.
+- `require_secure_transport = on` remains on both old + new servers.
+- Entra AD auth + password auth both remain enabled.
+- `apiEnvVars` / `apiSecrets` in `main.bicep` — unchanged. Cutover happens by rotating the KV secret's value, not by changing the Bicep secret refs.
+- App code, RLS policies, seed migration content — unchanged.
+
+## §7 What DOES change (small)
+
+- `pg_dump`/`pg_restore` habit for future infra changes: keeping a snapshot even when the data is expendable is cheap insurance. Consider a scheduled export to a private blob as a follow-up (not this slice).
+- Once prod is stood up, an ADR revisits public-vs-private posture for prod. Documented separately.
+
+---
+
+## §8 Session budget
+
+Single session, ~3 hours end-to-end:
+- Prep + snapshot + Bicep edit (Commit A): 30 min.
+- Deploy V2 + migrator + DBeaver verify: 45 min (of which ~15 min is Azure provisioning time).
+- Cutover + burn-in: 30 min.
+- Delete old server + secret + cleanup commit (Commit B): 30 min.
+- Buffer: 45 min.
+
+---
+
+## §9 Empirical verifications required BEFORE execution
+
+These are the assumptions the plan depends on. Each must be verified with a docs read or a `--help`/`what-if` invocation before Commit A ships. None of them can burn the old server.
+
+| ID | Assumption | Verification |
+|---|---|---|
+| A1 | Old server's admin login name (I had `vrbookadmin` in my earlier prompt; `main.bicep` line 27 declares `vrbook_admin`). Different logins mean V2 connection string won't match. | `az postgres flexible-server show -n psql-vrbook-staging -g rg-vrbook-staging --query administratorLogin -o tsv`. |
+| A2 | `az containerapp job update --set-env-vars` + `--secrets` accepts `keyvaultref:...` values. | `az containerapp job update --help` or `--yes --no-wait` dry-run. Fallback: YAML apply. |
+| A3 | Container App Job outbound traffic to public Postgres Flex Server is covered by `AllowAzureServices` (0.0.0.0-0.0.0.0). | Attempt step 6; if "no pg_hba.conf entry", add firewall rule for CAE's static IP. |
+| A4 | Rotating a KV secret does NOT auto-restart Container App revisions; new revision must be created. | Azure docs "Manage secrets in Azure Container Apps" — well-known but worth re-reading. |
+| A5 | Postgres Flexible Server does NOT support rename. | `az postgres flexible-server --help` — no `rename` verb. ARM `name` is immutable. |
+| A6 | `main.bicep` can invoke `postgres-flexible.bicep` twice in one deployment with different `serverNameOverride` values. | `az deployment group what-if` at step 2 will show. Fallback: duplicate module file `postgres-flexible-v2.bicep` hardcoding V2 name. |
+| A7 | `postgres-admin-password` KV secret is the same on both servers (both `pg` and `pgV2` reference it via `getSecret()` in `staging.bicepparam`). | Read `staging.bicepparam` — parameterized. Both server invocations receive the same password. |
+
+**Any A1-A7 that fails on verification blocks execution until resolved.** Do NOT execute step 3 until A1-A6 pass.
+
+---
+
+## §10 Approval
 
 Awaiting owner sign-off. On approval:
-- Update this file's Status header to APPROVED.
-- Execute §2 sequence in one commit + one Azure deploy.
+- Update Status header to APPROVED.
+- Execute §9 verifications, then §3 sequence.
+- Commit A creates + verifies V2. Commit B post-cutover cleanup.
 - Update `docs/MASTER_PLAN.md` with an INFRA.1 row after ship.
 - Then proceed to OPS.M.12.1.
