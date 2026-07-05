@@ -52,6 +52,15 @@ internal sealed class BookingConfiguration : IEntityTypeConfiguration<DomainBook
         b.Property(x => x.CancellationReason).HasColumnName("cancellation_reason").HasMaxLength(500);
         b.Property(x => x.SpecialRequests).HasColumnName("special_requests").HasMaxLength(2000);
 
+        // Slice OPS.M.16 — completion window: snapshotted at CheckOut time,
+        // read by CompletionSweepHandler predicate. Filtered index keeps the
+        // sweep index tiny (only CheckedOut + not-soft-deleted).
+        b.Property(x => x.TurnoverHoursOverride).HasColumnName("turnover_hours_override");
+        b.Property(x => x.CompletionDueAt).HasColumnName("completion_due_at");
+        b.HasIndex(x => x.CompletionDueAt)
+            .HasDatabaseName("ix_bookings_completion_due_at")
+            .HasFilter("status = 'CheckedOut' AND deleted_at IS NULL");
+
         b.Property(x => x.CreatedAt).HasColumnName("created_at");
         b.Property(x => x.CreatedBy).HasColumnName("created_by");
         b.Property(x => x.UpdatedAt).HasColumnName("updated_at");

@@ -59,6 +59,11 @@ internal sealed class PropertyConfiguration : IEntityTypeConfiguration<Property>
         b.Property(p => p.DynamicPricingEnabled).HasColumnName("dynamic_pricing_enabled").HasDefaultValue(false);
         b.Property(p => p.MessagingEnabled).HasColumnName("messaging_enabled").HasDefaultValue(true);
 
+        // Slice OPS.M.16 — property-level default turnover window (hours).
+        // Consumed by Booking.CheckOut() to snapshot Booking.CompletionDueAt.
+        // See docs/OPS_M_16_TURNOVER_AWARE_COMPLETION_PLAN.md §1.
+        b.Property(p => p.TurnoverHours).HasColumnName("turnover_hours").HasDefaultValue(24).IsRequired();
+
         b.Property(p => p.RatingAvg).HasColumnName("rating_avg").HasColumnType("numeric(3,2)");
         b.Property(p => p.RatingCount).HasColumnName("rating_count").HasDefaultValue(0);
 
