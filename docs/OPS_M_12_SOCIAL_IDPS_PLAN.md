@@ -1,13 +1,15 @@
 # Slice OPS.M.12 — Google social IdP + admin-vs-guest sign-in surface split + middleware admin-rejection
 
-- **Status:** DRAFT for reviewer sign-off (`niroshanaks`). NOT approved for execution. All §9 questions must be locked before any sub-commit lands.
+- **Status:** APPROVED for execution. Reviewer sign-off received 2026-07-05 with §9 locked answers (see §11 for the locked-answer summary; §9 itself preserved as-is for design-diary continuity).
 - **Date:** 2026-07-05.
 - **Author (role):** Platform Enterprise Architect.
 - **Predecessors:** [`OPS_M_13_CLOSE_OUT.md`](./OPS_M_13_CLOSE_OUT.md) (email-canonical users + `user_identities` table live), [`OPS_M_14_CLOSE_OUT.md`](./OPS_M_14_CLOSE_OUT.md) (Entra-only auth baseline; `ExternalObjectId` rename in place; mock JwtBearer test handler wired).
 - **Supersedes:** the 108-line stub previously at this same path, authored during OPS.M.10.2 F11 (pre-M.13). That draft assumed a single-oid `identity.users` schema and had no notion of admin/guest surface split. Every §-numbered thing there is subsumed by this rewrite; keep the stub's text in git history as design-diary reading only.
-- **Scope:** ONE vertical slice. Wires Google as a federated IdP through Entra External ID for the guest sign-in surface, splits the SPA sign-in flow into `admin` (Entra local only) and `guest` (Entra local + Google), and lands a middleware admin-vs-social rejection gate that guarantees a Google-federated token can never carry admin authority — regardless of DB state, JWT claims, or future config drift.
+- **Scope:** ONE vertical slice. Wires **Google + Microsoft consumer + Facebook + Apple** as federated IdPs through Entra External ID for the guest sign-in surface, splits the SPA sign-in flow into `admin` (Entra local only — password OR OTP) and `guest` (Entra local + all 4 social IdPs), and lands a TWO-LAYER admin protection:
+  1. **Refuse-at-provisioning**: a social sign-in whose email matches an existing user with any admin authority is rejected AT PROVISIONING TIME. No `user_identities` row is created. The admin user's row NEVER carries a social-provider identity.
+  2. **Middleware belt**: even if layer 1 is circumvented (data-heal race, direct SQL, config drift), the middleware admin-vs-social rejection gate stops the request before any handler runs.
 - **Explicitly NOT in this slice:**
-  - **Microsoft consumer accounts + Apple + Facebook** — Google is the single shipping IdP for M.12 per §9-Q1. Microsoft is the fanned-out follow-up (**OPS.M.12.1**) and reuses the same middleware gate; Apple is out of scope.
+  - **LinkedIn / X (Twitter) / Amazon social IdPs** — the closed set `SocialIdpValues` includes them for the middleware gate's future-proofing, but no user-flow config or classifier mapping ships in M.12. Add-on ops slice if needed.
   - **App-role legacy claim reads / `[Authorize(Roles=)]` drop** — **OPS.M.15** (still deferred).
   - **`_pre_m13_snap` schema cleanup** — scheduled 2026-08-04.
   - **`@unknown.local` synthetic-email row cleanup** — maintenance follow-up.
@@ -66,14 +68,15 @@ Sub-commit convention: `Slice OPS.M.12.N: <summary>`. All commits target `develo
 ```
 M.12.1 GREEN — Middleware idp-claim propagation + ICurrentUser.IdentityProvider accessor + arch tests.
 M.12.2 GREEN — Admin-vs-social rejection middleware + AdminSocialIdpRejectedException + ProblemDetails wiring.
-M.12.3 GREEN — ProvisionOrLinkUserHandler multi-provider verify + IdentityProviderClassifier + integration tests.
-M.12.4 DOCS  — Entra tenant + Google Cloud runbook + ADR + Bicep audit doc.
-M.12.5 GREEN — SPA sign-in flow split (/auth/signin?flow={admin|guest}) + per-flow MSAL authority + admin-layout redirect.
-M.12.6 GREEN — SPA admin-guard useAdminGuard() + /auth/admin-social-idp-rejected error page + admin/error.tsx branch.
-M.12.7 GREEN — Close-out: arch-tests consolidation + MASTER_PLAN row + close-out doc + Bicep second-phase cleanup.
+M.12.3 GREEN — Add 'facebook' to user_identities.provider CHECK migration + IdentityProviderClassifier (4 IdPs).
+M.12.4 GREEN — ProvisionOrLinkUserHandler REFUSE-AT-PROVISIONING branch for admin users + integration tests.
+M.12.5 DOCS  — Entra tenant + 4 IdP provider portals runbook + ADR + Bicep audit doc.
+M.12.6 GREEN — SPA sign-in flow split (/auth/signin?flow={admin|guest}) + per-flow MSAL authority + admin-layout redirect.
+M.12.7 GREEN — SPA admin-guard useAdminGuard() + /auth/admin-social-idp-rejected error page + admin/error.tsx branch.
+M.12.8 GREEN — Close-out: arch-tests consolidation + MASTER_PLAN row + close-out doc + Bicep second-phase cleanup.
 ```
 
-7 sub-commits; one doc-only (M.12.4); six code-carrying. No RED-only commit — arch tests bundle with the code.
+8 sub-commits (grew from 7 to accommodate the 4-IdP scope + REFUSE-AT-PROVISIONING branch); one doc-only (M.12.5); seven code-carrying. Session budget: **3 sessions** (up from 2).
 
 ### M.12.1 — GREEN. `idp` claim propagation + `ICurrentUser.IdentityProvider` accessor.
 
@@ -115,43 +118,74 @@ Tests:
 
 CI: green.
 
-### M.12.3 — GREEN. `ProvisionOrLinkUserHandler` multi-provider verify.
-
-Verification-heavy; the M.13 handler is provider-parametric, minimal source diff.
+### M.12.3 — GREEN. `user_identities.provider` CHECK migration + `IdentityProviderClassifier` (4 IdPs).
 
 Files touched:
-- `src/Modules/VrBook.Modules.Identity/Application/Users/Commands/ProvisionOrLinkUserHandler.cs` — no algorithm change. Add one `ILogger.LogInformation` line at Branch 2 for cross-provider-link observability.
-- `src/Modules/VrBook.Modules.Identity/Infrastructure/Auth/UserProvisioningMiddleware.cs` — line ~94: `Provider: "entra"` hardcoded → `Provider: IdentityProviderClassifier.Classify(idpClaim, tenantIssuerHost)`.
-- `src/Modules/VrBook.Modules.Identity/Infrastructure/Auth/IdentityProviderClassifier.cs` (NEW) — static helper mapping `idp` claim → `user_identities.provider` string.
+- `src/Modules/VrBook.Modules.Identity/Infrastructure/Persistence/Migrations/{ts}_OpsM12_UserIdentitiesProviderAddFacebook.cs` (NEW)
+  - `DROP CONSTRAINT` on the existing CHECK; `ADD CONSTRAINT` with the widened set `('entra','google','microsoft','apple','facebook','test')`. `facebook` was NOT in the M.13 shape (`Migrations/20260701225121_OpsM13_UserIdentitiesAndMigrationAudit.cs` line 125 — verify empirically).
+  - Down: revert to the pre-M.12 CHECK. Safe because no `provider='facebook'` rows exist pre-M.12.
+- `src/Modules/VrBook.Modules.Identity/Infrastructure/Auth/UserProvisioningMiddleware.cs` — hardcoded `Provider: "entra"` → `Provider: IdentityProviderClassifier.Classify(...)`.
+- `src/Modules/VrBook.Modules.Identity/Infrastructure/Auth/IdentityProviderClassifier.cs` (NEW):
+  - `Classify(idpClaim, tenantIssuerHost)` maps:
+    - null/whitespace → `"entra"`
+    - matches issuer host → `"entra"`
+    - `"google.com"` → `"google"`
+    - `"live.com"` → `"microsoft"`
+    - `"facebook.com"` → `"facebook"`
+    - `"apple.com"` → `"apple"`
+    - else → raw literal (DB CHECK rejects)
 
-Config: `EntraExternalId:TenantIssuerHost` — new key. Bicep/env wiring lands in M.12.5.
+Config: `EntraExternalId:TenantIssuerHost` — new key. Bicep/env wiring lands in M.12.6.
 
 Tests:
-- `tests/VrBook.Modules.Identity.Tests/IdentityProviderClassifierTests.cs` (NEW, Unit) — 8 facts.
-- `tests/VrBook.Modules.Identity.Tests/ProvisionOrLinkUserHandler_MultiProviderTests.cs` (NEW, Unit) — 6 facts covering Branch 1/2/3 with google + races.
-- `tests/VrBook.Api.IntegrationTests/Identity/SocialIdpProvisioningEndToEndTests.cs` (NEW, Integration) — 3 facts.
+- `tests/VrBook.Modules.Identity.Tests/IdentityProviderClassifierTests.cs` (NEW, Unit) — 10 facts covering all 4 IdPs + null + whitespace + issuer host + apple.com + case-insensitive + empty issuer config.
+- `tests/VrBook.Api.IntegrationTests/Identity/UserIdentitiesProviderCheckMigrationTests.cs` (NEW, Integration) — 2 facts: (a) INSERT `provider='facebook'` succeeds; (b) INSERT `provider='linkedin'` still rejected with 23514.
 
 CI: green.
 
-### M.12.4 — DOCS. Entra + Google Cloud runbook.
+### M.12.4 — GREEN. `ProvisionOrLinkUserHandler` REFUSE-AT-PROVISIONING branch for admin users.
 
-Docs-only. Documents the portal steps so M.12.5 can land against a specific user-flow name.
+**The load-bearing decision.** Owner policy 2026-07-05: tenant admins can NEVER have a social-provider identity linked. A social sign-in whose email matches an existing user with admin authority must be rejected at provisioning time — not at middleware, not at endpoint auth. Layer 1 defence for admin-role integrity.
 
 Files touched:
-- `docs/runbooks/social_idp_setup.md` (NEW) — 10-step operator recipe:
-  1. Google Cloud Console OAuth client creation.
-  2. Entra External ID Google IdP registration (Key Vault-backed credentials).
-  3. `GuestSignUpSignIn` user flow: Local Accounts + Google. **Application claims MUST include `idp`** (critical — see §7 risk 1).
-  4. `AdminSignUpSignIn` user flow: Local Accounts only.
-  5. Application registration attach.
-  6. Bicep audit table (portal-only vs Bicep-managed).
-  7. Redirect URI documentation.
-  8. Smoke walk (10 min): successful path + adversarial path.
-- `docs/adr/0016-admin-vs-social-idp-surface-split.md` (NEW) — ADR capturing the split, mirrors `docs/adr/0012-entra-external-id-over-b2c.md` shape.
+- `src/Modules/VrBook.Modules.Identity/Application/Users/Commands/ProvisionOrLinkUserHandler.cs`
+  - In `LinkIdentityToUserAsync` (Branch 2), BEFORE creating the new `UserIdentity`:
+    - If `cmd.Provider` is in `HttpCurrentUser.SocialProviderKeys` (`{"google","microsoft","facebook","apple"}`) AND the matched `existingUser.IsPlatformAdmin` OR the user has any active `tenant_memberships` row:
+      - Throw `AdminSocialLinkRefusedException` with message: "This email belongs to a tenant admin account. Admin roles must use Entra local sign-in (email + password OR email + OTP). Contact your admin if this is unexpected. No new identity was created."
+  - Query the tenant_memberships lookup via a new method on `IUserQueryService` OR inline query — decide based on repository shape. Cheapest option is inline against `IdentityDbContext`.
+- `src/VrBook.Domain/Common/DomainException.cs` — ADD `AdminSocialLinkRefusedException : BusinessRuleViolationException` with rule `"admin_social_signin_refused"`.
+- `src/VrBook.Contracts/Common/ProblemTypes.cs` — ADD `AdminSocialLinkRefused` constant.
+- `src/VrBook.Api/Middleware/ProblemDetailsConfig.cs` — register mapper: 422 with the specific rule string + a `matchedUserId` extension (audited but the client only sees "an admin account exists on this email").
 
-No code changes. Per `feedback_no_ci_for_doc_only_commits`, the prior code commit (M.12.3) is the CI gate.
+Tests:
+- `tests/VrBook.Modules.Identity.Tests/ProvisionOrLinkUserHandler_AdminSocialRefuseTests.cs` (NEW, Unit) — 6 facts:
+  1. Guest+google branch 2 on non-admin user → LINK succeeds.
+  2. Guest+google branch 2 on `IsPlatformAdmin=true` user → REFUSE with rule.
+  3. Guest+google branch 2 on user with 1 `tenant_admin` membership → REFUSE.
+  4. Guest+google branch 2 on user with any other membership role → REFUSE (any membership is admin authority per §3.2).
+  5. Fresh entra sign-in via admin flow → Branch 3 → NO REFUSE (entra is not a social provider).
+  6. Fresh google sign-in NO existing user match → Branch 3 → NO REFUSE (creates new guest user).
+- `tests/VrBook.Api.IntegrationTests/Identity/SocialIdpProvisioningRefuseTests.cs` (NEW, Integration) — 3 facts against the mock JwtBearer using new `SocialAdmin` + `SocialAdminExistingEntra` personas.
 
-### M.12.5 — GREEN. SPA sign-in flow split.
+CI: green.
+
+### M.12.5 — DOCS. Entra tenant + 4-IdP provider portals runbook.
+
+Files touched:
+- `docs/runbooks/social_idp_setup.md` (NEW) — 4 portal setups documented:
+  1. **Google Cloud Console** — OAuth client + reply URI `https://<tenant>.ciamlogin.com/<tenant-id>/federation/oauth2`.
+  2. **Microsoft consumer** — via Entra's built-in "Microsoft" IdP (consumer accounts). No separate portal; Entra registers it against Microsoft's account service directly.
+  3. **Meta for Developers** (Facebook) — Meta App creation + OAuth consumer + Instagram Basic Display disabled + Facebook Login product enabled + valid OAuth redirect URI matching Entra's federation endpoint.
+  4. **Apple Developer** — Sign in with Apple requires an Apple Developer account ($99/yr) + Services ID + Sign in with Apple capability enabled + private key (`.p8`) + team/client IDs. Documented step-by-step.
+  5. `GuestSignUpSignIn` user flow — Local Accounts + all 4 social IdPs. **Application claims MUST include `idp`** (§7 risk 1).
+  6. `AdminSignUpSignIn` user flow — Local Accounts only. Per §11-Q7 locked: allow both password AND OTP (whichever the admin has configured).
+  7. Bicep audit table + Key Vault secret shapes for 4 client-ID/secret pairs.
+  8. Smoke walk (15 min) — one flow per IdP + adversarial admin-social-link refusal.
+- `docs/adr/0016-admin-vs-social-idp-surface-split.md` (NEW).
+
+No code changes. Per `feedback_no_ci_for_doc_only_commits`, the prior code commit (M.12.4) is the CI gate.
+
+### M.12.6 — GREEN. SPA sign-in flow split.
 
 Files touched (web):
 - `web/src/lib/auth/msalConfig.ts` — refactor:
@@ -173,7 +207,7 @@ Tests:
 
 CI: `cd-staging-web.yml` green.
 
-### M.12.6 — GREEN. SPA admin-guard companion.
+### M.12.7 — GREEN. SPA admin-guard companion.
 
 Files touched (web):
 - `web/src/lib/auth/useAdminGuard.ts` (NEW) — hook returning `{ status: 'ok' | 'social-admin-rejected' | 'loading' | 'unauthenticated' }`.
@@ -186,7 +220,7 @@ Tests: 6 facts in `useAdminGuard.test.tsx` + error page render tests.
 
 CI: green.
 
-### M.12.7 — GREEN. Close-out.
+### M.12.8 — GREEN. Close-out.
 
 - `tests/VrBook.Architecture.Tests/OpsM12_SocialIdpShapeTests.cs` (NEW) — 7 consolidated shape facts.
 - `docs/OPS_M_12_CLOSE_OUT.md` (NEW) — standard 8-section close-out.
@@ -205,9 +239,13 @@ CI: green.
 
 The M.13 schema allows N identities per user; M.12 exercises this for the first time. No constraint added.
 
-### §2.2 Linking rule when Google sign-in email matches an existing Entra user
+### §2.2 Linking rule when a social sign-in email matches an existing Entra user
 
-**Decision: LINK by default** (M.13 Branch 2, verified-email guard). No new algorithm. Rejected: REJECT-with-error, CONSENT-prompt.
+**Decision (owner-locked 2026-07-05):**
+- If the matched user carries any admin authority (`IsPlatformAdmin=true` OR any active `tenant_memberships` row): **REFUSE the link.** Throw `AdminSocialLinkRefusedException` with rule `admin_social_signin_refused`. No new `user_identities` row is created. The admin's user row NEVER carries a social-provider identity — this closes the class of edge cases at provisioning time rather than at middleware.
+- Otherwise (guest user, no admin authority): **LINK by default** (M.13 Branch 2, verified-email guard).
+
+Rationale: guarantees the invariant "admin users have entra-only identities" holds in the DB, not just at middleware. Layer 1 defence; middleware gate is Layer 2 belt.
 
 ### §2.3 No new domain event on cross-provider link
 
@@ -408,12 +446,33 @@ MASTER_PLAN row:
 
 ---
 
-## §10 Approval gate — PENDING
+## §10 Approval gate — APPROVED 2026-07-05
 
-Reviewer must lock §9 Q1-Q8 before M.12.1 lands. On sign-off, this file's Status header is updated to "APPROVED for execution."
+Reviewer sign-off received 2026-07-05. §11 documents the locked answers to §9 (§9 preserved unchanged for design-diary continuity).
 
-Session budget estimate: **2 sessions.** Session 1 = M.12.1-3 (backend). Session 2 = M.12.4-7 (docs + web).
+Session budget estimate: **3 sessions** (up from 2 to accommodate 4-IdP scope + REFUSE-AT-PROVISIONING branch).
+- Session 1 — M.12.1 + M.12.2 + M.12.3 (backend infra + migration).
+- Session 2 — M.12.4 + M.12.5 (REFUSE branch + tenant runbook).
+- Session 3 — M.12.6 + M.12.7 + M.12.8 (SPA + close-out).
 
 ---
 
-**End of plan. Awaiting reviewer sign-off on §9.**
+## §11 Locked answers (2026-07-05)
+
+- **Q1 (IdPs)** → **Google + Microsoft consumer + Facebook + Apple.** Owner: "why only google and microsoft? why not facebook?" — all 4 major consumer IdPs ship in M.12. LinkedIn / X / Amazon deferred (add-on ops slice if ever wanted).
+- **Q2 (linking rule)** → **REJECT for admin users; LINK for guests.** Owner: "Reject for Tenant Admin, I want tenant Admin only to have username password. Guests can Extra id or external idp." See §2.2.
+- **Q3 (google-federated pre-existing admin)** → **Block sign-in at middleware.** Layer 2 belt for Layer 1 (§2.2 REFUSE). Redundant by construction but shipped for defence-in-depth.
+- **Q4 (promote to tenant admin)** → **Refuse promotion.** Owner: "tenant admi only have extra id with username/password no matter what." When the promote endpoint lands (future slice), it checks the target's `user_identities` — if any social provider present, refuse with `promote_requires_social_identity_removal`. Also enforced retroactively: existing entra admin's Google sign-in triggers §2.2 REFUSE before any linking.
+- **Q5 (email authoritative)** → **M.13 partial-UNIQUE remains authoritative.** DB email set at provisioning; never mutates automatically.
+- **Q6 (MSAL flow mechanism)** → **Per-flow authority URL.**
+- **Q7 (admin sign-in method)** → **Entra local, either password OR OTP.** Owner: "Email + password OR email + OTP (either works)." AdminSignUpSignIn user flow allows both; the operator can enforce one via portal config if ever desired.
+- **Q8 (admin-guard placement)** → **new `useAdminGuard()` hook** in admin subtree.
+- **Q9 (migration path)** → **No data-heal for existing entra users.** M.13.4 backfill covered it.
+
+Plus a NEW question introduced by the widened IdP set:
+
+- **Q10 (facebook DB CHECK)** → **Add migration** to widen `user_identities.provider` CHECK constraint set from `('entra','google','microsoft','apple','test')` to `('entra','google','microsoft','apple','facebook','test')`. `linkedin`/`twitter`/`amazon` stay OUT — deferred. Migration lands in M.12.3.
+
+---
+
+**End of plan. Ready to execute M.12.1.**
