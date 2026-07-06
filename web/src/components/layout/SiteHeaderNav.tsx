@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Search, User, Calendar, Settings } from 'lucide-react';
 
 import { useMe } from '@/hooks/useMe';
+import { useMyTenants } from '@/lib/tenants/useMyTenants';
 import { cn } from '@/lib/utils/cn';
 
 const baseLinks = [
@@ -14,22 +15,33 @@ const baseLinks = [
 
 /**
  * Slice OPS.M.10.2 F11.7.5.5 — client subcomponent of {@link SiteHeader}
- * that calls `useMe()` and conditionally renders the `Admin` link when
- * the signed-in user has any operator role (`isOwner`, `isAdmin`,
- * `isPlatformAdmin`).
+ * that conditionally renders the `Admin` link when the signed-in user
+ * has any operator role.
  *
- *   - During the `useMe` loading window we render the base nav only —
- *     no skeleton, no flicker. The base nav is static so the header
- *     paints immediately; the Admin link slides in when the query lands.
- *   - The Admin entry points at `/admin` (dashboard surface) rather
- *     than `/admin/bookings` because the dashboard is the canonical
- *     operator landing per the architect's resolution of §9 (b).
- *   - Anonymous and non-operator signed-in users see exactly the base
- *     nav (no Admin entry).
+ * <p>Slice OPS.M.21 (M.15 App Roles follow-up) — the operator derivation
+ * key changed. Pre-M.21 read `data?.isOwner || data?.isAdmin ||
+ * data?.isPlatformAdmin` from `/api/v1/me` — the first two came from
+ * `identity.users.is_owner`/`is_admin` DB columns (retired in M.21.A.3).
+ * Post-M.21 the derivation keys on:</p>
+ *
+ * <ul>
+ *   <li><c>useMe().isPlatformAdmin</c> — DB-authoritative
+ *   <c>identity.users.is_platform_admin</c> flag, unchanged.</li>
+ *   <li><c>useMyTenants()</c> — any active membership with
+ *   <c>role="tenant_admin"</c> in <c>identity.tenant_memberships</c>.
+ *   Matches the M.13.6 <c>MembershipRoles</c> shape read server-side
+ *   by every handler post-M.15.</li>
+ * </ul>
+ *
+ * <p>The Admin link points at `/admin` (dashboard surface) — the canonical
+ * operator landing per the architect's resolution of §9 (b). Anonymous
+ * and non-operator users see exactly the base nav.</p>
  */
 export const SiteHeaderNav = () => {
-  const { data } = useMe();
-  const isOperator = !!(data?.isOwner || data?.isAdmin || data?.isPlatformAdmin);
+  const { data: me } = useMe();
+  const { data: tenants } = useMyTenants();
+  const hasTenantAdminMembership = tenants?.memberships.some(m => m.role === 'tenant_admin') ?? false;
+  const isOperator = !!(me?.isPlatformAdmin || hasTenantAdminMembership);
 
   return (
     <nav className="hidden items-center gap-6 md:flex" aria-label="Primary">
