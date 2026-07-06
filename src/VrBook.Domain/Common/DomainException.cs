@@ -63,3 +63,41 @@ public sealed class CrossTenantAccessException : ForbiddenException
     public Guid AttemptedTenantId { get; }
     public Guid? ActualTenantId { get; }
 }
+
+/// <summary>
+/// Slice OPS.M.12 — thrown by <c>AdminSocialIdpRejectionMiddleware</c> when a
+/// social-IdP token attempts to exercise admin authority
+/// (<c>IsPlatformAdmin</c> or any active <c>tenant_memberships</c> row). Maps
+/// to 403 with <c>ProblemTypes.AdminSocialIdpRejected</c>. The
+/// <c>AttemptedTenantIds</c> collection is for audit + Log Analytics
+/// filtering; not surfaced in the response body.
+/// </summary>
+public sealed class AdminSocialIdpRejectedException : ForbiddenException
+{
+    public AdminSocialIdpRejectedException(
+        string identityProvider,
+        bool isPlatformAdmin,
+        IReadOnlyCollection<Guid> attemptedTenantIds)
+        : base(
+            $"Admin authority cannot be exercised from a social identity provider. " +
+            $"Provider={identityProvider}, IsPlatformAdmin={isPlatformAdmin}, " +
+            $"TenantMembershipsCount={attemptedTenantIds.Count}.")
+    {
+        IdentityProvider = identityProvider;
+        IsPlatformAdmin = isPlatformAdmin;
+        AttemptedTenantIds = attemptedTenantIds;
+    }
+
+    /// <summary>
+    /// Fixed rule string; matches the ProblemDetails Extensions key. Exposed
+    /// as an instance property to mirror <see cref="BusinessRuleViolationException.Rule"/>
+    /// so ProblemDetails maps can read it uniformly across exception types.
+    /// </summary>
+#pragma warning disable S2325 // Rule value is invariant but the shape mirrors BusinessRuleViolationException.
+    public string Rule => "admin_authority_requires_entra_local";
+#pragma warning restore S2325
+
+    public string IdentityProvider { get; }
+    public bool IsPlatformAdmin { get; }
+    public IReadOnlyCollection<Guid> AttemptedTenantIds { get; }
+}

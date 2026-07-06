@@ -17,4 +17,11 @@ public static class ProblemTypes
     public const string PaymentRequired = $"{Base}/payment-required";
     public const string UpstreamFailure = $"{Base}/upstream-failure";
     public const string Internal = $"{Base}/internal-server-error";
+
+    /// <summary>
+    /// Slice OPS.M.12 — surface for the middleware admin-vs-social gate.
+    /// A social-IdP token attempting to exercise admin authority
+    /// (IsPlatformAdmin or any tenant membership) hits this shape.
+    /// </summary>
+    public const string AdminSocialIdpRejected = $"{Base}/admin-social-idp-rejected";
 }

@@ -35,6 +35,27 @@ public static class ProblemDetailsConfig
                 Detail = ex.Message,
             });
 
+            // Slice OPS.M.12 — specific mapping for the admin-vs-social gate.
+            // Must land BEFORE the generic ForbiddenException mapper below;
+            // Hellang matches first-registered-first.
+            opts.Map<AdminSocialIdpRejectedException>(ex => new ProblemDetails
+            {
+                Type = ProblemTypes.AdminSocialIdpRejected,
+                Title = "Admin authority requires Entra local sign-in.",
+                Status = StatusCodes.Status403Forbidden,
+                Detail = "Sign out and sign in with your Entra credentials " +
+                         "(email + OTP or password). Social sign-in is available " +
+                         "for the guest experience only.",
+                Extensions =
+                {
+                    ["rule"] = ex.Rule,
+                    ["identityProvider"] = ex.IdentityProvider,
+                    // AttemptedTenantIds deliberately omitted from response
+                    // body — audit-log only. The ILogger.LogWarning in the
+                    // middleware carries the full list for Log Analytics.
+                },
+            });
+
             opts.Map<ForbiddenException>(ex => new ProblemDetails
             {
                 Type = ProblemTypes.Forbidden,

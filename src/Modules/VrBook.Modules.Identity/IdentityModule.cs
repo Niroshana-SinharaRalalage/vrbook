@@ -94,7 +94,16 @@ public static class IdentityModuleRegistration
 
     /// <summary>
     /// Map Identity-owned middleware. MUST run AFTER UseAuthentication().
+    /// <para>Ordering is load-bearing: <c>UserProvisioningMiddleware</c>
+    /// stamps <c>HttpContext.Items</c> with IsPlatformAdmin +
+    /// MembershipRoles + ActiveTenantId; the OPS.M.12
+    /// <c>AdminSocialIdpRejectionMiddleware</c> gate reads those + the
+    /// <c>idp</c> claim and MUST run immediately after.</para>
     /// </summary>
-    public static IApplicationBuilder UseIdentityModule(this IApplicationBuilder app) =>
+    public static IApplicationBuilder UseIdentityModule(this IApplicationBuilder app)
+    {
         app.UseMiddleware<UserProvisioningMiddleware>();
+        app.UseMiddleware<AdminSocialIdpRejectionMiddleware>();
+        return app;
+    }
 }
