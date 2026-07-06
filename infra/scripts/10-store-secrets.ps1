@@ -85,8 +85,6 @@ Set-KvSecret -Name 'entra-tenant-id' -Value 'pending-identity-setup' `
     -Description 'Entra External ID tenant GUID. Overwritten by docs/identity/setup.md §7.'
 Set-KvSecret -Name 'entra-api-client-id' -Value 'pending-identity-setup' `
     -Description 'vrbook-api app registration appId. Overwritten by docs/identity/setup.md §7.'
-Set-KvSecret -Name 'entra-web-authority' -Value 'pending-identity-setup' `
-    -Description 'NEXT_PUBLIC_ENTRA_AUTHORITY: legacy single-authority URL. Retained one deploy cycle; dropped in OPS.M.12.8.'
 Set-KvSecret -Name 'entra-web-authority-admin' -Value 'pending-identity-setup' `
     -Description 'NEXT_PUBLIC_ENTRA_AUTHORITY_ADMIN: MSAL authority for the AdminSignUpSignIn user flow (Entra local only). See ADR-0016.'
 Set-KvSecret -Name 'entra-web-authority-guest' -Value 'pending-identity-setup' `

@@ -12,12 +12,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const ADMIN_URL = 'https://vrbookcid.ciamlogin.com/tenant-guid/AdminSignUpSignIn/v2.0';
 const GUEST_URL = 'https://vrbookcid.ciamlogin.com/tenant-guid/GuestSignUpSignIn/v2.0';
-const LEGACY_URL = 'https://vrbookcid.ciamlogin.com/tenant-guid/v2.0';
 
 const env = process.env as Record<string, string | undefined>;
 
 const clearEntraEnv = () => {
-  delete env.NEXT_PUBLIC_ENTRA_AUTHORITY;
+  // NEXT_PUBLIC_ENTRA_AUTHORITY (legacy single-authority) was dropped in
+  // OPS.M.12.8 — no longer read; kept out of the clean-slate here to reduce
+  // the risk of a stale build accidentally referencing it.
   delete env.NEXT_PUBLIC_ENTRA_AUTHORITY_ADMIN;
   delete env.NEXT_PUBLIC_ENTRA_AUTHORITY_GUEST;
 };
@@ -60,25 +61,17 @@ describe('msalConfig.authorityForFlow', () => {
     expect(authorityForFlow('guest')).toBe(GUEST_URL);
   });
 
-  it('falls back to the legacy NEXT_PUBLIC_ENTRA_AUTHORITY when the per-flow vars are absent', async () => {
-    env.NEXT_PUBLIC_ENTRA_AUTHORITY = LEGACY_URL;
-    const { authorityForFlow } = await import('./msalConfig');
-    expect(authorityForFlow('admin')).toBe(LEGACY_URL);
-    expect(authorityForFlow('guest')).toBe(LEGACY_URL);
-  });
-
-  it('falls through to microsoftonline common when nothing is configured', async () => {
+  it('falls through to microsoftonline common when nothing is configured (safety net)', async () => {
     const { authorityForFlow } = await import('./msalConfig');
     expect(authorityForFlow('admin')).toBe('https://login.microsoftonline.com/common');
     expect(authorityForFlow('guest')).toBe('https://login.microsoftonline.com/common');
   });
 
-  it('prefers per-flow over legacy when both are set', async () => {
-    env.NEXT_PUBLIC_ENTRA_AUTHORITY = LEGACY_URL;
-    env.NEXT_PUBLIC_ENTRA_AUTHORITY_ADMIN = ADMIN_URL;
+  it('resolves each flow independently — admin missing does NOT bleed into guest', async () => {
+    env.NEXT_PUBLIC_ENTRA_AUTHORITY_GUEST = GUEST_URL;
     const { authorityForFlow } = await import('./msalConfig');
-    expect(authorityForFlow('admin')).toBe(ADMIN_URL);
-    expect(authorityForFlow('guest')).toBe(LEGACY_URL);
+    expect(authorityForFlow('admin')).toBe('https://login.microsoftonline.com/common');
+    expect(authorityForFlow('guest')).toBe(GUEST_URL);
   });
 });
 

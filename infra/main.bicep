@@ -529,13 +529,12 @@ var webEnvVars = [
   // The browser bundle (where MSAL actually executes) is sealed at `next build`
   // and reads the build-args; see cd-staging-web.yml + web/Dockerfile.
   //
-  // Slice OPS.M.12.6 — per-flow authority split. `_ADMIN` points at the
-  // `AdminSignUpSignIn` Entra user flow (Entra local only); `_GUEST` points
-  // at `GuestSignUpSignIn` (Entra local + Google/Microsoft/Facebook/Apple).
-  // The legacy single-authority env var is retained for one deploy cycle
-  // (dropped in M.12.8) so a stale build won't 500 at MSAL init.
-  // See ADR-0016 and docs/runbooks/social_idp_setup.md §7.
-  { name: 'NEXT_PUBLIC_ENTRA_AUTHORITY', secretRef: 'entra-web-authority' }
+  // Slice OPS.M.12.6+12.8 — per-flow authority split. `_ADMIN` points at
+  // the `AdminSignUpSignIn` Entra user flow (Entra local only); `_GUEST`
+  // points at `GuestSignUpSignIn` (Entra local + Google/Microsoft/
+  // Facebook/Apple). The legacy `NEXT_PUBLIC_ENTRA_AUTHORITY` env var was
+  // dropped in M.12.8 (this file). See ADR-0016 and
+  // docs/runbooks/social_idp_setup.md §7.
   { name: 'NEXT_PUBLIC_ENTRA_AUTHORITY_ADMIN', secretRef: 'entra-web-authority-admin' }
   { name: 'NEXT_PUBLIC_ENTRA_AUTHORITY_GUEST', secretRef: 'entra-web-authority-guest' }
   { name: 'NEXT_PUBLIC_ENTRA_CLIENT_ID', secretRef: 'entra-web-client-id' }
@@ -560,7 +559,6 @@ module webApp 'modules/container-app.bicep' = {
     memory: '1Gi'
     envVars: webEnvVars
     secrets: [
-      { name: 'entra-web-authority', keyVaultSecretName: 'entra-web-authority' }
       { name: 'entra-web-authority-admin', keyVaultSecretName: 'entra-web-authority-admin' }
       { name: 'entra-web-authority-guest', keyVaultSecretName: 'entra-web-authority-guest' }
       { name: 'entra-web-client-id', keyVaultSecretName: 'entra-web-client-id' }

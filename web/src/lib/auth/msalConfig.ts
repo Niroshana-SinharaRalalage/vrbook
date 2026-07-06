@@ -25,7 +25,6 @@ export type SignInFlow = 'admin' | 'guest';
 
 export const SIGN_IN_FLOW_STORAGE_KEY = 'vrbook-signin-flow';
 
-const legacyAuthority = process.env.NEXT_PUBLIC_ENTRA_AUTHORITY;
 const adminAuthority = process.env.NEXT_PUBLIC_ENTRA_AUTHORITY_ADMIN;
 const guestAuthority = process.env.NEXT_PUBLIC_ENTRA_AUTHORITY_GUEST;
 const clientId = process.env.NEXT_PUBLIC_ENTRA_CLIENT_ID;
@@ -43,22 +42,21 @@ const postLogoutRedirectUri = isBrowser ? `${window.location.origin}/auth/signou
  *
  * Fallback order:
  *   1. Per-flow env var (`_ADMIN` / `_GUEST`).
- *   2. Legacy `NEXT_PUBLIC_ENTRA_AUTHORITY` — retained for one deploy cycle
- *      so a stale build against unmigrated infra keeps working. Dropped in
- *      M.12.8.
- *   3. Microsoft common — safety net so MSAL init never throws.
+ *   2. Microsoft common — safety net so MSAL init never throws (the legacy
+ *      `NEXT_PUBLIC_ENTRA_AUTHORITY` single-authority fallback was dropped
+ *      in M.12.8 after staging cycle 2026-07-06 confirmed the per-flow
+ *      secrets are populated).
  */
 export const authorityForFlow = (flow: SignInFlow): string => {
   if (flow === 'admin' && adminAuthority) return adminAuthority;
   if (flow === 'guest' && guestAuthority) return guestAuthority;
-  if (legacyAuthority) return legacyAuthority;
   return 'https://login.microsoftonline.com/common';
 };
 
 /** All authorities the app might use — required by MSAL's `knownAuthorities`. */
 const knownAuthorities: string[] = (() => {
   const hosts = new Set<string>();
-  for (const url of [adminAuthority, guestAuthority, legacyAuthority]) {
+  for (const url of [adminAuthority, guestAuthority]) {
     if (!url) continue;
     try {
       hosts.add(new URL(url).host);

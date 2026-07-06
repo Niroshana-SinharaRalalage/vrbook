@@ -349,3 +349,83 @@ Related:
 - [ADR-0016 — Admin vs Social IdP surface split](../adr/0016-admin-vs-social-idp-surface-split.md).
 - [ADR-0012 — Entra External ID over B2C](../adr/0012-entra-external-id-over-b2c.md).
 - [ADR-0014 — App Roles for global, DB for per-tenant](../adr/0014-app-roles-global-db-per-tenant.md).
+
+---
+
+## Appendix A — Post-M.12 walk playbook (added M.12.8)
+
+Once §3–§7 are complete for an environment, run this scripted walk to
+confirm the three layers hold. Owner drives it; findings feed the
+close-out doc [`OPS_M_12_CLOSE_OUT.md`](../OPS_M_12_CLOSE_OUT.md) §6.
+
+### A.1 Guest flow — happy path per provider
+
+For each of Google, Microsoft consumer, Facebook, Apple:
+
+1. Incognito window → `https://<web-fqdn>` → click Sign in.
+2. Expect the Entra `GuestSignUpSignIn` hosted UI with all 4 buttons.
+3. Complete provider sign-in with a **fresh email** the tenant has never
+   seen.
+4. Post-callback lands on `/` (guest → skip picker per §6.4 in the plan).
+5. Verify `GET /api/v1/me` returns `identityProvider: "<canonical>"`.
+6. Verify `identity.user_identities` shows one row for the user
+   with `provider='<canonical>'` and no admin authority.
+
+### A.2 Guest flow — link to an existing entra-only guest
+
+Repeat A.1 but with an email that already has an `entra` identity from
+a prior local sign-in and no admin authority (any tenant_admin
+membership). Expect a successful link — post-condition
+`user_identities` shows both `entra` + the social provider row.
+
+### A.3 REFUSE-AT-PROVISIONING (Layer 1)
+
+Seed an admin user (or promote a guest to `is_platform_admin=true`).
+Sign in with that admin's email via Google:
+
+- Expect 422 with `rule=admin_social_signin_refused` at
+  `POST /api/v1/auth/provision-or-link` (whichever step the SPA calls
+  during callback).
+- Expect NO `provider='google'` row in `user_identities` for this user.
+- SPA should either surface the 422 (guest flow catch) OR the
+  `AdminAuthGuard` client-side detect fires (if the admin was previously
+  linked but somehow held both identities).
+
+### A.4 Middleware belt (Layer 2)
+
+Manufacture a social-IdP admin token (typically only possible in a
+staging test tenant where you can grant admin authority to a
+Google-linked user). Hit `GET /api/v1/admin/bookings`:
+
+- Expect 403 with `type=https://vrbook.example.com/problems/admin-social-idp-rejected`
+  and `rule=admin_authority_requires_entra_local` +
+  `identityProvider=<idp>` extension.
+- Hit `GET /api/v1/me` on the same token — expect 200. Whitelist held.
+
+### A.5 SPA flow-split routing
+
+- Public homepage → header Sign in button → routes through
+  `GuestSignUpSignIn` (Google button visible).
+- Direct visit to `https://<web-fqdn>/admin/properties` → redirects to
+  `/auth/signin?flow=admin&returnTo=/admin/properties`.
+- The signin page kicks off `AdminSignUpSignIn` (Entra local only — no
+  Google button visible).
+- Complete with Entra local password → callback → tenant picker if
+  memberships > 1, else `/admin/properties`.
+
+### A.6 SPA rejection UX
+
+Sign in via Google using an email that has admin authority
+(post-manufactured — see A.4). Expect the SPA to redirect to
+`/auth/admin-social-idp-rejected?provider=google.com` before ANY admin
+API call fires. The page names Google and offers a "Sign out and try
+again" CTA that triggers MSAL logout.
+
+### A.7 Break-glass verification
+
+- Delete an `entra-web-authority-admin` KV secret → cutover a revision
+  → verify the SPA falls through to `login.microsoftonline.com/common`
+  and Entra returns a "user flow not found" error. Restore the KV
+  value and cutover again to confirm recovery.
+- (Do NOT actually delete secrets in prod during the walk — this is a
+  staging-only check.)
