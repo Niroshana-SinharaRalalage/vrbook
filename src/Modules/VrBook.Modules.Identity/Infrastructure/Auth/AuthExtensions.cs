@@ -101,11 +101,7 @@ public static class AuthExtensions
             });
         }
 
-        services.AddAuthorization(opts =>
-        {
-            opts.AddPolicy("OwnerOrAdmin", p => p.RequireRole("Owner", "Admin"));
-            opts.AddPolicy("Admin", p => p.RequireRole("Admin"));
-        });
+        services.AddAuthorization();
 
         return services;
     }

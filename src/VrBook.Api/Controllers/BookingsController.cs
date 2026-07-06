@@ -87,7 +87,7 @@ public sealed class BookingsController(
         Ok(await mediator.Send(new CancelBookingCommand(id, request.Reason ?? string.Empty), cancellationToken));
 
     [HttpPost("{id:guid}/confirm")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Owner manual confirmation. Tentative -> Confirmed.")]
     public async Task<ActionResult<BookingDto>> Confirm(Guid id, CancellationToken cancellationToken)
     {
@@ -96,7 +96,7 @@ public sealed class BookingsController(
     }
 
     [HttpPost("{id:guid}/reject")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Owner rejection of a Tentative booking.")]
     public async Task<ActionResult<BookingDto>> Reject(Guid id, [FromBody] RejectBookingRequest request, CancellationToken cancellationToken)
     {
@@ -105,7 +105,7 @@ public sealed class BookingsController(
     }
 
     [HttpPost("{id:guid}/check-in")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     public async Task<ActionResult<BookingDto>> CheckIn(Guid id, CancellationToken cancellationToken)
     {
         var tenantId = await ResolveBookingTenantAsync(id, cancellationToken);
@@ -113,7 +113,7 @@ public sealed class BookingsController(
     }
 
     [HttpPost("{id:guid}/check-out")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     public async Task<ActionResult<BookingDto>> CheckOut(Guid id, CancellationToken cancellationToken)
     {
         var tenantId = await ResolveBookingTenantAsync(id, cancellationToken);
@@ -127,7 +127,7 @@ public sealed class BookingsController(
     /// in the CheckedOut state.
     /// </summary>
     [HttpPost("{id:guid}/complete")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Manually complete a CheckedOut booking.")]
     public async Task<ActionResult<BookingDto>> Complete(Guid id, CancellationToken cancellationToken)
     {
@@ -142,7 +142,7 @@ public sealed class BookingsController(
     /// out-of-range values are rejected by the domain with 422.
     /// </summary>
     [HttpPost("{id:guid}/schedule-completion")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Schedule when a CheckedOut booking auto-completes.")]
     public async Task<ActionResult<BookingDto>> ScheduleCompletion(
         Guid id, [FromBody] ScheduleCompletionRequest request, CancellationToken cancellationToken)
@@ -168,7 +168,7 @@ public sealed class BookingsController(
 
 [Route("api/v1/admin/bookings")]
 [Tags("Booking — Admin")]
-[Authorize(Roles = "Owner,Admin")]
+[Authorize]
 public sealed class BookingAdminController : ControllerBase
 {
     [HttpGet("queue")]

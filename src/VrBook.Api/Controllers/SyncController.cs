@@ -35,7 +35,7 @@ public sealed class FeedsController(IMediator mediator) : ControllerBase
 /// <summary>Admin CRUD for inbound iCal channel feeds (A6 stages 2+3).</summary>
 [Route("api/v1/admin/channel-feeds")]
 [Tags("Sync — Admin")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public sealed class ChannelFeedsController(IMediator mediator, ICurrentUser currentUser) : ControllerBase
 {
     private Guid CallerTenantId() => currentUser.TenantId
@@ -86,7 +86,7 @@ public sealed class ChannelFeedsController(IMediator mediator, ICurrentUser curr
 /// <summary>Admin view of conflicts + owner resolution endpoint (A6.8).</summary>
 [Route("api/v1/admin/sync-conflicts")]
 [Tags("Sync — Admin")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public sealed class SyncConflictsController(IMediator mediator, ICurrentUser currentUser) : ControllerBase
 {
     private Guid CallerTenantId() => currentUser.TenantId

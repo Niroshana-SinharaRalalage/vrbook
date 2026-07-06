@@ -23,7 +23,7 @@ public sealed class ReviewsController(IMediator mediator, ICurrentUser currentUs
         ?? throw new ForbiddenException("Owner action requires a tenant membership.");
 
     [HttpPost("{id:guid}/response")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Owner replies to a review (1:1).")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -60,7 +60,7 @@ public sealed class PropertyReviewsController(IMediator mediator) : ControllerBa
 /// <summary>A8.1 admin moderation surface for reviews.</summary>
 [Route("api/v1/admin/reviews")]
 [Tags("Reviews — Admin")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public sealed class ReviewsAdminController(IMediator mediator, ICurrentUser currentUser) : ControllerBase
 {
     private Guid CallerTenantId() => currentUser.TenantId

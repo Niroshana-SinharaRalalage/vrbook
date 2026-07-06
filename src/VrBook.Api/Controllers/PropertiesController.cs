@@ -51,7 +51,7 @@ public sealed class PropertiesController(IMediator mediator, ICurrentUser curren
         Ok(await mediator.Send(new GetPropertyAvailabilityQuery(id, from, to), cancellationToken));
 
     [HttpPost]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Create a property.")]
     [ProducesResponseType(typeof(PropertyDto), StatusCodes.Status201Created)]
     public async Task<ActionResult<PropertyDto>> Create([FromBody] CreatePropertyRequest request, CancellationToken cancellationToken)
@@ -61,7 +61,7 @@ public sealed class PropertiesController(IMediator mediator, ICurrentUser curren
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [ProducesResponseType(typeof(PropertyDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<PropertyDto>> Update(Guid id, [FromBody] UpdatePropertyRequest request, CancellationToken cancellationToken)
     {
@@ -71,19 +71,19 @@ public sealed class PropertiesController(IMediator mediator, ICurrentUser curren
 
     // ---- Image management is deferred to A2.1 (multipart + Blob signer). ----
     [HttpPost("{id:guid}/images")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(PropertyImageDto), StatusCodes.Status201Created)]
     public IActionResult UploadImage(Guid id, IFormFile file) =>
         StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Image upload lands in A2.1." });
 
     [HttpPut("{id:guid}/images/order")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     public IActionResult ReorderImages(Guid id, [FromBody] ReorderImagesRequest request) =>
         StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Image ordering lands in A2.1." });
 
     [HttpDelete("{id:guid}/images/{imageId:guid}")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     public IActionResult DeleteImage(Guid id, Guid imageId) =>
         StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Image deletion lands in A2.1." });
 }
@@ -102,7 +102,7 @@ public sealed class AmenitiesController(IMediator mediator) : ControllerBase
 /// <summary>Slice 1 — admin list of the caller's properties (or all for admins).</summary>
 [Route("api/v1/admin/properties")]
 [Tags("Catalog — Admin")]
-[Authorize(Roles = "Owner,Admin")]
+[Authorize]
 public sealed class AdminPropertiesController(IMediator mediator) : ControllerBase
 {
     [HttpGet]
@@ -131,7 +131,7 @@ public sealed class AdminPropertiesController(IMediator mediator) : ControllerBa
 /// <summary>Slice 2 — admin/owner bookings list and detail for /admin/bookings.</summary>
 [Route("api/v1/admin/bookings")]
 [Tags("Booking — Admin")]
-[Authorize(Roles = "Owner,Admin")]
+[Authorize]
 public sealed class AdminBookingsController(IMediator mediator) : ControllerBase
 {
     [HttpGet]
@@ -230,7 +230,7 @@ public sealed class PropertyBlocksController(IMediator mediator, ICurrentUser cu
 /// <summary>Admin CRUD for the amenity catalog (A2.2).</summary>
 [Route("api/v1/admin/amenities")]
 [Tags("Catalog — Admin")]
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "PlatformAdmin")]
 public sealed class AdminAmenitiesController(IMediator mediator) : ControllerBase
 {
     [HttpGet]

@@ -20,7 +20,7 @@ public sealed class PricingController(IMediator mediator, ICurrentUser currentUs
         ?? throw new ForbiddenException("Owner action requires a tenant membership.");
 
     [HttpGet]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Read pricing plan for a property.")]
     [ProducesResponseType(typeof(PricingPlanDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -31,7 +31,7 @@ public sealed class PricingController(IMediator mediator, ICurrentUser currentUs
     }
 
     [HttpPut]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Replace the pricing plan basics + fees.")]
     [ProducesResponseType(typeof(PricingPlanDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<PricingPlanDto>> Update(Guid propertyId, [FromBody] UpdatePricingPlanRequest request, CancellationToken cancellationToken)
@@ -41,7 +41,7 @@ public sealed class PricingController(IMediator mediator, ICurrentUser currentUs
     }
 
     [HttpPost("rules")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Add a pricing rule to the plan.")]
     [ProducesResponseType(typeof(PricingRuleDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -56,7 +56,7 @@ public sealed class PricingController(IMediator mediator, ICurrentUser currentUs
     }
 
     [HttpPut("rules/{ruleId:guid}")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Replace a pricing rule's fields. Re-emits PricingRuleAdded/Removed.")]
     [ProducesResponseType(typeof(PricingRuleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -69,7 +69,7 @@ public sealed class PricingController(IMediator mediator, ICurrentUser currentUs
         Ok(await mediator.Send(new UpdatePricingRuleCommand(propertyId, ruleId, request, CallerTenantId()), cancellationToken));
 
     [HttpDelete("rules/{ruleId:guid}")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Remove a pricing rule. Idempotent on unknown id.")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -80,7 +80,7 @@ public sealed class PricingController(IMediator mediator, ICurrentUser currentUs
     }
 
     [HttpPatch("rules/{ruleId:guid}/enabled")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Toggle a rule's IsEnabled flag. Does NOT raise PricingRuleAdded/Removed.")]
     [ProducesResponseType(typeof(PricingRuleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -93,7 +93,7 @@ public sealed class PricingController(IMediator mediator, ICurrentUser currentUs
         Ok(await mediator.Send(new SetPricingRuleEnabledCommand(propertyId, ruleId, request.IsEnabled, CallerTenantId()), cancellationToken));
 
     [HttpPost("rules/reorder")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Rewrite rule priorities 0..N-1. Last-write-wins on concurrent drag.")]
     [ProducesResponseType(typeof(PricingPlanDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

@@ -20,7 +20,7 @@ namespace VrBook.Api.Controllers;
 public sealed class ReportsController(IMediator mediator) : ControllerBase
 {
     [HttpGet("occupancy")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Daily occupancy report.")]
     [ProducesResponseType(typeof(OccupancyReportDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -32,7 +32,7 @@ public sealed class ReportsController(IMediator mediator) : ControllerBase
         Ok(await mediator.Send(new GetOccupancyReportQuery(from, to, propertyId), ct));
 
     [HttpGet("revenue")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Daily revenue report (Confirmed bookings bucket by ConfirmedAt::date).")]
     [ProducesResponseType(typeof(RevenueReportDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
@@ -45,7 +45,7 @@ public sealed class ReportsController(IMediator mediator) : ControllerBase
         Ok(await mediator.Send(new GetRevenueReportQuery(from, to, propertyId), ct));
 
     [HttpGet("adr")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Daily Average Daily Rate (ADR). Zero-night days emit null.")]
     [ProducesResponseType(typeof(AdrReportDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
@@ -58,7 +58,7 @@ public sealed class ReportsController(IMediator mediator) : ControllerBase
         Ok(await mediator.Send(new GetAdrReportQuery(from, to, propertyId), ct));
 
     [HttpGet("source")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Bookings + nights broken down by source channel.")]
     [ProducesResponseType(typeof(SourceReportDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

@@ -16,7 +16,7 @@ namespace VrBook.Api.Controllers;
 /// </summary>
 [Route("api/v1/admin/notifications")]
 [Tags("Notifications — Admin")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public sealed class AdminNotificationsController(IMediator mediator, ICurrentUser currentUser) : ControllerBase
 {
     private Guid CallerTenantId() => currentUser.TenantId

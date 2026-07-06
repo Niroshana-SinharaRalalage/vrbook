@@ -34,7 +34,7 @@ public sealed class PaymentsController(IMediator mediator, ICurrentUser currentU
     }
 
     [HttpPost("refunds")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [SwaggerOperation(Summary = "Issue a refund. v1 = full refund only; amount param is ignored.")]
     public async Task<IActionResult> IssueRefund([FromBody] IssueRefundRequest request, CancellationToken cancellationToken)
     {

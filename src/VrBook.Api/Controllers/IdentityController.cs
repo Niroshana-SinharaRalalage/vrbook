@@ -46,7 +46,7 @@ public sealed class IdentityController(IMediator mediator) : ControllerBase
     /// per §3.2 so the polling loop after Stripe return sees fresh state.
     /// </summary>
     [HttpGet("tenant")]
-    [Authorize(Roles = "Owner,Admin")]
+    [Authorize]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [SwaggerOperation(Summary = "Get the caller's tenant + onboarding progress (OPS.M.7).")]
     [ProducesResponseType(typeof(MeTenantDto), StatusCodes.Status200OK)]
@@ -59,9 +59,11 @@ public sealed class IdentityController(IMediator mediator) : ControllerBase
     /// Slice OPS.M.13.5 — list every tenant the caller has active membership in.
     /// The SPA's post-sign-in callback calls this to route based on membership
     /// count (0/1/N) per <c>docs/OPS_M_13_IDENTITY_REDESIGN_PLAN.md</c> §3.2.
-    /// Not <c>[Authorize(Roles = "Owner,Admin")]</c> — the picker needs to
-    /// answer "which tenants CAN I sign into" for any authenticated human,
-    /// including PlatformAdmins with zero tenant memberships.
+    /// Kept at plain <c>[Authorize]</c> — the picker needs to answer
+    /// "which tenants CAN I sign into" for any authenticated human,
+    /// including PlatformAdmins with zero tenant memberships. Post-M.15
+    /// no controller in the codebase carries a role-scoped [Authorize]
+    /// other than the platform-admin surface (see ADR-0014 + M.15.7).
     /// </summary>
     [HttpGet("tenants")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]

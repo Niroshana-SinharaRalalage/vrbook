@@ -11,7 +11,7 @@ namespace VrBook.Api.Controllers;
 /// <summary>Admin — proposal §6.2.</summary>
 [Route("api/v1/admin/users")]
 [Tags("Admin — Users")]
-[Authorize(Roles = "Owner,Admin")]
+[Authorize]
 public sealed class AdminUsersController(IMediator mediator) : ControllerBase
 {
     [HttpGet]
@@ -27,7 +27,7 @@ public sealed class AdminUsersController(IMediator mediator) : ControllerBase
 
 [Route("api/v1/admin/toggles")]
 [Tags("Admin — Feature toggles")]
-[Authorize(Roles = "Owner,Admin")]
+[Authorize]
 public sealed class TogglesController : StubController
 {
     [HttpGet]
@@ -42,7 +42,7 @@ public sealed class TogglesController : StubController
 
 [Route("api/v1/admin/alerts")]
 [Tags("Admin — Alerts")]
-[Authorize(Roles = "Owner,Admin")]
+[Authorize]
 public sealed class AlertsController : StubController
 {
     [HttpGet]

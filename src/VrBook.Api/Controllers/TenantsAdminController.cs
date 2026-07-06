@@ -20,7 +20,7 @@ namespace VrBook.Api.Controllers;
 /// </summary>
 [Route("api/v1/admin/tenants/{tenantId:guid}")]
 [Tags("Tenant — Admin")]
-[Authorize(Roles = "Owner,Admin")]
+[Authorize]
 public sealed class TenantsAdminController(IMediator mediator) : ControllerBase
 {
     // OPS.M.10.2 F-residual (audit follow-up): pass the ROUTE tenantId into
