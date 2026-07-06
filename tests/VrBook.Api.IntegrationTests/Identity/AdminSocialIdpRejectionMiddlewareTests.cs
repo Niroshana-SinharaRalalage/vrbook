@@ -110,7 +110,7 @@ public sealed class AdminSocialIdpRejectionMiddlewareTests
         r.NextCalled.Should().BeFalse();
         r.Thrown.Should().BeOfType<AdminSocialIdpRejectedException>();
         var ex = (AdminSocialIdpRejectedException)r.Thrown!;
-        ex.Rule.Should().Be("admin_authority_requires_entra_local");
+        AdminSocialIdpRejectedException.Rule.Should().Be("admin_authority_requires_entra_local");
         ex.IdentityProvider.Should().Be("google.com");
         ex.IsPlatformAdmin.Should().BeTrue();
     }

@@ -88,14 +88,8 @@ public sealed class AdminSocialIdpRejectedException : ForbiddenException
         AttemptedTenantIds = attemptedTenantIds;
     }
 
-    /// <summary>
-    /// Fixed rule string; matches the ProblemDetails Extensions key. Exposed
-    /// as an instance property to mirror <see cref="BusinessRuleViolationException.Rule"/>
-    /// so ProblemDetails maps can read it uniformly across exception types.
-    /// </summary>
-#pragma warning disable S2325 // Rule value is invariant but the shape mirrors BusinessRuleViolationException.
-    public string Rule => "admin_authority_requires_entra_local";
-#pragma warning restore S2325
+    /// <summary>Fixed rule string constant. Matches the ProblemDetails Extensions key.</summary>
+    public const string Rule = "admin_authority_requires_entra_local";
 
     public string IdentityProvider { get; }
     public bool IsPlatformAdmin { get; }

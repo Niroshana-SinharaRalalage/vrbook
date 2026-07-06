@@ -48,7 +48,7 @@ public static class ProblemDetailsConfig
                          "for the guest experience only.",
                 Extensions =
                 {
-                    ["rule"] = ex.Rule,
+                    ["rule"] = AdminSocialIdpRejectedException.Rule,
                     ["identityProvider"] = ex.IdentityProvider,
                     // AttemptedTenantIds deliberately omitted from response
                     // body — audit-log only. The ILogger.LogWarning in the
