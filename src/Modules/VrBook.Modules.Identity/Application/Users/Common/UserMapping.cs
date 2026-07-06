@@ -10,8 +10,6 @@ internal static class UserMapping
         Email: u.Email.Value,
         DisplayName: u.DisplayName,
         Phone: u.Phone.IsEmpty ? null : u.Phone.Value,
-        IsOwner: u.IsOwner,
-        IsAdmin: u.IsAdmin,
         IsPlatformAdmin: u.IsPlatformAdmin,
         EmailVerified: u.EmailVerified,
         CreatedAt: u.CreatedAt,

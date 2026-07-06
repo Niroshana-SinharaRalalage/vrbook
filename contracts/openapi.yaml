@@ -599,12 +599,12 @@ components:
         email:          { type: string, format: email }
         displayName:    { type: string }
         phone:          { type: string, nullable: true }
-        isOwner:        { type: boolean }
-        isAdmin:        { type: boolean }
+        # Slice OPS.M.21 (M.15 follow-up A) — isOwner + isAdmin fields dropped.
+        # Nav derivation post-M.21 keys on /me/tenants membership role.
         emailVerified:  { type: boolean }
         createdAt:      { type: string, format: date-time }
         lastLoginAt:    { type: string, format: date-time, nullable: true }
-      required: [id, email, displayName, isOwner, isAdmin, emailVerified, createdAt]
+      required: [id, email, displayName, emailVerified, createdAt]
 
   responses:
     User:

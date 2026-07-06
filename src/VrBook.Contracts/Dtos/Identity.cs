@@ -4,14 +4,16 @@ namespace VrBook.Contracts.Dtos;
 /// Public-shape of an authenticated user. See proposal §6.2 — GET /me.
 /// OPS.M.8 §3.10 (D10) — bumped to carry <see cref="IsPlatformAdmin"/> so the
 /// web client can show/hide the Platform nav group without a second round trip.
+/// <para>Slice OPS.M.21 (M.15 follow-up A step 2) — dropped the legacy
+/// <c>IsOwner</c> / <c>IsAdmin</c> boolean flags. Nav derivation post-M.21
+/// keys on <see cref="IsPlatformAdmin"/> + membership role via
+/// <c>GET /api/v1/me/tenants</c> per ADR-0014.</para>
 /// </summary>
 public sealed record UserDto(
     Guid Id,
     string Email,
     string DisplayName,
     string? Phone,
-    bool IsOwner,
-    bool IsAdmin,
     bool IsPlatformAdmin,
     bool EmailVerified,
     DateTimeOffset CreatedAt,

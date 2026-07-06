@@ -33,8 +33,9 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasMaxLength(40)
             .HasConversion(v => v.Value, v => new PhoneNumber(v));
 
-        b.Property(u => u.IsOwner).HasColumnName("is_owner").HasDefaultValue(false);
-        b.Property(u => u.IsAdmin).HasColumnName("is_admin").HasDefaultValue(false);
+        // Slice OPS.M.21 (M.15 follow-up A step 2) — IsOwner/IsAdmin
+        // properties dropped from the User aggregate; the M.21.A.3 migration
+        // drops the DB columns and regenerates the model snapshot.
         // OPS.M.8 §3.1 (D1) — partial index "WHERE is_platform_admin = true"
         // keeps the index tiny because the population is small (low single
         // digits across the whole platform). Lookup speed at startup matters

@@ -186,12 +186,11 @@ public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsync
         // fixture now uses the email-first overload + explicit grants.
         var ownerA = User.Provision(
             new Email("owner-a@vrbook.test"), "Owner A", emailVerified: true);
-        ownerA.GrantOwner();
-        ownerA.GrantAdmin();
         var ownerB = User.Provision(
             new Email("owner-b@vrbook.test"), "Owner B", emailVerified: true);
-        ownerB.GrantOwner();
-        ownerB.GrantAdmin();
+        // Slice OPS.M.21 (M.15 follow-up A step 2) — GrantOwner()/GrantAdmin()
+        // domain methods removed. Owner authority for tenant-scoped writes
+        // comes from the TenantMembership rows seeded below (role="tenant_admin").
         var platformAdmin = User.Provision(
             new Email("platform-admin@vrbook.test"), "Platform Admin", emailVerified: true);
         platformAdmin.GrantPlatformAdmin(actorId: Guid.NewGuid());

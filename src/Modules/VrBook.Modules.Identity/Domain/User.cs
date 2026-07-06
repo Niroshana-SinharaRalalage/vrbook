@@ -17,8 +17,6 @@ public sealed class User : AggregateRoot
     public Email Email { get; private set; } = default!;
     public string DisplayName { get; private set; } = default!;
     public PhoneNumber Phone { get; private set; } = new(string.Empty);
-    public bool IsOwner { get; private set; }
-    public bool IsAdmin { get; private set; }
     /// <summary>
     /// OPS.M.8 §3.1 (D1) — DB-authoritative platform-admin flag. The
     /// <c>TenantAuthorizationBehavior</c> reads this via the DB-wins
@@ -39,10 +37,12 @@ public sealed class User : AggregateRoot
     /// <see cref="UserIdentity"/> row in the same handler transaction.
     /// </summary>
     /// <remarks>
-    /// <c>IsOwner</c> and <c>IsAdmin</c> global flags are omitted
-    /// intentionally — role assignments happen post-provisioning through
-    /// admin flows, not from token claims. Global roles get formally
-    /// deprecated in OPS.M.15.
+    /// Global <c>IsOwner</c> / <c>IsAdmin</c> flags were removed in
+    /// OPS.M.21 (M.15 follow-up A) — role assignments live in
+    /// <c>identity.tenant_memberships</c> (per-tenant) or the
+    /// <c>is_platform_admin</c> flag (global). Set the appropriate
+    /// shape post-provisioning via <c>vrbook-admin promote</c> or the
+    /// tenant-invitation flow.
     /// </remarks>
     public static User Provision(
         Email email,
@@ -101,10 +101,12 @@ public sealed class User : AggregateRoot
         Raise(new UserEmailVerified(Id, Email.Value));
     }
 
-    public void GrantOwner() => IsOwner = true;
-    public void RevokeOwner() => IsOwner = false;
-    public void GrantAdmin() => IsAdmin = true;
-    public void RevokeAdmin() => IsAdmin = false;
+    // Slice OPS.M.21 (M.15 follow-up A step 2) — GrantOwner/RevokeOwner
+    // /GrantAdmin/RevokeAdmin methods removed along with the underlying
+    // IsOwner/IsAdmin domain properties. Role management post-M.21 is
+    // per-tenant via TenantMembership + platform-wide via GrantPlatformAdmin
+    // (below). See docs/OPS_M_15_APP_ROLES_CLEANUP_PLAN.md §7-Q1 + ADR-0014
+    // amendment #2.
 
     /// <summary>
     /// OPS.M.8 §3.1 + §3.8 — promote a user to platform-admin. Idempotent

@@ -40,8 +40,9 @@ public sealed class IdentityFlowTests(IdentityApiFixture fixture)
         dto.Should().NotBeNull();
         dto!.Email.Should().Be("owner@vrbook.test");
         dto.DisplayName.Should().Be("Test Owner");
-        dto.IsOwner.Should().BeTrue();
-        dto.IsAdmin.Should().BeTrue();
+        // Slice OPS.M.21 (M.15 follow-up A step 2) — IsOwner/IsAdmin
+        // fields dropped from UserDto. IsPlatformAdmin remains authoritative.
+        dto.IsPlatformAdmin.Should().BeFalse();
         dto.EmailVerified.Should().BeTrue();
 
         // User row should exist now.
