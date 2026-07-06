@@ -57,7 +57,7 @@ const buildGrid = (anchor: Date): Date[] => {
 
 // ---- Entry typing -------------------------------------------------------
 
-type EntryKind = 'Confirmed' | 'Tentative' | 'External' | 'Block' | 'Hold';
+type EntryKind = 'Confirmed' | 'Tentative' | 'External' | 'Block' | 'Hold' | 'AwaitingTurnover';
 
 interface DayEntry {
   readonly kind: EntryKind;
@@ -77,25 +77,46 @@ const overlapsDay = (startIso: string, endIsoExclusive: string, day: Date): bool
   return dayIso >= startIso && dayIso < endIsoExclusive;
 };
 
+// Slice OPS.M.16 polish — the checkout day of a CheckedOut booking with an
+// active turnover window is a single-day overlay (not part of the half-open
+// [checkin, checkout) range covered by overlapsDay above). Renders as a
+// distinct amber striped chip to signal "same-day new booking is blocked."
+const isCheckoutDay = (checkoutIsoExclusive: string, day: Date): boolean =>
+  toIso(day) === checkoutIsoExclusive;
+
 const collectEntriesForDay = (cal: PropertyCalendar | null, day: Date): DayEntry[] => {
   if (!cal) return [];
   const out: DayEntry[] = [];
 
   for (const b of cal.bookings) {
-    if (!overlapsDay(b.checkin, b.checkout, day)) continue;
-    if (b.status === 'Confirmed' || b.status === 'CheckedIn' || b.status === 'CheckedOut' || b.status === 'Completed') {
+    if (overlapsDay(b.checkin, b.checkout, day)) {
+      if (b.status === 'Confirmed' || b.status === 'CheckedIn' || b.status === 'CheckedOut' || b.status === 'Completed') {
+        out.push({
+          kind: 'Confirmed',
+          color: 'bg-blue-500',
+          label: `Direct · ${b.reference}`,
+          raw: { type: 'booking', data: b },
+        });
+      } else if (b.status === 'Tentative') {
+        out.push({
+          kind: 'Tentative',
+          color: 'bg-blue-300',
+          border: 'ring-1 ring-blue-500 [background-image:repeating-linear-gradient(45deg,transparent_0,transparent_4px,rgba(255,255,255,0.5)_4px,rgba(255,255,255,0.5)_8px)]',
+          label: `Tentative · ${b.reference}`,
+          raw: { type: 'booking', data: b },
+        });
+      }
+    }
+    // Slice OPS.M.16 polish — awaiting-turnover chip on the checkout day
+    // itself. Only fires when the backend flag is set (status=CheckedOut
+    // and turnover window not yet elapsed); once the booking transitions
+    // to Completed, the DTO drops the flag and this chip disappears.
+    if (b.awaitingTurnover === true && isCheckoutDay(b.checkout, day)) {
       out.push({
-        kind: 'Confirmed',
-        color: 'bg-blue-500',
-        label: `Direct · ${b.reference}`,
-        raw: { type: 'booking', data: b },
-      });
-    } else if (b.status === 'Tentative') {
-      out.push({
-        kind: 'Tentative',
-        color: 'bg-blue-300',
-        border: 'ring-1 ring-blue-500 [background-image:repeating-linear-gradient(45deg,transparent_0,transparent_4px,rgba(255,255,255,0.5)_4px,rgba(255,255,255,0.5)_8px)]',
-        label: `Tentative · ${b.reference}`,
+        kind: 'AwaitingTurnover',
+        color: 'bg-amber-400',
+        border: 'ring-1 ring-amber-600 [background-image:repeating-linear-gradient(45deg,transparent_0,transparent_4px,rgba(255,255,255,0.55)_4px,rgba(255,255,255,0.55)_8px)]',
+        label: `Awaiting turnover · ${b.reference}`,
         raw: { type: 'booking', data: b },
       });
     }
@@ -404,6 +425,7 @@ const Legend = () => (
     <LegendChip className="bg-rose-500" label="External (AirBnB / VRBO)" />
     <LegendChip className="bg-gray-400" label="Blocked (owner)" />
     <LegendChip className="bg-amber-300" label="Hold (checkout in progress)" />
+    <LegendChip className="bg-amber-400" label="Awaiting turnover (housekeeping)" />
   </div>
 );
 
@@ -472,6 +494,13 @@ const DayDetailPanel = ({ day, entries, onClose, onBlockDeleted, propertyId }: D
                 {e.raw.type === 'booking' && (
                   <div className="mt-1 text-muted-foreground">
                     {e.raw.data.checkin} → {e.raw.data.checkout} · {e.raw.data.guestDisplayName}
+                    {e.kind === 'AwaitingTurnover' && (
+                      <div className="mt-1 text-amber-700">
+                        Housekeeping pending. Same-day new booking blocked until the operator
+                        confirms turnover via the <b>Complete now</b> action on the booking
+                        detail page.
+                      </div>
+                    )}
                   </div>
                 )}
                 {e.raw.type === 'external' && (

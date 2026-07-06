@@ -232,6 +232,15 @@ export interface CalendarBookingEntry {
   readonly checkout: string;
   readonly status: BookingStatus;
   readonly guestDisplayName: string;
+  /**
+   * Slice OPS.M.16 — true when status=CheckedOut and the property's turnover
+   * window has not elapsed. The calendar renders the checkout day with an
+   * amber diagonal-stripe overlay to signal "same-day new booking is
+   * blocked until housekeeping is confirmed via the Complete action." See
+   * docs/OPS_M_16_TURNOVER_AWARE_COMPLETION_PLAN.md §6.3 + runbooks/
+   * turnover_walk.md.
+   */
+  readonly awaitingTurnover?: boolean;
 }
 
 export interface CalendarExternalEntry {
