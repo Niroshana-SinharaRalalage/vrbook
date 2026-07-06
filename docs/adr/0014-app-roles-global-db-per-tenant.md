@@ -84,11 +84,44 @@ Register an Entra CAE webhook that injects claims at token-issuance time by call
 
 Consumers (`UserProvisioningMiddleware` enrichment, `TenantAuthorizationBehavior`, the admin endpoint that writes memberships) ship in OPS.M.2 + OPS.M.4 + OPS.M.8 respectively.
 
+## Amendment 2026-07-06 — OPS.M.15 cleanup landed
+
+Slice OPS.M.15 (documented in [`OPS_M_15_APP_ROLES_CLEANUP_PLAN.md`](../OPS_M_15_APP_ROLES_CLEANUP_PLAN.md) and [`OPS_M_15_CLOSE_OUT.md`](../OPS_M_15_CLOSE_OUT.md)) closed the pre-ADR-0014 legacy authorization surface that was still present as dead weight belt-and-braces alongside the App Roles / DB-memberships shape this ADR pins.
+
+**What OPS.M.15 removed:**
+
+- `HttpCurrentUser.OwnerClaim` / `AdminClaim` constants (`extension_isOwner` / `extension_isAdmin`).
+- `HttpCurrentUser.ReadBoolClaim` private helper.
+- `ICurrentUser.IsOwner` / `IsAdmin` boolean accessors — retired outright, not reshaped. Business logic that previously read them migrated to `HasTenantRole(tenantId, "tenant_admin")` — see the 9-site call-site sweep in the close-out §1.
+- Every `[Authorize(Roles="Owner,Admin")]` / `[Authorize(Roles="Admin")]` decorator on 12 controllers — migrated to `[Authorize]` + handler-level `HasTenantRole` where the role check was load-bearing.
+- `AuthExtensions.AddPolicy("OwnerOrAdmin", ...)` + `AddPolicy("Admin", ...)` — neither was referenced anywhere.
+- `TestAuthHandler` emission of `extension_isOwner` / `extension_isAdmin` claims + `TestPersona.IsOwner`/`IsAdmin` boolean fields (reshaped to `Roles: IReadOnlyList<string>`).
+- SPA `useAuth.ts` reads of `claims.extension_isOwner` / `extension_isAdmin` + the `AuthUser.isOwner`/`isAdmin` fields.
+
+**What OPS.M.15 KEEPS (current shape, DO NOT DELETE):**
+
+- **`Owner` + `Admin` App Role definitions on `vrbook-api-<env>` app registration in Entra.** These emit the token's `roles` claim which JwtBearer maps to `ClaimTypes.Role`; `HttpCurrentUser.HasRole` reads that. Deleting the App Role definitions in the Entra portal breaks every authenticated admin request. See `OPS_M_15_APP_ROLES_CLEANUP_PLAN.md` §4 risk #5.
+- **`identity.tenant_memberships.role="tenant_admin"`** — the DB-authoritative shape `HasTenantRole` reads. Materialized by `UserProvisioningMiddleware` into `HttpContext.Items` per-request.
+- **`HttpCurrentUser.PlatformAdminItemKey` / `PlatformAdminRole` / DB `identity.users.is_platform_admin` flag** — CURRENT SHAPE per §7-Q6. Materialized as a synthesized `ClaimTypes.Role="PlatformAdmin"` claim.
+- **`identity.users.is_owner` / `is_admin` DB columns** + the `UserDto.IsOwner` / `IsAdmin` wire-contract fields — kept for one cycle per §7-Q1. Follow-up slice drops both together after the SPA nav is refactored to key on membership roles instead. The columns still feed the DTO but nothing in server-side authorization keys off them.
+
+**Guardrails added:**
+
+- `OpsM15_NoLegacyExtensionClaimSymbolsTests` (5 facts) — pins the absence of the legacy claim readers.
+- `OpsM15_NoOwnerAdminRoleAttributeTests` (3 facts) — pins the absence of `[Authorize(Roles="Owner"|"Admin")]`; allowlist is `{"PlatformAdmin"}` only.
+- `OpsM15_ICurrentUserRoleShapeTests` (2 facts) — pins the removed accessors + the surviving `HasRole` reader.
+- `OpsM15_OwnerActionHandlerRoleGateTests` (3 facts) — pins the handler-level `HasTenantRole(booking.TenantId, "tenant_admin")` on booking transitions.
+- Web arch test `useAuth-noExtensionClaimReads.test.ts` — pins the absence of `extension_*` claim reads on the SPA side.
+
+Any future PR that resurrects the legacy pattern fails one or more of these facts before merge.
+
 ## References
 
 - [`docs/identity/roles-architecture.md`](../identity/roles-architecture.md) — the design doc this ADR formalises.
 - [`docs/OPS_M_0_PLAN.md`](../OPS_M_0_PLAN.md) §"Post-cutover correction" — the empirical OPS.M.0 finding.
 - [`docs/OPS_M_1_PLAN.md`](../OPS_M_1_PLAN.md) — the schema work this ADR is the foundation of.
+- [`docs/OPS_M_15_APP_ROLES_CLEANUP_PLAN.md`](../OPS_M_15_APP_ROLES_CLEANUP_PLAN.md) — legacy retirement plan (2026-07-06).
+- [`docs/OPS_M_15_CLOSE_OUT.md`](../OPS_M_15_CLOSE_OUT.md) — legacy retirement close-out (2026-07-06).
 - [`docs/MULTI_TENANCY_OPS_PLAN.md`](../MULTI_TENANCY_OPS_PLAN.md) §1 + §2 — the role taxonomy and authorization design.
 - [ADR-0012](./0012-entra-external-id-over-b2c.md) — the identity provider decision (unchanged).
 - [`docs/identity/runbooks/entra-external-id-setup.md`](../identity/runbooks/entra-external-id-setup.md) §7 — operational procedure for App Role definition + assignment.
