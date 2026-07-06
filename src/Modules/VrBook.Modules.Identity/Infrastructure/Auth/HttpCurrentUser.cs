@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using VrBook.Contracts.Interfaces;
 
 namespace VrBook.Modules.Identity.Infrastructure.Auth;
@@ -72,6 +74,74 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
     /// </summary>
     public const string ActiveTenantHeader = "X-Active-Tenant";
 
+    /// <summary>
+    /// Slice OPS.M.12 — JWT claim name for the identity provider that
+    /// authenticated the token. Entra External ID emits this claim on
+    /// federated sign-ins as the provider's OIDC issuer host
+    /// (<c>"google.com"</c>, <c>"live.com"</c>, <c>"facebook.com"</c>,
+    /// <c>"apple.com"</c>). For Entra-local sign-ins the claim is absent
+    /// or equals the tenant issuer host. The application-claims list on
+    /// the Entra user flow MUST include <c>idp</c> for social flows
+    /// (documented in <c>docs/runbooks/social_idp_setup.md</c>).
+    /// </summary>
+    public const string IdpClaim = "idp";
+
+    /// <summary>
+    /// Slice OPS.M.12 — canonical string used in
+    /// <c>identity.user_identities.provider</c> for Entra-local
+    /// identities. Constant kept here so producers and readers agree.
+    /// </summary>
+    public const string ProviderEntraLocal = "entra";
+
+    /// <summary>
+    /// Slice OPS.M.12 — canonical strings for each supported social IdP.
+    /// Match the DB CHECK constraint on
+    /// <c>identity.user_identities.provider</c>.
+    /// </summary>
+    public const string ProviderGoogle = "google";
+    public const string ProviderMicrosoft = "microsoft";
+    public const string ProviderFacebook = "facebook";
+    public const string ProviderApple = "apple";
+
+    /// <summary>
+    /// Slice OPS.M.12 — closed set of <c>idp</c>-claim values recognized as
+    /// social federation. The values are Entra External ID's canonical
+    /// per-provider host strings, NOT the normalized
+    /// <c>user_identities.provider</c> tokens. Comparison is case-
+    /// insensitive.
+    /// <para>Read by <c>AdminSocialIdpRejectionMiddleware</c> to decide
+    /// whether the current token's <c>idp</c> triggers the gate. Extends
+    /// naturally as new social IdPs are added; each addition also updates
+    /// <c>IdentityProviderClassifier</c> to map the host to a provider
+    /// token.</para>
+    /// </summary>
+    public static readonly IReadOnlySet<string> SocialIdpValues =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "google.com",
+            "live.com",
+            "facebook.com",
+            "apple.com",
+            "linkedin.com",
+            "twitter.com",
+            "amazon.com",
+        };
+
+    /// <summary>
+    /// Slice OPS.M.12 — canonical <c>user_identities.provider</c> values
+    /// recognized as social federation. Used by
+    /// <c>ProvisionOrLinkUserHandler</c> to determine if a Branch 2 link
+    /// on an admin-authority user should be refused.
+    /// </summary>
+    public static readonly IReadOnlySet<string> SocialProviderKeys =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ProviderGoogle,
+            ProviderMicrosoft,
+            ProviderFacebook,
+            ProviderApple,
+        };
+
     public Guid? UserId
     {
         get
@@ -94,6 +164,48 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
     public string? ExternalObjectId =>
         accessor.HttpContext?.User.FindFirstValue("oid")
         ?? accessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+    /// <summary>
+    /// Slice OPS.M.12 — returns the raw <c>idp</c> claim when present,
+    /// normalized to <c>"entra"</c> when the claim is absent (Entra-local
+    /// sign-in default) or when the value equals the tenant's issuer host
+    /// (Entra-local sign-in that emits <c>idp</c> anyway). Values in
+    /// <see cref="SocialIdpValues"/> are returned verbatim so consumers
+    /// can compare directly. Unknown IdP shapes pass through unchanged so
+    /// downstream classification (via
+    /// <c>IdentityProviderClassifier</c>) can decide policy.
+    /// </summary>
+    public string? IdentityProvider
+    {
+        get
+        {
+            var ctx = accessor.HttpContext;
+            if (ctx is null)
+            {
+                return null;
+            }
+
+            var idp = ctx.User.FindFirstValue(IdpClaim);
+            if (string.IsNullOrWhiteSpace(idp))
+            {
+                return ProviderEntraLocal;
+            }
+
+            // If the tenant issuer host is configured, treat it as
+            // Entra-local. Config is optional; when missing this branch
+            // is skipped and idp propagates verbatim.
+            var tenantIssuerHost = ctx.RequestServices
+                .GetService<IConfiguration>()
+                ?["EntraExternalId:TenantIssuerHost"];
+            if (!string.IsNullOrWhiteSpace(tenantIssuerHost)
+                && string.Equals(idp, tenantIssuerHost, StringComparison.OrdinalIgnoreCase))
+            {
+                return ProviderEntraLocal;
+            }
+
+            return idp;
+        }
+    }
 
     public string? Email =>
         accessor.HttpContext?.User.FindFirstValue("emails")

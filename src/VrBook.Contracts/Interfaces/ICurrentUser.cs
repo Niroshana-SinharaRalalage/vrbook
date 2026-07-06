@@ -16,6 +16,20 @@ public interface ICurrentUser
     /// </summary>
     string? ExternalObjectId { get; }
 
+    /// <summary>
+    /// Slice OPS.M.12 — the sign-in path that produced this token.
+    /// <para>Source: JWT <c>idp</c> claim. For Entra-local sign-in, the claim
+    /// is absent OR equal to the tenant's issuer host — both normalized to
+    /// <c>"entra"</c> by the accessor. For social federation, the provider's
+    /// OIDC issuer host (e.g. <c>"google.com"</c>, <c>"live.com"</c>,
+    /// <c>"facebook.com"</c>, <c>"apple.com"</c>).</para>
+    /// <para>Consumed by <c>AdminSocialIdpRejectionMiddleware</c>'s admin-vs-
+    /// social rejection gate + by any handler that needs to differentiate
+    /// assurance levels between admin-required flows and guest-optional ones.
+    /// Null for anonymous requests.</para>
+    /// </summary>
+    string? IdentityProvider { get; }
+
     string? Email { get; }
     bool IsAuthenticated { get; }
     bool IsOwner { get; }

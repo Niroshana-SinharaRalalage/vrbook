@@ -13,6 +13,7 @@ public sealed class AnonymousCurrentUser : ICurrentUser
 
     public Guid? UserId => null;
     public string? ExternalObjectId => null;
+    public string? IdentityProvider => null;
     public string? Email => null;
     public bool IsAuthenticated => false;
     public bool IsOwner => false;
