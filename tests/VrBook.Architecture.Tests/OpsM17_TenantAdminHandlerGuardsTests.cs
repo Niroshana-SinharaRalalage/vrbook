@@ -102,15 +102,15 @@ public sealed class OpsM17_TenantAdminHandlerGuardsTests
     }
 
     [Fact]
-    public void RespondToReview_deliberately_NOT_guarded_by_tenant_admin_helper()
+    public void RespondToReview_gates_on_property_ownership_not_tenant_admin()
     {
-        // The owner-response endpoint is different — it's for the property
-        // OWNER to publish a response, not for platform/tenant moderation.
-        // Tenant_admin bypass would be wrong shape (an admin who is NOT the
-        // owner shouldn't be able to speak in the owner's voice). Property-
-        // ownership check is the correct guard; deferred to a separate
-        // follow-up. This fact locks the DELIBERATE absence so a future
-        // "close out the M.17 pattern" PR doesn't blindly wrap this one too.
+        // The owner-response endpoint is different from the mod actions —
+        // it's for the property OWNER to publish a response, not for
+        // platform/tenant moderation. Tenant_admin bypass would be wrong
+        // semantics (an admin who is NOT the property owner shouldn't be
+        // able to speak in the owner's voice). Property-ownership check is
+        // the correct guard, added in the M.17 follow-up
+        // (post-OPS.M.18). PlatformAdmin retains the cross-tenant bypass.
         var text = ReadHandler(
             "src/Modules/VrBook.Modules.Reviews/Application/Moderation/Commands/ModerationHandlers.cs");
         var respondToReviewSection = System.Text.RegularExpressions.Regex.Match(
@@ -118,7 +118,22 @@ public sealed class OpsM17_TenantAdminHandlerGuardsTests
             @"class\s+RespondToReviewHandler[\s\S]*?SaveChangesAsync\(cancellationToken\);\s*\}");
         respondToReviewSection.Success.Should().BeTrue(
             because: "RespondToReviewHandler must exist in this file.");
+
+        // Positive: property-ownership check present via IPropertyOwnerLookup.
+        respondToReviewSection.Value.Should().Contain("properties.GetAsync(review.PropertyId",
+            because: "the handler must look up the property owner to verify ownership. A regressor that drops this lookup opens an intra-tenant hole where any tenant member can respond in the owner's voice.");
+        respondToReviewSection.Value.Should().Contain("owner.OwnerUserId != currentUser.UserId",
+            because: "the ownership check compares the property's OwnerUserId to the caller's UserId.");
+        respondToReviewSection.Value.Should().Contain("IsPlatformAdmin",
+            because: "PlatformAdmin retains the cross-tenant bypass — same as elsewhere.");
+        respondToReviewSection.Value.Should().Contain("ForbiddenException",
+            because: "the ownership-miss must throw ForbiddenException for the RFC 7807 → 403 pipeline.");
+
+        // Negative: tenant_admin bypass has wrong shape here — must NOT
+        // sneak into the handler even in a "close the pattern out" PR.
         respondToReviewSection.Value.Should().NotContain("ReviewModerationAuthorization.RequireTenantAdmin",
-            because: "RespondToReview is an owner-response endpoint; tenant_admin bypass has wrong semantics. Property-ownership check belongs there instead (deferred).");
+            because: "RespondToReview is owner-scoped; tenant_admin bypass would let a tenant admin who is NOT the property owner post responses in the owner's voice — wrong shape.");
+        respondToReviewSection.Value.Should().NotContain("HasTenantRole",
+            because: "HasTenantRole gates on tenant_admin membership; RespondToReview must gate on property ownership instead.");
     }
 }

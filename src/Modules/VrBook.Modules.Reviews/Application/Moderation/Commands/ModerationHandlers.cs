@@ -12,7 +12,10 @@ namespace VrBook.Modules.Reviews.Application.Moderation.Commands;
 // row to the command. Throws NotFoundException on mismatch to preserve
 // the existing 404 contract and avoid leaking row existence.
 
-internal sealed class RespondToReviewHandler(ReviewsDbContext db, ICurrentUser currentUser)
+internal sealed class RespondToReviewHandler(
+    ReviewsDbContext db,
+    ICurrentUser currentUser,
+    IPropertyOwnerLookup properties)
     : IRequestHandler<RespondToReviewCommand>
 {
     public async Task Handle(RespondToReviewCommand cmd, CancellationToken cancellationToken)
@@ -27,8 +30,25 @@ internal sealed class RespondToReviewHandler(ReviewsDbContext db, ICurrentUser c
         {
             throw new NotFoundException("Review", cmd.ReviewId);
         }
-        // Owner verification belongs at the controller level via [Authorize(Roles="Owner,Admin")];
-        // for tighter checks the controller can also verify property ownership.
+
+        // Slice OPS.M.17 follow-up — the pre-M.15.3 controller-level
+        // `[Authorize(Roles="Owner,Admin")]` gate was dropped, so any
+        // same-tenant authenticated user could otherwise speak as the
+        // property owner. RespondToReview is an owner-response endpoint;
+        // the correct guard is property-ownership (NOT tenant_admin —
+        // ADR-0016 semantics apply per handler). PlatformAdmin retains
+        // the cross-tenant bypass as usual.
+        if (!currentUser.IsPlatformAdmin)
+        {
+            var owner = await properties.GetAsync(review.PropertyId, cancellationToken)
+                ?? throw new NotFoundException("Property", review.PropertyId);
+            if (owner.OwnerUserId != currentUser.UserId.Value)
+            {
+                throw new ForbiddenException(
+                    "Only the property owner may respond to reviews on their property.");
+            }
+        }
+
         review.AddOwnerResponse(cmd.Body);
         await db.SaveChangesAsync(cancellationToken);
     }
