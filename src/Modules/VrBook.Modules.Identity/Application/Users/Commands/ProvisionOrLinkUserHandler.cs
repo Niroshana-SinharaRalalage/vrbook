@@ -1,8 +1,10 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
 using VrBook.Modules.Identity.Domain;
+using VrBook.Modules.Identity.Infrastructure.Auth;
 using VrBook.Modules.Identity.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Identity.Application.Users.Commands;
@@ -37,7 +39,8 @@ namespace VrBook.Modules.Identity.Application.Users.Commands;
 internal sealed class ProvisionOrLinkUserHandler(
     IdentityDbContext db,
     IUnitOfWork uow,
-    IDateTimeProvider clock) : IRequestHandler<ProvisionOrLinkUserCommand, Guid>
+    IDateTimeProvider clock,
+    ILogger<ProvisionOrLinkUserHandler> logger) : IRequestHandler<ProvisionOrLinkUserCommand, Guid>
 {
     private const string UsersEmailUniqueConstraint = "users_email_active_lower_uq";
     private const string UserIdentitiesUniqueConstraint = "user_identities_provider_extid_uq";
@@ -79,6 +82,8 @@ internal sealed class ProvisionOrLinkUserHandler(
                     $"Cannot bind '{cmd.Provider}' identity to existing profile: email '{cmd.Email}' is not verified. Verify your email with your identity provider and sign in again.");
             }
 
+            await RefuseIfAdminSocialLinkAsync(existingUser, cmd, cancellationToken);
+
             var linkedId = await LinkIdentityToUserAsync(
                 existingUser, cmd.Provider, cmd.ExternalId, cmd.DisplayName, cmd.EmailVerified, now, cancellationToken);
             return linkedId;
@@ -108,6 +113,9 @@ internal sealed class ProvisionOrLinkUserHandler(
                     "email_unverified_cannot_bind_profile",
                     $"Cannot bind '{cmd.Provider}' identity to existing profile: email '{cmd.Email}' is not verified.");
             }
+            // Slice OPS.M.12.4 REFUSE-AT-PROVISIONING — same rule applies
+            // on the race-recovery path.
+            await RefuseIfAdminSocialLinkAsync(raced, cmd, cancellationToken);
             return await LinkIdentityToUserAsync(
                 raced, cmd.Provider, cmd.ExternalId, cmd.DisplayName, cmd.EmailVerified, now, cancellationToken);
         }
@@ -119,6 +127,52 @@ internal sealed class ProvisionOrLinkUserHandler(
                 .FirstAsync(i => i.Provider == cmd.Provider && i.ExternalId == cmd.ExternalId, cancellationToken);
             return raced.UserId;
         }
+    }
+
+    /// <summary>
+    /// Slice OPS.M.12.4 REFUSE-AT-PROVISIONING.
+    ///
+    /// <para>Owner policy 2026-07-05: admin users MUST NEVER carry a social
+    /// identity linked. If <paramref name="cmd"/> targets a social provider
+    /// AND <paramref name="matched"/> has any admin authority
+    /// (<c>is_platform_admin</c> OR any active <c>tenant_memberships</c>
+    /// row), throws <c>BusinessRuleViolationException</c> with rule
+    /// <c>admin_social_signin_refused</c>. No <c>user_identities</c> row is
+    /// created; the admin's row stays entra-only.</para>
+    ///
+    /// <para>Layer 1 defence for admin-role integrity. Layer 2
+    /// (<c>AdminSocialIdpRejectionMiddleware</c>) catches the case where
+    /// this branch is bypassed by data-heal race, direct SQL, or config
+    /// drift.</para>
+    /// </summary>
+    private async Task RefuseIfAdminSocialLinkAsync(
+        User matched,
+        ProvisionOrLinkUserCommand cmd,
+        CancellationToken cancellationToken)
+    {
+        if (!HttpCurrentUser.SocialProviderKeys.Contains(cmd.Provider))
+        {
+            return;
+        }
+
+        var hasAdminAuthority = matched.IsPlatformAdmin
+            || await db.Set<TenantMembership>()
+                .AnyAsync(m => m.UserId == matched.Id && m.DeletedAt == null, cancellationToken);
+
+        if (!hasAdminAuthority)
+        {
+            return;
+        }
+
+        logger.LogWarning(
+            "REFUSE-AT-PROVISIONING fired. UserId={UserId} Email={Email} IsPlatformAdmin={PA} AttemptedProvider={Provider} AttemptedExternalId={ExtId}",
+            matched.Id, cmd.Email, matched.IsPlatformAdmin, cmd.Provider, cmd.ExternalId);
+
+        throw new BusinessRuleViolationException(
+            "admin_social_signin_refused",
+            "This email belongs to a tenant admin account. Admin roles must use Entra local sign-in " +
+            "(email + password OR email + OTP). Sign in with your Entra credentials instead. If this is " +
+            "unexpected, contact your admin. No new identity was created.");
     }
 
     private Task<User?> FindUserByEmailAsync(string normalizedEmail, CancellationToken cancellationToken) =>
