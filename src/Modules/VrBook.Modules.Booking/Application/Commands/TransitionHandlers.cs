@@ -82,12 +82,19 @@ internal abstract class OwnerActionHandler(
         var booking = await bookings.GetByIdAsync(bookingId, cancellationToken)
             ?? throw new NotFoundException("Booking", bookingId);
 
-        // OPS.M.4 Step 3 — owner-equality check deleted. TenantAuthorizationBehavior
-        // rejects mismatched-tenant commands at the pipeline; the controller's
-        // [Authorize(Roles="Owner,Admin")] gates which roles can reach the endpoint.
-        // The property lookup is dropped entirely — the booking already carries
-        // PropertyId; no per-transition property fetch is needed once the owner
-        // check is gone.
+        // Slice OPS.M.15.4 — the pre-M.15 controller-level
+        // [Authorize(Roles="Owner,Admin")] gated who could reach this
+        // transition; that role gate was dropped in M.15.3. The tenant
+        // fence still holds (TenantAuthorizationBehavior ensures the
+        // caller's tenant matches the booking's tenant), but any same-
+        // tenant AUTHENTICATED user could otherwise hit this handler.
+        // Owner-side transitions require `tenant_admin` explicitly.
+        if (!currentUser.HasTenantRole(booking.TenantId, "tenant_admin"))
+        {
+            throw new ForbiddenException(
+                "Owner-side booking transitions require tenant_admin role in the booking's tenant.");
+        }
+
         transition(booking);
         await db.SaveChangesAsync(cancellationToken);
         return booking.ToDto();
