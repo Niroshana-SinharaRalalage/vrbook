@@ -115,6 +115,44 @@ Slice OPS.M.15 (documented in [`OPS_M_15_APP_ROLES_CLEANUP_PLAN.md`](../OPS_M_15
 
 Any future PR that resurrects the legacy pattern fails one or more of these facts before merge.
 
+## Amendment 2026-07-06 (#2) — OPS.M.21 finalizes the cleanup
+
+The three-commit follow-up authorized by amendment #1 §7-Q1 shipped as
+Slice OPS.M.21 (A.1/A.2/A.3) later on 2026-07-06. What that finalized:
+
+- **Dropped `identity.users.is_owner` + `identity.users.is_admin` columns.**
+  Migration `20260706225458_OpsM21_Users_DropOwnerAdminColumns`. Down
+  re-adds them with `defaultValue: false`; full rollback with data
+  preserved requires the backfill script in
+  [`OPS_M_15_APP_ROLES_CLEANUP_FOLLOWUP_ROLLBACK.md`](../OPS_M_15_APP_ROLES_CLEANUP_FOLLOWUP_ROLLBACK.md).
+- **Dropped `UserDto.IsOwner` + `UserDto.IsAdmin` wire-contract fields.**
+  OpenAPI spec + SPA `CurrentUser` type synced. `IsPlatformAdmin`
+  remains the sole role flag on the `/api/v1/me` shape.
+- **Dropped `User.GrantOwner`/`RevokeOwner`/`GrantAdmin`/`RevokeAdmin`
+  domain methods.** `User.GrantPlatformAdmin`/`RevokePlatformAdmin`
+  remain.
+- **Reshaped SPA nav operator-detection** to key on
+  `useMe().isPlatformAdmin || useMyTenants().memberships.some(m =>
+  m.role === "tenant_admin")`. Web arch test
+  `SiteHeaderNav-noLegacyDtoReads.test.ts` pins the absence of the
+  legacy shape.
+
+**Post-M.21 state — final:**
+
+- Global role authority: `identity.users.is_platform_admin` boolean →
+  materialized as `ClaimTypes.Role="PlatformAdmin"` by
+  `UserProvisioningMiddleware`.
+- Per-tenant role authority: `identity.tenant_memberships.role` string
+  (`"tenant_admin"` today; `"tenant_member"` supported by shape,
+  deferred UI) → materialized as `ICurrentUser.MembershipRoles`
+  dictionary + `HasTenantRole(tenantId, role)` accessor.
+- Entra `Owner` + `Admin` App Role definitions still exist on
+  `vrbook-api-<env>` but are no longer read by any handler — retained
+  as historical shape only. Deletion is safe post-M.21 (previously
+  amendment #1 warned NOT to delete because HasRole reads still fired
+  on them; those reads are gone). Owner will not delete them without
+  a follow-up ADR amendment authorizing the portal cleanup.
+
 ## References
 
 - [`docs/identity/roles-architecture.md`](../identity/roles-architecture.md) — the design doc this ADR formalises.
@@ -122,6 +160,7 @@ Any future PR that resurrects the legacy pattern fails one or more of these fact
 - [`docs/OPS_M_1_PLAN.md`](../OPS_M_1_PLAN.md) — the schema work this ADR is the foundation of.
 - [`docs/OPS_M_15_APP_ROLES_CLEANUP_PLAN.md`](../OPS_M_15_APP_ROLES_CLEANUP_PLAN.md) — legacy retirement plan (2026-07-06).
 - [`docs/OPS_M_15_CLOSE_OUT.md`](../OPS_M_15_CLOSE_OUT.md) — legacy retirement close-out (2026-07-06).
+- [`docs/OPS_M_15_APP_ROLES_CLEANUP_FOLLOWUP_ROLLBACK.md`](../OPS_M_15_APP_ROLES_CLEANUP_FOLLOWUP_ROLLBACK.md) — M.21 rollback runbook.
 - [`docs/MULTI_TENANCY_OPS_PLAN.md`](../MULTI_TENANCY_OPS_PLAN.md) §1 + §2 — the role taxonomy and authorization design.
 - [ADR-0012](./0012-entra-external-id-over-b2c.md) — the identity provider decision (unchanged).
 - [`docs/identity/runbooks/entra-external-id-setup.md`](../identity/runbooks/entra-external-id-setup.md) §7 — operational procedure for App Role definition + assignment.
