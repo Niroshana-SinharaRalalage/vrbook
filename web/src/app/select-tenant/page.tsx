@@ -12,6 +12,7 @@ import { Suspense, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMyTenants, MyTenantMembership } from '../../lib/tenants/useMyTenants';
 import { setActiveTenantId } from '../../lib/tenants/activeTenant';
+import { AdminAuthGuard } from '../../components/auth/AdminAuthGuard';
 
 const isSelectable = (status: MyTenantMembership['status']): boolean =>
   status === 'Active' || status === 'PendingOnboarding';
@@ -136,16 +137,21 @@ const SelectTenantInner = () => {
   );
 };
 
+// Slice OPS.M.12.7 — the tenant picker is admin-authority territory. Guard
+// with <AdminAuthGuard> so a social-IdP token attempting the admin flow is
+// redirected to `/auth/admin-social-idp-rejected` BEFORE the API rejects.
 const SelectTenantPage = () => (
-  <Suspense
-    fallback={
-      <main className="flex min-h-dvh items-center justify-center">
-        <div className="text-sm text-muted-foreground">Loading…</div>
-      </main>
-    }
-  >
-    <SelectTenantInner />
-  </Suspense>
+  <AdminAuthGuard>
+    <Suspense
+      fallback={
+        <main className="flex min-h-dvh items-center justify-center">
+          <div className="text-sm text-muted-foreground">Loading…</div>
+        </main>
+      }
+    >
+      <SelectTenantInner />
+    </Suspense>
+  </AdminAuthGuard>
 );
 
 export default SelectTenantPage;

@@ -37,11 +37,45 @@ const isCrossTenantWriteRejected = (error: Error): boolean => {
   return detail.startsWith('Cross-tenant write rejected');
 };
 
+// Slice OPS.M.12.7 — the middleware admin-vs-social gate uses this problem
+// type. See src/VrBook.Contracts/Common/ProblemTypes.cs.
+const ADMIN_SOCIAL_IDP_REJECTED_TYPE = 'https://vrbook.example.com/problems/admin-social-idp-rejected';
+
+const isAdminSocialIdpRejected = (error: Error): { rejected: true; identityProvider?: string } | { rejected: false } => {
+  if (!(error instanceof ApiProblemError)) return { rejected: false };
+  if (error.status !== 403) return { rejected: false };
+  if (error.problem.type !== ADMIN_SOCIAL_IDP_REJECTED_TYPE) return { rejected: false };
+  const idp = error.problem.identityProvider;
+  return { rejected: true, identityProvider: typeof idp === 'string' ? idp : undefined };
+};
+
 const AdminError = ({ error, reset }: AdminErrorProps) => {
   const { data } = useMyTenants();
   const membershipCount = data?.memberships.length ?? 0;
   const isCrossTenant = isCrossTenantWriteRejected(error);
   const canSwitchWorkspace = isCrossTenant && membershipCount > 1;
+  const socialAdmin = isAdminSocialIdpRejected(error);
+
+  if (socialAdmin.rejected) {
+    const q = socialAdmin.identityProvider
+      ? `?provider=${encodeURIComponent(socialAdmin.identityProvider)}`
+      : '';
+    return (
+      <main className="mx-auto flex min-h-[60vh] max-w-lg flex-col items-center justify-center gap-4 p-6 text-center">
+        <h1 className="text-2xl font-semibold">Admin sign-in requires a workspace account</h1>
+        <p className="text-sm text-muted-foreground">
+          Social sign-in is available for guest use only. Admin authority
+          requires an Entra workspace account (email + password or OTP).
+        </p>
+        <Link
+          href={`/auth/admin-social-idp-rejected${q}`}
+          className="mt-4 inline-flex h-10 items-center rounded-md bg-brand-orange-600 px-4 text-sm font-medium text-white hover:bg-brand-orange-700"
+        >
+          Sign out and try again
+        </Link>
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto flex min-h-[60vh] max-w-lg flex-col items-center justify-center gap-4 p-6 text-center">
