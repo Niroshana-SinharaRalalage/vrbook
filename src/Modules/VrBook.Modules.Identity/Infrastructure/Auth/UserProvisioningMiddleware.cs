@@ -2,6 +2,7 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using VrBook.Modules.Identity.Application.Users.Commands;
 using VrBook.Modules.Identity.Domain;
@@ -32,7 +33,7 @@ namespace VrBook.Modules.Identity.Infrastructure.Auth;
 /// </summary>
 public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<UserProvisioningMiddleware> logger)
 {
-    public async Task InvokeAsync(HttpContext ctx, IMediator mediator, IdentityDbContext db)
+    public async Task InvokeAsync(HttpContext ctx, IMediator mediator, IdentityDbContext db, IConfiguration configuration)
     {
         if (ctx.User?.Identity?.IsAuthenticated == true)
         {
@@ -90,8 +91,18 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<Use
                     var emailVerified = emailVerifiedRaw is null
                         || string.Equals(emailVerifiedRaw, "true", StringComparison.OrdinalIgnoreCase);
 
+                    // Slice OPS.M.12.3 — classify the identity provider from
+                    // the JWT `idp` claim. Entra-local sign-ins (no idp or
+                    // idp = tenant issuer host) → "entra". Social federation
+                    // → "google" / "microsoft" / "facebook" / "apple".
+                    // Unknown values pass through verbatim and hit the DB
+                    // CHECK constraint (loud failure > silent misclassify).
+                    var idpClaim = ctx.User.FindFirstValue(HttpCurrentUser.IdpClaim);
+                    var tenantIssuerHost = configuration["EntraExternalId:TenantIssuerHost"];
+                    var provider = IdentityProviderClassifier.Classify(idpClaim, tenantIssuerHost);
+
                     var userId = await mediator.Send(new ProvisionOrLinkUserCommand(
-                        Provider: "entra",
+                        Provider: provider,
                         ExternalId: oid,
                         Email: email,
                         EmailVerified: emailVerified,
