@@ -82,22 +82,27 @@ public sealed class AuditLogBehavior<TRequest, TResponse>(
 
     private static string ResolveRole(ICurrentUser u)
     {
+        // Slice OPS.M.15.5 — telemetry role derived from MembershipRoles
+        // (per ADR-0014 DB-authoritative source) instead of the retired
+        // ICurrentUser.IsOwner/IsAdmin accessors. Downstream log consumers
+        // key on the returned string: "anonymous" | "platform_admin" |
+        // "tenant_admin" | "authenticated".
         if (!u.IsAuthenticated)
         {
             return "anonymous";
         }
 
-        if (u.IsAdmin)
+        if (u.IsPlatformAdmin)
         {
-            return "admin";
+            return "platform_admin";
         }
 
-        if (u.IsOwner)
+        if (u.MembershipRoles.Any(kv => kv.Value.Contains("tenant_admin")))
         {
-            return "owner";
+            return "tenant_admin";
         }
 
-        return "guest";
+        return "authenticated";
     }
 
     private static string? SafeSerialize(object? value)

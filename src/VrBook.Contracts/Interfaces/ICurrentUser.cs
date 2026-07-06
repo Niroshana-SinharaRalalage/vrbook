@@ -32,8 +32,6 @@ public interface ICurrentUser
 
     string? Email { get; }
     bool IsAuthenticated { get; }
-    bool IsOwner { get; }
-    bool IsAdmin { get; }
 
     /// <summary>
     /// OPS.M.8 §3.1 (D1) + §3.2 (D2) — DB-authoritative platform-admin flag.

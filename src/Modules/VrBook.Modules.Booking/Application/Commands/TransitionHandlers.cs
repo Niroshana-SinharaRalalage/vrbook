@@ -38,7 +38,11 @@ internal sealed class CancelBookingHandler(
 
         var booking = await bookings.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new NotFoundException("Booking", request.Id);
-        if (booking.GuestUserId != currentUser.UserId.Value && !currentUser.IsAdmin)
+        // Slice OPS.M.15.5 — tenant_admin of the booking's tenant bypasses
+        // the guest-equality check (mirrors the pre-M.15 `!IsAdmin` shape
+        // scoped correctly per ADR-0014).
+        var isTenantAdmin = currentUser.HasTenantRole(booking.TenantId, "tenant_admin");
+        if (booking.GuestUserId != currentUser.UserId.Value && !isTenantAdmin)
         {
             throw new ForbiddenException("Only the guest who placed the booking can cancel it.");
         }

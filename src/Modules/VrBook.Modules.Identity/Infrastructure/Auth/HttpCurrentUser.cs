@@ -215,9 +215,6 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
 
     public bool IsAuthenticated => accessor.HttpContext?.User.Identity?.IsAuthenticated == true;
 
-    public bool IsOwner => HasRole("Owner");
-    public bool IsAdmin => HasRole("Admin");
-
     /// <summary>
     /// OPS.M.8 §3.2 — DB-authoritative read. Prefers the
     /// <c>HttpContext.Items</c> bit stamped by the middleware (one DB query

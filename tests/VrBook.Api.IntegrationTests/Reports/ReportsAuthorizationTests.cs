@@ -36,9 +36,11 @@ public sealed class ReportsAuthorizationTests
         var user = Substitute.For<ICurrentUser>();
         user.UserId.Returns(currentUserId ?? OwnerA);
         user.IsAuthenticated.Returns(true);
-        user.IsOwner.Returns(true);
-        user.IsAdmin.Returns(isAdmin);
+        // Slice OPS.M.15.5 — IsOwner/IsAdmin removed from ICurrentUser;
+        // admin authority now comes from HasTenantRole against the
+        // per-tenant MembershipRoles set.
         user.TenantId.Returns(SeededTenant);
+        user.HasTenantRole(SeededTenant, "tenant_admin").Returns(isAdmin);
 
         var lookup = Substitute.For<IPropertyOwnerLookup>();
         lookup.GetAsync(PropertyOfA, Arg.Any<CancellationToken>())

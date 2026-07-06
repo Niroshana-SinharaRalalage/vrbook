@@ -31,9 +31,14 @@ internal sealed class GetBookingHandler(
         var booking = await bookings.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new NotFoundException("Booking", request.Id);
 
-        // A4 v1 authZ: the guest who booked OR any admin. Owner visibility lands
-        // when we add the Catalog cross-check (next iteration).
-        if (booking.GuestUserId != currentUser.UserId.Value && !currentUser.IsAdmin)
+        // A4 v1 authZ: the guest who booked OR any tenant_admin of the
+        // booking's tenant. Owner visibility lands when we add the Catalog
+        // cross-check (next iteration).
+        //
+        // Slice OPS.M.15.5 — legacy IsAdmin reader replaced with tenant-
+        // scoped role check.
+        var isTenantAdmin = currentUser.HasTenantRole(booking.TenantId, "tenant_admin");
+        if (booking.GuestUserId != currentUser.UserId.Value && !isTenantAdmin)
         {
             throw new ForbiddenException("Not allowed to view this booking.");
         }

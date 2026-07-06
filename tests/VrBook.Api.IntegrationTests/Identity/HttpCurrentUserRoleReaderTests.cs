@@ -76,27 +76,30 @@ public sealed class HttpCurrentUserRoleReaderTests
     }
 
     [Fact]
-    public void IsOwner_reflects_HasRole_and_ignores_extension_claim()
+    public void HasRole_Owner_reflects_ClaimTypes_Role_and_ignores_extension_claim()
     {
+        // Slice OPS.M.15.5 — IsOwner/IsAdmin accessors were removed from
+        // ICurrentUser + HttpCurrentUser. The reshaped shape is that
+        // HasRole reads ClaimTypes.Role directly. The extension_* claim
+        // MUST NOT satisfy the role check post-M.15.2.
         var withRole = NewSut(new Claim(ClaimTypes.Role, "Owner"));
-        withRole.IsOwner.Should().BeTrue();
-        withRole.IsAdmin.Should().BeFalse();
+        withRole.HasRole("Owner").Should().BeTrue();
+        withRole.HasRole("Admin").Should().BeFalse();
 
-        // The extension claim MUST NOT satisfy IsOwner post-M.15.2.
         var legacyOnly = NewSut(new Claim("extension_isOwner", "true"));
-        legacyOnly.IsOwner.Should().BeFalse(
-            because: "M.15.2 dropped the extension_isOwner reader; only ClaimTypes.Role satisfies IsOwner.");
+        legacyOnly.HasRole("Owner").Should().BeFalse(
+            because: "M.15.2 dropped the extension_isOwner reader; only ClaimTypes.Role satisfies HasRole.");
     }
 
     [Fact]
-    public void IsAdmin_reflects_HasRole_and_ignores_extension_claim()
+    public void HasRole_Admin_reflects_ClaimTypes_Role_and_ignores_extension_claim()
     {
         var withRole = NewSut(new Claim(ClaimTypes.Role, "Admin"));
-        withRole.IsAdmin.Should().BeTrue();
-        withRole.IsOwner.Should().BeFalse();
+        withRole.HasRole("Admin").Should().BeTrue();
+        withRole.HasRole("Owner").Should().BeFalse();
 
         var legacyOnly = NewSut(new Claim("extension_isAdmin", "true"));
-        legacyOnly.IsAdmin.Should().BeFalse(
-            because: "M.15.2 dropped the extension_isAdmin reader; only ClaimTypes.Role satisfies IsAdmin.");
+        legacyOnly.HasRole("Admin").Should().BeFalse(
+            because: "M.15.2 dropped the extension_isAdmin reader; only ClaimTypes.Role satisfies HasRole.");
     }
 }

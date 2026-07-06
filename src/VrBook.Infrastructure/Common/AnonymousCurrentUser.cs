@@ -16,8 +16,6 @@ public sealed class AnonymousCurrentUser : ICurrentUser
     public string? IdentityProvider => null;
     public string? Email => null;
     public bool IsAuthenticated => false;
-    public bool IsOwner => false;
-    public bool IsAdmin => false;
     public bool IsPlatformAdmin => false;
     public Guid? TenantId => null;
     public IReadOnlyDictionary<Guid, IReadOnlySet<string>> MembershipRoles => EmptyMembershipRoles;

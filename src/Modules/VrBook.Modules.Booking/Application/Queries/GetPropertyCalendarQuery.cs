@@ -46,7 +46,11 @@ internal sealed class GetPropertyCalendarHandler(
         var property = await mediator.Send(new GetPropertyByIdQuery(request.PropertyId), cancellationToken)
             ?? throw new NotFoundException("Property", request.PropertyId);
 
-        if (property.OwnerUserId != currentUser.UserId.Value && !currentUser.IsAdmin)
+        // Slice OPS.M.15.5 — legacy IsAdmin reader replaced with tenant-
+        // scoped role check.
+        var isTenantAdmin = currentUser.TenantId is { } callerTid
+            && currentUser.HasTenantRole(callerTid, "tenant_admin");
+        if (property.OwnerUserId != currentUser.UserId.Value && !isTenantAdmin)
         {
             throw new ForbiddenException("Only the property owner can view the calendar.");
         }

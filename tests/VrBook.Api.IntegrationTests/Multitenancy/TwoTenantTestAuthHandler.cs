@@ -35,16 +35,20 @@ public static class TwoTenantTestAuthHandler
     public static IReadOnlyDictionary<string, TestPersona> Personas { get; } =
         new Dictionary<string, TestPersona>
         {
-            ["OwnerA"] = new(OwnerAOid, "owner-a@vrbook.test", "Owner A", IsOwner: true, IsAdmin: true),
-            ["OwnerB"] = new(OwnerBOid, "owner-b@vrbook.test", "Owner B", IsOwner: true, IsAdmin: true),
-            // PlatformAdmin gets IsOwner + IsAdmin true purely so the token
-            // carries the ClaimTypes.Role values that pre-M.15
-            // [Authorize(Roles = "Owner,Admin")] decorators still gate on.
-            // The DB is_platform_admin flag is what actually gives this
-            // persona its cross-tenant enumeration privilege — the role
-            // claims are here only to pass the token-level gate.
-            // Drops entirely when M.15 replaces those decorators with
-            // MembershipRoles-based checks.
-            ["PlatformAdmin"] = new(PlatformAdminOid, "platform-admin@vrbook.test", "Platform Admin", IsOwner: true, IsAdmin: true),
+            // Slice OPS.M.15.5 — Roles left null. Post-M.15 every
+            // [Authorize(Roles="Owner,Admin")] decorator was retired
+            // (M.15.3) so no token in the integration-test suite needs
+            // the Owner/Admin role claims to authenticate. Owner-side
+            // authority for tenant-scoped writes comes from
+            // identity.tenant_memberships (MembershipRoles) which the
+            // fixture's seed data configures with role="tenant_admin".
+            ["OwnerA"] = new(OwnerAOid, "owner-a@vrbook.test", "Owner A"),
+            ["OwnerB"] = new(OwnerBOid, "owner-b@vrbook.test", "Owner B"),
+            // PlatformAdmin's cross-tenant enumeration comes from the
+            // DB is_platform_admin flag → UserProvisioningMiddleware
+            // synthesizes ClaimTypes.Role="PlatformAdmin" at request time
+            // for [Authorize(Roles="PlatformAdmin")] gates. Persona-level
+            // Roles are not required.
+            ["PlatformAdmin"] = new(PlatformAdminOid, "platform-admin@vrbook.test", "Platform Admin"),
         };
 }

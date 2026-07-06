@@ -23,7 +23,7 @@ namespace VrBook.Architecture.Tests;
 [Trait("Category", "Unit")]
 public sealed class OpsM15_ICurrentUserRoleShapeTests
 {
-    [Fact(Skip = "Flipped to active in M.15.5 — asserts the reshaped ICurrentUser shape after IsOwner/IsAdmin are removed.")]
+    [Fact]
     public void ICurrentUser_exposes_no_IsOwner_or_IsAdmin_property()
     {
         var t = typeof(ICurrentUser);

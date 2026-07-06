@@ -29,12 +29,13 @@ public sealed class IdentityApiFixture : WebApplicationFactory<Program>, IAsyncL
     private static readonly IReadOnlyDictionary<string, TestPersona> DefaultPersonas =
         new Dictionary<string, TestPersona>
         {
+            // Slice OPS.M.15.5 — Roles left null; owner authority for the
+            // tenant-scoped identity API tests comes from the seed data's
+            // identity.tenant_memberships row.
             ["Owner"] = new(
                 Oid: OwnerOid,
                 Email: "owner@vrbook.test",
-                DisplayName: "Test Owner",
-                IsOwner: true,
-                IsAdmin: true),
+                DisplayName: "Test Owner"),
         };
 
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()

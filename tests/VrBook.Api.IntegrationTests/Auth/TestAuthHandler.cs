@@ -78,6 +78,11 @@ public sealed class TestAuthHandler(
         // Emit the SAME claim shape production Entra tokens carry so
         // UserProvisioningMiddleware + HttpCurrentUser resolve identically
         // between test and production auth paths.
+        //
+        // Slice OPS.M.15.5 — the legacy `extension_isOwner` / `extension_isAdmin`
+        // claim emissions were retired along with the `IsOwner` / `IsAdmin`
+        // reader on ICurrentUser. Role claims come from TestPersona.Roles
+        // (mirroring production Entra App Roles → JwtBearer → ClaimTypes.Role).
         var claims = new List<Claim>
         {
             new("oid", p.Oid),
@@ -87,16 +92,13 @@ public sealed class TestAuthHandler(
             new(ClaimTypes.Email, p.Email),
             new("emails", p.Email),
             new("email_verified", "true"),
-            new("extension_isOwner", p.IsOwner ? "true" : "false"),
-            new("extension_isAdmin", p.IsAdmin ? "true" : "false"),
         };
-        if (p.IsOwner)
+        if (p.Roles is not null)
         {
-            claims.Add(new Claim(ClaimTypes.Role, "Owner"));
-        }
-        if (p.IsAdmin)
-        {
-            claims.Add(new Claim(ClaimTypes.Role, "Admin"));
+            foreach (var role in p.Roles)
+            {
+                claims.Add(new Claim(ClaimTypes.Role, role));
+            }
         }
 
         var identity = new ClaimsIdentity(

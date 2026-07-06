@@ -28,7 +28,13 @@ internal sealed class ListAvailabilityBlocksHandler(
         var property = await mediator.Send(new GetPropertyByIdQuery(request.PropertyId), cancellationToken)
             ?? throw new NotFoundException("Property", request.PropertyId);
 
-        if (property.OwnerUserId != currentUser.UserId.Value && !currentUser.IsAdmin)
+        // Slice OPS.M.15.5 — legacy IsAdmin reader replaced with tenant-
+        // scoped role check. tenant_admin bypasses the owner-equality
+        // fence within their tenant (RLS ensures the property belongs to
+        // the caller's tenant).
+        var isTenantAdmin = currentUser.TenantId is { } callerTid
+            && currentUser.HasTenantRole(callerTid, "tenant_admin");
+        if (property.OwnerUserId != currentUser.UserId.Value && !isTenantAdmin)
         {
             throw new ForbiddenException("Only the property owner can view blocks.");
         }

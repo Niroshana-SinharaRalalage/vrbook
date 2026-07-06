@@ -42,8 +42,10 @@ public sealed class PricingRuleEndpointsTests
         user.UserId.Returns(OwnerUserId);
         user.ExternalObjectId.Returns(OwnerB2C);
         user.IsAuthenticated.Returns(true);
-        user.IsOwner.Returns(true);
-        user.IsAdmin.Returns(false);
+        // Slice OPS.M.15.5 — IsOwner/IsAdmin removed. HasTenantRole
+        // returns false by default; tests exercising the admin bypass
+        // can override per-test.
+        user.TenantId.Returns((Guid?)null);
 
         // No provider — the auth guard and aggregate invariants throw BEFORE
         // any db.Database.ExecuteSqlInterpolatedAsync call, so the context

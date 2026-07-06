@@ -37,7 +37,10 @@ internal sealed class ListAdminBookingsHandler(
 
         IQueryable<Domain.Booking> q = db.Bookings.AsNoTracking();
 
-        if (!currentUser.IsAdmin)
+        // Slice OPS.M.15.5 — tenant-scoped role check.
+        var isTenantAdmin = currentUser.TenantId is { } callerTid
+            && currentUser.HasTenantRole(callerTid, "tenant_admin");
+        if (!isTenantAdmin)
         {
             var ownedPropertyIds = await ownerLookup.ListPropertyIdsOwnedByAsync(currentUser.UserId.Value, cancellationToken);
             if (ownedPropertyIds.Count == 0)

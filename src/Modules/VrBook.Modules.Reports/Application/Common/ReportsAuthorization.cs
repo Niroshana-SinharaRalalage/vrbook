@@ -38,7 +38,13 @@ internal static class ReportsAuthorization
         // checked OwnerUserId but NOT TenantId, so an Owner with
         // multi-tenant membership could probe a property they own in
         // another tenant.
-        if (currentUser.IsAdmin)
+        //
+        // Slice OPS.M.15.5 — legacy `currentUser.IsAdmin` reader replaced
+        // with tenant-scoped role check. Admins-for-this-tenant bypass the
+        // ownership check; every other authenticated caller is verified as
+        // the property owner.
+        if (currentUser.TenantId is { } callerTid
+            && currentUser.HasTenantRole(callerTid, "tenant_admin"))
         {
             if (requestedPropertyId is { } pid)
             {

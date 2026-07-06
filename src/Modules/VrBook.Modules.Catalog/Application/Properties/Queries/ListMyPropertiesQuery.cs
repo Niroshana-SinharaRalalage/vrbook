@@ -49,7 +49,12 @@ internal sealed class ListMyPropertiesHandler(
             .AsNoTracking()
             .Include(p => p.Images);
 
-        if (!currentUser.IsAdmin)
+        // Slice OPS.M.15.5 — tenant-scoped role check. tenant_admin sees
+        // every property in the tenant (RLS scopes the query); every other
+        // authenticated caller sees only what they own.
+        var isTenantAdmin = currentUser.TenantId is { } callerTid
+            && currentUser.HasTenantRole(callerTid, "tenant_admin");
+        if (!isTenantAdmin)
         {
             q = q.Where(p => p.OwnerUserId == currentUser.UserId.Value);
         }
