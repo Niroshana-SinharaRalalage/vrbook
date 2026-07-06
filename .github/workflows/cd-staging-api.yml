@@ -169,21 +169,28 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: OpenAPI breaking-change check
+      - name: Prepare oasdiff ignore file
         if: steps.base_spec.outputs.exists == 'true' && hashFiles(env.OPENAPI_SPEC) != ''
         # Slice OPS.M.21 — VrBook is pre-1.0 with no external API consumers;
         # the SPA + all dogfood consumers ship in this same repo and reshape
         # atomically with the contract. `response-required-property-removed`
-        # is excluded so intentional wire-shape cleanups (e.g. dropping the
-        # legacy `UserDto.isOwner`/`isAdmin` fields when the SPA nav
-        # derivation has already reshaped away from them) don't force a
-        # deprecate-then-drop two-slice dance. Re-enable if we ever ship a
-        # third-party-consumed API surface. Other breaking-change classes
-        # (route removed, param type changed, etc.) still fail the check.
+        # errors are ignored so intentional wire-shape cleanups (e.g.
+        # dropping the legacy `UserDto.isOwner`/`isAdmin` fields when the
+        # SPA nav derivation has already reshaped away from them) don't
+        # force a deprecate-then-drop two-slice dance. Re-enable if we ever
+        # ship a third-party-consumed API surface. Other breaking-change
+        # classes (route removed, param type changed, etc.) still fail.
+        run: |
+          cat > .ci-tmp/oasdiff-err-ignore.txt <<'EOF'
+          response-required-property-removed
+          EOF
+
+      - name: OpenAPI breaking-change check
+        if: steps.base_spec.outputs.exists == 'true' && hashFiles(env.OPENAPI_SPEC) != ''
         run: |
           oasdiff breaking \
             --fail-on ERR \
-            --exclude-elements response-required-property-removed \
+            --err-ignore .ci-tmp/oasdiff-err-ignore.txt \
             --format githubactions \
             .ci-tmp/openapi.main.yaml ${{ env.OPENAPI_SPEC }}
 
