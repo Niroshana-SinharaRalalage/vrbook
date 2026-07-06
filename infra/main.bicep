@@ -136,56 +136,41 @@ module acr 'modules/acr.bicep' = {
 }
 
 // ---------- Data plane ----------
-// OPS.INFRA.1 rev 2 (blue/green) — the LIVE Postgres server stays on its current
-// VNet-injected shape via the primary `pg` module below. In parallel, a
-// staging-only `pgV2` module (gated by `deployStagingPgV2`) stands up
-// psql-vrbook-staging-v2 with publicNetworkAccess=Enabled + IP allowlist for
-// operator DBeaver observability. Post-cutover (see
-// docs/OPS_INFRA_1_STAGING_POSTGRES_PUBLIC_REBUILD_PLAN.md §3 step 12) the
-// primary module gains serverNameOverride='psql-vrbook-staging-v2' and this
-// pgV2 block is removed. Prod is never touched.
-@description('OPS.INFRA.1 rev 2 — set true to stand up psql-vrbook-staging-v2 alongside the live private server. Cleared after cutover.')
-param deployStagingPgV2 bool = false
-
-var pgV2FirewallRules = [
-  // Owner IP from LankaConnect staging allowlist (verified A1 alignment 2026-07-05).
+// OPS.INFRA.1 post-cutover shape (2026-07-05):
+//   * Staging: publicNetworkAccess=Enabled + IP allowlist + serverNameOverride
+//     locks the server as psql-vrbook-staging-v2 (created during the blue/green
+//     rebuild). Postgres Flex Server does not support rename, so the -v2
+//     suffix is permanent (cosmetic only).
+//   * Prod: VNet-injected + Disabled per parameter defaults. Never touched by
+//     INFRA.1. Prod-specific privacy posture will be revisited at prod cutover.
+var pgIsStagingPublic = env == 'staging'
+var pgStagingFirewallRules = [
+  // Owner IP from LankaConnect staging allowlist.
   {
     name: 'Owner-Home-Office'
     startIp: '174.104.204.213'
     endIp: '174.104.204.213'
   }
-  // 0.0.0.0-0.0.0.0 = allow all in-region Azure-internal traffic (NOT the internet).
-  // Covers CAE outbound to Postgres per A8 empirical.
+  // Portal convention: 0.0.0.0-0.0.0.0 = allow all in-region Azure-internal
+  // traffic. NOT the internet.
   {
     name: 'AllowAzureServices'
     startIp: '0.0.0.0'
     endIp: '0.0.0.0'
   }
+  // OPS.INFRA.1 A8 remediation: CAE outbound IP needs an explicit rule; the
+  // AllowAzureServices umbrella did NOT cover Container Apps → Postgres Flex
+  // outbound. Discovered empirically at cutover; without it new API revisions
+  // failed activation on health-probe timeout.
+  {
+    name: 'CAE-Outbound'
+    startIp: '135.18.171.52'
+    endIp: '135.18.171.52'
+  }
 ]
 
-// Primary — live server (unchanged shape; stays VNet-private on both staging + prod).
 module pg 'modules/postgres-flexible.bicep' = {
   name: 'pg'
-  params: {
-    env: env
-    location: location
-    tags: tags
-    subnetId: net.outputs.pgSubnetId
-    privateDnsZoneId: net.outputs.pgPrivateDnsZoneId
-    skuName: pgSku
-    skuTier: pgTier
-    storageSizeGB: pgStorageGB
-    backupRetentionDays: pgBackupRetention
-    haEnabled: isProd
-    administratorLogin: pgAdminLogin
-    administratorLoginPassword: pgAdminPassword
-  }
-}
-
-// OPS.INFRA.1 rev 2 — blue/green replacement server for staging.
-// Temporary: this module invocation is removed post-cutover (§3 step 12 of the plan).
-module pgV2 'modules/postgres-flexible.bicep' = if (deployStagingPgV2 && env == 'staging') {
-  name: 'pgV2'
   params: {
     env: env
     location: location
@@ -199,9 +184,9 @@ module pgV2 'modules/postgres-flexible.bicep' = if (deployStagingPgV2 && env == 
     haEnabled: isProd
     administratorLogin: pgAdminLogin
     administratorLoginPassword: pgAdminPassword
-    publicNetworkAccess: 'Enabled'
-    firewallRules: pgV2FirewallRules
-    serverNameOverride: 'psql-vrbook-staging-v2'
+    publicNetworkAccess: pgIsStagingPublic ? 'Enabled' : 'Disabled'
+    firewallRules: pgIsStagingPublic ? pgStagingFirewallRules : []
+    serverNameOverride: pgIsStagingPublic ? 'psql-vrbook-staging-v2' : ''
   }
 }
 

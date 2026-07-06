@@ -24,9 +24,3 @@ param pgAdminPassword = az.getSecret(
 // setting deployRedis=true here AND Features__UseRedisHoldStore=true in API
 // app settings.
 param deployRedis = false
-
-// OPS.INFRA.1 rev 2 — stand up psql-vrbook-staging-v2 (public-access + IP
-// firewall) alongside the live private psql-vrbook-staging for the blue/green
-// rebuild. Remove this line + the pgV2 module invocation in main.bicep after
-// cutover (§3 step 12 of docs/OPS_INFRA_1_STAGING_POSTGRES_PUBLIC_REBUILD_PLAN.md).
-param deployStagingPgV2 = true
