@@ -301,6 +301,14 @@ var apiEnvVars = [
   { name: 'EntraExternalId__Instance', secretRef: 'entra-instance' }
   { name: 'EntraExternalId__TenantId', secretRef: 'entra-tenant-id' }
   { name: 'EntraExternalId__ClientId', secretRef: 'entra-api-client-id' }
+  // Slice OPS.M.12.6 — the External-tenant issuer host used by
+  // IdentityProviderClassifier to normalize a token's `idp` claim to the
+  // canonical `entra` string when it matches the tenant issuer host (rather
+  // than the Entra-local absent-idp shape). See
+  // src/Modules/VrBook.Modules.Identity/Infrastructure/Auth/IdentityProviderClassifier.cs.
+  // Value is e.g. `vrbookcid.ciamlogin.com` — not sensitive, but stored in
+  // KV for symmetry with the rest of the Entra config.
+  { name: 'EntraExternalId__TenantIssuerHost', secretRef: 'entra-tenant-issuer-host' }
   // App:WebBaseUrl — same-origin base URL for outbound deep links (review
   // notification etc.). Empty in staging + prod so links fall through to the
   // handler's built-in fallback; populated in dev so notification templates
@@ -344,6 +352,7 @@ var apiSecrets = [
   { name: 'entra-instance', keyVaultSecretName: 'entra-instance' }
   { name: 'entra-tenant-id', keyVaultSecretName: 'entra-tenant-id' }
   { name: 'entra-api-client-id', keyVaultSecretName: 'entra-api-client-id' }
+  { name: 'entra-tenant-issuer-host', keyVaultSecretName: 'entra-tenant-issuer-host' }
   { name: 'feed-pepper', keyVaultSecretName: 'feed-pepper' }
   { name: 'appi-cs', keyVaultSecretName: 'appi-cs' }
 ]
@@ -519,7 +528,16 @@ var webEnvVars = [
   // OPS.M.0 — these reach Next.js server components / middleware at runtime.
   // The browser bundle (where MSAL actually executes) is sealed at `next build`
   // and reads the build-args; see cd-staging-web.yml + web/Dockerfile.
+  //
+  // Slice OPS.M.12.6 — per-flow authority split. `_ADMIN` points at the
+  // `AdminSignUpSignIn` Entra user flow (Entra local only); `_GUEST` points
+  // at `GuestSignUpSignIn` (Entra local + Google/Microsoft/Facebook/Apple).
+  // The legacy single-authority env var is retained for one deploy cycle
+  // (dropped in M.12.8) so a stale build won't 500 at MSAL init.
+  // See ADR-0016 and docs/runbooks/social_idp_setup.md §7.
   { name: 'NEXT_PUBLIC_ENTRA_AUTHORITY', secretRef: 'entra-web-authority' }
+  { name: 'NEXT_PUBLIC_ENTRA_AUTHORITY_ADMIN', secretRef: 'entra-web-authority-admin' }
+  { name: 'NEXT_PUBLIC_ENTRA_AUTHORITY_GUEST', secretRef: 'entra-web-authority-guest' }
   { name: 'NEXT_PUBLIC_ENTRA_CLIENT_ID', secretRef: 'entra-web-client-id' }
 ]
 
@@ -543,6 +561,8 @@ module webApp 'modules/container-app.bicep' = {
     envVars: webEnvVars
     secrets: [
       { name: 'entra-web-authority', keyVaultSecretName: 'entra-web-authority' }
+      { name: 'entra-web-authority-admin', keyVaultSecretName: 'entra-web-authority-admin' }
+      { name: 'entra-web-authority-guest', keyVaultSecretName: 'entra-web-authority-guest' }
       { name: 'entra-web-client-id', keyVaultSecretName: 'entra-web-client-id' }
     ]
     keyVaultName: kv.outputs.name

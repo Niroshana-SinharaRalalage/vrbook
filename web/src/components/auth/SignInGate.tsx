@@ -23,7 +23,7 @@ export const SignInGate = ({
       {description && <p className="mt-2 text-sm text-muted-foreground">{description}</p>}
       <button
         type="button"
-        onClick={signIn}
+        onClick={() => signIn({ flow: 'guest' })}
         className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-brand-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-orange-700"
       >
         <LogIn className="h-4 w-4" aria-hidden /> Sign in

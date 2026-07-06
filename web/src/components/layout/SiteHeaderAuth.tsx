@@ -34,7 +34,7 @@ export const SiteHeaderAuth = () => {
   return (
     <button
       type="button"
-      onClick={signIn}
+      onClick={() => signIn({ flow: 'guest' })}
       disabled={isBusy}
       className={cn(
         'inline-flex items-center gap-1.5 rounded-md bg-brand-orange-600 px-3 py-1.5 text-sm font-medium text-white',

@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 
 import { AdminSidebar } from '@/components/layout/AdminSidebar';
+import { AdminAuthGuard } from '@/components/auth/AdminAuthGuard';
 
 interface AdminLayoutProps {
   readonly children: ReactNode;
@@ -9,6 +10,10 @@ interface AdminLayoutProps {
 // Admin shell per proposal §12.1: persistent side nav + content. Different from
 // the public site chrome (SiteHeader/Footer) by design — the admin is a tool,
 // not a marketing surface.
+//
+// Slice OPS.M.12.6 — wrapped in `<AdminAuthGuard>` so unauthenticated visitors
+// redirect to `/auth/signin?flow=admin&returnTo=<pathname>` instead of the
+// generic guest sign-in. See ADR-0016.
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   return (
     <div className="flex min-h-dvh">
@@ -19,7 +24,9 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
             Admin · auth-gated by Agent F1 (proposal §14.2)
           </span>
         </header>
-        <main className="p-6">{children}</main>
+        <main className="p-6">
+          <AdminAuthGuard>{children}</AdminAuthGuard>
+        </main>
       </div>
     </div>
   );

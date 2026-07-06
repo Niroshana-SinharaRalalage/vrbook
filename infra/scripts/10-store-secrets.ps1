@@ -86,9 +86,15 @@ Set-KvSecret -Name 'entra-tenant-id' -Value 'pending-identity-setup' `
 Set-KvSecret -Name 'entra-api-client-id' -Value 'pending-identity-setup' `
     -Description 'vrbook-api app registration appId. Overwritten by docs/identity/setup.md §7.'
 Set-KvSecret -Name 'entra-web-authority' -Value 'pending-identity-setup' `
-    -Description 'NEXT_PUBLIC_ENTRA_AUTHORITY: full v2.0 authority URL for MSAL. Overwritten by setup.md §7.'
+    -Description 'NEXT_PUBLIC_ENTRA_AUTHORITY: legacy single-authority URL. Retained one deploy cycle; dropped in OPS.M.12.8.'
+Set-KvSecret -Name 'entra-web-authority-admin' -Value 'pending-identity-setup' `
+    -Description 'NEXT_PUBLIC_ENTRA_AUTHORITY_ADMIN: MSAL authority for the AdminSignUpSignIn user flow (Entra local only). See ADR-0016.'
+Set-KvSecret -Name 'entra-web-authority-guest' -Value 'pending-identity-setup' `
+    -Description 'NEXT_PUBLIC_ENTRA_AUTHORITY_GUEST: MSAL authority for the GuestSignUpSignIn user flow (Entra local + 4 socials). See ADR-0016.'
 Set-KvSecret -Name 'entra-web-client-id' -Value 'pending-identity-setup' `
     -Description 'vrbook-web SPA app registration appId. Overwritten by docs/identity/setup.md §7.'
+Set-KvSecret -Name 'entra-tenant-issuer-host' -Value 'pending-identity-setup' `
+    -Description 'EntraExternalId__TenantIssuerHost: External tenant issuer host (e.g. vrbookcid.ciamlogin.com) used by IdentityProviderClassifier.'
 
 # ---- Prompted external secrets ----
 Write-Step "External providers -- enter values now (press Enter to skip & set later)"
