@@ -11,16 +11,17 @@ namespace VrBook.Modules.Identity.Infrastructure.Auth;
 /// Replaces the <c>AnonymousCurrentUser</c> stub from A0 when registered scoped.
 /// </summary>
 /// <remarks>
-/// AD B2C populates a custom <c>extension_</c> claim for owner / admin role flags;
-/// the OIDC middleware does not map those to <see cref="ClaimTypes.Role"/> by default,
-/// so we look at both forms. <c>UserId</c> is the app-side user id stamped by
-/// <see cref="UserProvisioningMiddleware"/>, NOT the B2C oid.
+/// Role claims resolve through the ASP.NET-standard <see cref="ClaimTypes.Role"/>
+/// mapping populated by JwtBearer from the token's <c>roles</c> claim (Entra
+/// App Roles per ADR-0014), or synthesized by <c>UserProvisioningMiddleware</c>
+/// for <c>PlatformAdmin</c>. The pre-ADR-0014 <c>extension_isOwner</c> /
+/// <c>extension_isAdmin</c> readers were retired in OPS.M.15.2. <c>UserId</c>
+/// is the app-side user id stamped by <see cref="UserProvisioningMiddleware"/>,
+/// NOT the Entra oid.
 /// </remarks>
 public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUser
 {
     public const string AppUserIdItemKey = "VrBook:UserId";
-    public const string OwnerClaim = "extension_isOwner";
-    public const string AdminClaim = "extension_isAdmin";
     /// <summary>
     /// OPS.M.8 §3.2 (D2) — <c>HttpContext.Items</c> key holding the
     /// DB-resolved <c>is_platform_admin</c> bit. Stamped by
@@ -214,8 +215,8 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
 
     public bool IsAuthenticated => accessor.HttpContext?.User.Identity?.IsAuthenticated == true;
 
-    public bool IsOwner => ReadBoolClaim(OwnerClaim) || HasRole("Owner");
-    public bool IsAdmin => ReadBoolClaim(AdminClaim) || HasRole("Admin");
+    public bool IsOwner => HasRole("Owner");
+    public bool IsAdmin => HasRole("Admin");
 
     /// <summary>
     /// OPS.M.8 §3.2 — DB-authoritative read. Prefers the
@@ -308,11 +309,5 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
         return user.IsInRole(role) || user.HasClaim(c =>
             (c.Type == ClaimTypes.Role || c.Type == "roles") &&
             string.Equals(c.Value, role, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private bool ReadBoolClaim(string type)
-    {
-        var v = accessor.HttpContext?.User.FindFirstValue(type);
-        return string.Equals(v, "true", StringComparison.OrdinalIgnoreCase);
     }
 }
