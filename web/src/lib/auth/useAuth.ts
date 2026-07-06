@@ -19,8 +19,6 @@ export interface AuthUser {
   readonly oid: string;
   readonly email: string | undefined;
   readonly name: string | undefined;
-  readonly isOwner: boolean;
-  readonly isAdmin: boolean;
 }
 
 export interface SignInOptions {
@@ -31,12 +29,16 @@ export interface SignInOptions {
 const toAuthUser = (account: AccountInfo | null): AuthUser | null => {
   if (!account) return null;
   const claims = (account.idTokenClaims ?? {}) as Record<string, unknown>;
+  // Slice OPS.M.15.6 — the legacy `extension_isOwner` / `extension_isAdmin`
+  // token claims were retired backend-side in M.15.2/M.15.5. The SPA no
+  // longer reads them; nav derivation reads `/api/v1/me`'s `isOwner`/
+  // `isAdmin` DTO fields (kept for one cycle per M.15 §7-Q1) via
+  // `useMe`/`useMyTenants`, NOT the id-token claims. See ADR-0014
+  // amendment + docs/OPS_M_15_APP_ROLES_CLEANUP_PLAN.md.
   return {
     oid: account.localAccountId,
     email: (claims.email as string | undefined) ?? account.username,
     name: account.name,
-    isOwner: claims.extension_isOwner === true || claims.extension_isOwner === 'true',
-    isAdmin: claims.extension_isAdmin === true || claims.extension_isAdmin === 'true',
   };
 };
 
