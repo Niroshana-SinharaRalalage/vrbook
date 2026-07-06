@@ -20,10 +20,20 @@ public sealed record ResolveConflictCommand(
     string Notes,
     Guid TenantId) : IRequest, ITenantScoped;
 
-internal sealed class ResolveConflictHandler(SyncDbContext db) : IRequestHandler<ResolveConflictCommand>
+internal sealed class ResolveConflictHandler(SyncDbContext db, ICurrentUser currentUser) : IRequestHandler<ResolveConflictCommand>
 {
     public async Task Handle(ResolveConflictCommand cmd, CancellationToken cancellationToken)
     {
+        // Slice OPS.M.17 (M.15 follow-up B) — the controller-level
+        // [Authorize(Roles="Admin")] gate was dropped in M.15.3; any
+        // same-tenant authenticated user could otherwise reach this
+        // handler. Sync-conflict resolution is an admin action.
+        if (!currentUser.HasTenantRole(cmd.TenantId, "tenant_admin"))
+        {
+            throw new ForbiddenException(
+                "Sync-conflict resolution requires tenant_admin role in the tenant.");
+        }
+
         // The behavior already verified ICurrentUser.TenantId == cmd.TenantId.
         // Belt-and-braces row-level check: refuse if the conflict's tenant
         // doesn't match (data corruption / stale id).

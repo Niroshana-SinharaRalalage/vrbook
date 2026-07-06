@@ -50,6 +50,16 @@ internal sealed class RetryNotificationHandler(
             {
                 throw new NotFoundException("NotificationLog", request.Id);
             }
+            // Slice OPS.M.17 (M.15 follow-up B) — the controller-level
+            // [Authorize(Roles="Admin")] gate was dropped in M.15.3; any
+            // same-tenant authenticated user could otherwise reach this
+            // handler. Notification retry is an admin action; require
+            // tenant_admin in the row's tenant.
+            if (!currentUser.HasTenantRole(rowTenant, "tenant_admin"))
+            {
+                throw new ForbiddenException(
+                    "Notification retry requires tenant_admin role in the tenant.");
+            }
         }
         else if (!currentUser.IsPlatformAdmin)
         {

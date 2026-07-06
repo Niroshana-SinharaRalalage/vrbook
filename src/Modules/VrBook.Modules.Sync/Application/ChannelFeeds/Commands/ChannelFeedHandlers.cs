@@ -9,11 +9,31 @@ using VrBook.Modules.Sync.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Sync.Application.ChannelFeeds.Commands;
 
-internal sealed class CreateChannelFeedHandler(SyncDbContext db, IFeedUrlBuilder urls, IPropertyOwnerLookup properties)
+// Slice OPS.M.17 (M.15 follow-up B) — the controller-level
+// [Authorize(Roles="Admin")] gate on ChannelFeedsController was dropped
+// in M.15.3; any same-tenant authenticated user could otherwise reach
+// these handlers. Channel-feed CRUD is an admin action; each handler
+// gates on tenant_admin membership in the command's tenant. Mirrors the
+// M.15.4 pattern (OwnerActionHandler.TransitionAsync).
+internal static class ChannelFeedAuthorization
+{
+    public static void RequireTenantAdmin(ICurrentUser currentUser, Guid tenantId)
+    {
+        if (!currentUser.HasTenantRole(tenantId, "tenant_admin"))
+        {
+            throw new ForbiddenException(
+                "Channel-feed writes require tenant_admin role in the tenant.");
+        }
+    }
+}
+
+internal sealed class CreateChannelFeedHandler(SyncDbContext db, IFeedUrlBuilder urls, IPropertyOwnerLookup properties, ICurrentUser currentUser)
     : IRequestHandler<CreateChannelFeedCommand, ChannelFeedDto>
 {
     public async Task<ChannelFeedDto> Handle(CreateChannelFeedCommand cmd, CancellationToken cancellationToken)
     {
+        ChannelFeedAuthorization.RequireTenantAdmin(currentUser, cmd.TenantId);
+
         // One feed per (property, channel) — enforce here to avoid race conditions on the
         // unique index (which we don't have on (property_id, channel)).
         var existing = await db.ChannelFeeds
@@ -36,11 +56,13 @@ internal sealed class CreateChannelFeedHandler(SyncDbContext db, IFeedUrlBuilder
     }
 }
 
-internal sealed class UpdateChannelFeedHandler(SyncDbContext db, IFeedUrlBuilder urls)
+internal sealed class UpdateChannelFeedHandler(SyncDbContext db, IFeedUrlBuilder urls, ICurrentUser currentUser)
     : IRequestHandler<UpdateChannelFeedCommand, ChannelFeedDto>
 {
     public async Task<ChannelFeedDto> Handle(UpdateChannelFeedCommand cmd, CancellationToken cancellationToken)
     {
+        ChannelFeedAuthorization.RequireTenantAdmin(currentUser, cmd.TenantId);
+
         var feed = await db.ChannelFeeds.FirstOrDefaultAsync(f => f.Id == cmd.Id, cancellationToken)
             ?? throw new NotFoundException("ChannelFeed", cmd.Id);
         // Slice OPS.M.10.2 F7 (audit #19) — defense-in-depth row-level
@@ -58,10 +80,12 @@ internal sealed class UpdateChannelFeedHandler(SyncDbContext db, IFeedUrlBuilder
     }
 }
 
-internal sealed class DeleteChannelFeedHandler(SyncDbContext db) : IRequestHandler<DeleteChannelFeedCommand>
+internal sealed class DeleteChannelFeedHandler(SyncDbContext db, ICurrentUser currentUser) : IRequestHandler<DeleteChannelFeedCommand>
 {
     public async Task Handle(DeleteChannelFeedCommand cmd, CancellationToken cancellationToken)
     {
+        ChannelFeedAuthorization.RequireTenantAdmin(currentUser, cmd.TenantId);
+
         var feed = await db.ChannelFeeds.FirstOrDefaultAsync(f => f.Id == cmd.Id, cancellationToken)
             ?? throw new NotFoundException("ChannelFeed", cmd.Id);
         // Slice OPS.M.10.2 F7 (audit #19) — same defense-in-depth as

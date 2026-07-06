@@ -34,10 +34,30 @@ internal sealed class RespondToReviewHandler(ReviewsDbContext db, ICurrentUser c
     }
 }
 
-internal sealed class HideReviewHandler(ReviewsDbContext db) : IRequestHandler<HideReviewCommand>
+// Slice OPS.M.17 (M.15 follow-up B) — moderation actions require
+// tenant_admin membership. Pre-M.15.3 the controller carried
+// [Authorize(Roles="Admin")]; that gate is gone, so each handler gates
+// explicitly. RespondToReviewHandler above is EXCLUDED from this pattern
+// — it's an owner-response endpoint (property-ownership check belongs
+// there instead of tenant_admin); a separate follow-up covers that.
+internal static class ReviewModerationAuthorization
+{
+    public static void RequireTenantAdmin(ICurrentUser currentUser, Guid tenantId)
+    {
+        if (!currentUser.HasTenantRole(tenantId, "tenant_admin"))
+        {
+            throw new ForbiddenException(
+                "Review moderation requires tenant_admin role in the tenant.");
+        }
+    }
+}
+
+internal sealed class HideReviewHandler(ReviewsDbContext db, ICurrentUser currentUser) : IRequestHandler<HideReviewCommand>
 {
     public async Task Handle(HideReviewCommand cmd, CancellationToken cancellationToken)
     {
+        ReviewModerationAuthorization.RequireTenantAdmin(currentUser, cmd.TenantId);
+
         var review = await db.Reviews.FirstOrDefaultAsync(r => r.Id == cmd.ReviewId, cancellationToken)
             ?? throw new NotFoundException("Review", cmd.ReviewId);
         if (review.TenantId != cmd.TenantId)
@@ -49,10 +69,12 @@ internal sealed class HideReviewHandler(ReviewsDbContext db) : IRequestHandler<H
     }
 }
 
-internal sealed class RestoreReviewHandler(ReviewsDbContext db) : IRequestHandler<RestoreReviewCommand>
+internal sealed class RestoreReviewHandler(ReviewsDbContext db, ICurrentUser currentUser) : IRequestHandler<RestoreReviewCommand>
 {
     public async Task Handle(RestoreReviewCommand cmd, CancellationToken cancellationToken)
     {
+        ReviewModerationAuthorization.RequireTenantAdmin(currentUser, cmd.TenantId);
+
         var review = await db.Reviews.FirstOrDefaultAsync(r => r.Id == cmd.ReviewId, cancellationToken)
             ?? throw new NotFoundException("Review", cmd.ReviewId);
         if (review.TenantId != cmd.TenantId)
@@ -64,10 +86,12 @@ internal sealed class RestoreReviewHandler(ReviewsDbContext db) : IRequestHandle
     }
 }
 
-internal sealed class RejectReviewHandler(ReviewsDbContext db) : IRequestHandler<RejectReviewCommand>
+internal sealed class RejectReviewHandler(ReviewsDbContext db, ICurrentUser currentUser) : IRequestHandler<RejectReviewCommand>
 {
     public async Task Handle(RejectReviewCommand cmd, CancellationToken cancellationToken)
     {
+        ReviewModerationAuthorization.RequireTenantAdmin(currentUser, cmd.TenantId);
+
         var review = await db.Reviews.FirstOrDefaultAsync(r => r.Id == cmd.ReviewId, cancellationToken)
             ?? throw new NotFoundException("Review", cmd.ReviewId);
         if (review.TenantId != cmd.TenantId)
