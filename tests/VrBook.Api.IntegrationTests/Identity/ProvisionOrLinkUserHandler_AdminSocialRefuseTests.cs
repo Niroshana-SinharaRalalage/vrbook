@@ -89,7 +89,7 @@ public sealed class ProvisionOrLinkUserHandler_AdminSocialRefuseTests(IdentityAp
             .Where(i => i.UserId == returnedId)
             .Select(i => i.Provider)
             .ToListAsync();
-        identities.Should().BeEquivalentTo(new[] { "entra", "google" });
+        identities.Should().BeEquivalentTo("entra", "google");
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public sealed class ProvisionOrLinkUserHandler_AdminSocialRefuseTests(IdentityAp
         var user = await db.Users.FirstAsync(u => u.Id == id);
         user.IsPlatformAdmin.Should().BeFalse();
         var identities = await db.UserIdentities.Where(i => i.UserId == id).Select(i => i.Provider).ToListAsync();
-        identities.Should().BeEquivalentTo(new[] { "google" });
+        identities.Should().BeEquivalentTo("google");
     }
 
     [Fact]
