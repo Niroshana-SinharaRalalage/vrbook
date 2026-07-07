@@ -74,10 +74,23 @@ internal sealed class BookingNotificationHandlers(
 
         // (2) Deferred T+1 review request. C2's NotBeforeUtc gating means the
         //     dispatcher only picks this up 24h later — matches SLICE5_PLAN §2.3.
+        //
+        // Slice 4.V2.4 — payload carries M.16 BookingCompleted.Trigger
+        // ("sweep" | "manual") so the template can optionally warm the
+        // copy for guests whose stay was manually completed by the operator
+        // vs. auto-completed by the daily sweep. Manual completion signals
+        // an active checkout interaction (housekeeping approved), which is a
+        // slightly different UX moment than the sweep auto-close.
         var deepLink = BuildReviewDeepLink(n.BookingId);
         await Queue(NotificationKind.ReviewRequest, n.BookingId, n.GuestUserId,
             $"How was your stay? — {n.Reference}",
-            extras: new() { ["DeepLink"] = deepLink },
+            extras: new()
+            {
+                ["DeepLink"] = deepLink,
+                ["Trigger"] = n.Trigger,
+                // Mustache-friendly bool for the {{#Manual}} section fork.
+                ["Manual"] = string.Equals(n.Trigger, "manual", StringComparison.OrdinalIgnoreCase),
+            },
             cancellationToken: cancellationToken,
             notBeforeUtc: clock.UtcNow + TimeSpan.FromHours(24));
     }

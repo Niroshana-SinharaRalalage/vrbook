@@ -5,5 +5,7 @@
   "GuestDisplayName": "Sample Guest",
   "Checkin": "2026-08-12",
   "Checkout": "2026-08-14",
-  "DeepLink": "https://example.com/account/bookings/00000000-0000-0000-0000-000000000001/review"
+  "DeepLink": "https://example.com/account/bookings/00000000-0000-0000-0000-000000000001/review",
+  "Trigger": "sweep",
+  "Manual": false
 }

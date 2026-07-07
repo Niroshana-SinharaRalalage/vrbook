@@ -1,5 +1,10 @@
 <p>Hi {{GuestDisplayName}},</p>
+{{#Manual}}
+<p>Thanks for checking out of <strong>{{PropertyTitle}}</strong> — the host just closed out your stay. How was it?</p>
+{{/Manual}}
+{{^Manual}}
 <p>Hope you enjoyed your stay at <strong>{{PropertyTitle}}</strong> from {{Checkin}} to {{Checkout}}. How was it?</p>
+{{/Manual}}
 
 <p style="margin: 20px 0;">
   <a href="{{DeepLink}}"
