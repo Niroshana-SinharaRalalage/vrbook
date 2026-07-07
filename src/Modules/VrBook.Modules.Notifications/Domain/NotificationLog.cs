@@ -27,6 +27,13 @@ public enum NotificationKind
     OwnerAutoConfirmed = 32,
     OwnerCancellationAlert = 33,
     OwnerSyncConflict = 34,
+
+    // Slice 4.V2 (M.15 App Roles cleanup + notifications residuals): lifecycle-
+    // of-user templates. Reserved at 40+ so the booking/owner enums stay stable.
+    // TenantNotificationHandlers queues TenantWelcome on TenantMembershipCreated
+    // when the row is the tenant's first tenant_admin membership; GuestWelcome
+    // fires on UserRegistered for non-tenant-admin signups.
+    TenantWelcome = 40,
 }
 
 public enum NotificationStatus

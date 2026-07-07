@@ -37,6 +37,9 @@ public sealed class IdentityModule : IModuleRegistration
         // OPS.M.8 §3.11 (D11) — composed stats lookup for the platform-admin
         // detail page; delegates property count to the OPS.M.7 lookup.
         services.AddScoped<IPlatformTenantStatsLookup, PlatformTenantStatsLookup>();
+        // Slice 4.V2 — tenant setup context for TenantNotificationHandlers'
+        // welcome-email suppression logic.
+        services.AddScoped<ITenantSetupContextLookup, TenantSetupContextLookup>();
 
         // The DbContext doubles as the module's IUnitOfWork.
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<IdentityDbContext>());

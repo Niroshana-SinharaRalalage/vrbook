@@ -154,6 +154,9 @@ public sealed class MustacheTemplateRenderer : ITemplateRenderer
         NotificationKind.OwnerCancellationAlert => "owner.cancellation_alert",
         NotificationKind.OwnerSyncConflict => "owner.sync_conflict",
 
+        // Slice 4.V2 lifecycle-of-user templates.
+        NotificationKind.TenantWelcome => "tenant.welcome",
+
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "No template for kind."),
     };
 
