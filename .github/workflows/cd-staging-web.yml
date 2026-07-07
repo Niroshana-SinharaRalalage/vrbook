@@ -105,11 +105,17 @@ jobs:
       - name: Fetch Entra build args from Key Vault
         id: entra
         run: |
-          AUTHORITY=$(az keyvault secret show --vault-name kv-vrbook-staging --name entra-web-authority --query value -o tsv)
+          # Slice OPS.M.12.6/M.21.FIX — per-flow authorities. Legacy
+          # `entra-web-authority` was dropped in M.12.8; msalConfig reads
+          # ADMIN/GUEST directly.
+          AUTHORITY_ADMIN=$(az keyvault secret show --vault-name kv-vrbook-staging --name entra-web-authority-admin --query value -o tsv)
+          AUTHORITY_GUEST=$(az keyvault secret show --vault-name kv-vrbook-staging --name entra-web-authority-guest --query value -o tsv)
           CLIENT_ID=$(az keyvault secret show --vault-name kv-vrbook-staging --name entra-web-client-id --query value -o tsv)
-          echo "::add-mask::${AUTHORITY}"
+          echo "::add-mask::${AUTHORITY_ADMIN}"
+          echo "::add-mask::${AUTHORITY_GUEST}"
           echo "::add-mask::${CLIENT_ID}"
-          echo "authority=${AUTHORITY}" >> "$GITHUB_OUTPUT"
+          echo "authority_admin=${AUTHORITY_ADMIN}" >> "$GITHUB_OUTPUT"
+          echo "authority_guest=${AUTHORITY_GUEST}" >> "$GITHUB_OUTPUT"
           echo "client_id=${CLIENT_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Build image
@@ -122,7 +128,8 @@ jobs:
           load: true
           build-args: |
             NEXT_PUBLIC_API_BASE_URL=https://ca-vrbook-api-staging.icydesert-abf3fa4e.eastus2.azurecontainerapps.io
-            NEXT_PUBLIC_ENTRA_AUTHORITY=${{ steps.entra.outputs.authority }}
+            NEXT_PUBLIC_ENTRA_AUTHORITY_ADMIN=${{ steps.entra.outputs.authority_admin }}
+            NEXT_PUBLIC_ENTRA_AUTHORITY_GUEST=${{ steps.entra.outputs.authority_guest }}
             NEXT_PUBLIC_ENTRA_CLIENT_ID=${{ steps.entra.outputs.client_id }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max

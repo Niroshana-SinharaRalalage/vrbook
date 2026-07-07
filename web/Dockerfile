@@ -19,10 +19,18 @@ COPY . .
 # the Container App runtime env never reaches hydrated client components.
 # CI passes --build-arg NEXT_PUBLIC_API_BASE_URL=https://... per environment.
 ARG NEXT_PUBLIC_API_BASE_URL=""
-ARG NEXT_PUBLIC_ENTRA_AUTHORITY=""
+ARG NEXT_PUBLIC_ENTRA_AUTHORITY_ADMIN=""
+ARG NEXT_PUBLIC_ENTRA_AUTHORITY_GUEST=""
 ARG NEXT_PUBLIC_ENTRA_CLIENT_ID=""
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
-ENV NEXT_PUBLIC_ENTRA_AUTHORITY=${NEXT_PUBLIC_ENTRA_AUTHORITY}
+# Slice OPS.M.12.6/M.21.FIX — per-flow authorities inline into MSAL config.
+# The legacy NEXT_PUBLIC_ENTRA_AUTHORITY was dropped in M.12.8; the M.12.6
+# msalConfig reads _ADMIN + _GUEST directly. Missing this build-arg chain was
+# the root cause of a 2026-07-07 login.live.com fallback bug — msalConfig
+# saw both vars as undefined and fell through to microsoftonline.com/common,
+# which routes to consumer identity for CIAM tenants.
+ENV NEXT_PUBLIC_ENTRA_AUTHORITY_ADMIN=${NEXT_PUBLIC_ENTRA_AUTHORITY_ADMIN}
+ENV NEXT_PUBLIC_ENTRA_AUTHORITY_GUEST=${NEXT_PUBLIC_ENTRA_AUTHORITY_GUEST}
 ENV NEXT_PUBLIC_ENTRA_CLIENT_ID=${NEXT_PUBLIC_ENTRA_CLIENT_ID}
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
