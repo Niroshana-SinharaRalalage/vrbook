@@ -1,5 +1,11 @@
 # Slice 4 — Notifications That Actually Send (Plan)
 
+> ## Superseded 2026-07-06 by [SLICE_4_PLAN_V2.md](SLICE_4_PLAN_V2.md)
+>
+> This original design shipped as C1–C5 (commits `f42d771`→`5ff46c2`) — worker + ACS + 10 templates + owner handlers + `/admin/notifications` retry. The v2 plan covers what was left AFTER C5 (tenant/guest welcome, list-log M.17 guard, orphan cleanup, review-request Trigger enrichment) + the required re-review noted in the banner further down. All §s of this original doc are preserved verbatim below for design-diary continuity. **Do NOT re-implement** — v2 is the current-state plan.
+
+---
+
 **Status**: Proposed 2026-06-14. **Re-review required before implementation begins** — see banner below.
 **Author**: Plan agent (architect) consult, 2026-06-14.
 **REPLAN section**: `docs/REPLAN.md` §3 Slice 4.

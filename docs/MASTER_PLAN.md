@@ -18,7 +18,7 @@ This document is the single index. It points at the detailed plans for each phas
 | | Slice 2 — Guest books, owner confirms (the credibility test) | ✅ | `9896882` → `3fddd45` | staging |
 | | Slice 2 polish — DevAuth persona switcher works cross-origin | ✅ | `ca8ffd6` | staging |
 | | Slice 3 — Calendar + iCal + owner blocks (with §10.1 forward-compat `tenant_id NULL` on every new table) | ✅ | `f8ffd04` → `c8f8b8b` | staging |
-| | Slice 4 — Notifications that actually send | ⏭ after Slice OPS.M.10 | plan: `d9fa889` ([docs/SLICE4_PLAN.md](SLICE4_PLAN.md)) — re-review against post-M.10 world before starting (per architect 2026-06-27 re-evaluation) | |
+| | Slice 4 — Notifications that actually send | ✅ | `f42d771` → 4.V2.6 | v1 (C1-C5) shipped `f42d771`→`5ff46c2` — worker + templates + owner handlers + /admin/notifications retry. v2 residuals shipped 2026-07-06: `tenant.welcome` + `guest.welcome` + list-log M.17-parity guard + orphan cleanup + `review.request` M.16-Trigger enrichment + notification-dispatch-failures runbook. Plan v2 at [`SLICE_4_PLAN_V2.md`](SLICE_4_PLAN_V2.md); close-out at [`SLICE_4_V2_CLOSE_OUT.md`](SLICE_4_V2_CLOSE_OUT.md); operator-manual welcome runbook `OPS_M_7_WELCOME_EMAIL.md` retired. |
 | | Slice 5 — Stay completes → review + loyalty | ⏭ after Slice 4 | — | Ship `Review` with composite `(BookingId, PropertyId)` key per architect Phase-3 reconnaissance note. |
 | | Slice 6 — Host↔Guest chat + pricing power-user | ⏭ after Slice 5 | — | |
 | | Slice 7 — Reports + realtime polish | ⏭ after Slice 6 | — | |
