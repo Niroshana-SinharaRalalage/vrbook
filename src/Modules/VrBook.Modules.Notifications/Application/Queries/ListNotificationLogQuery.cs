@@ -35,21 +35,30 @@ internal sealed class ListNotificationLogHandler(
         // guest-flow emails (Slice 4 sends booking confirmations to guest
         // inboxes BEFORE the guest has a tenant claim). But that means
         // every tenant Admin's /admin/notifications page was leaking the
-        // guest emails of every other tenant's bookings - audit #16.
+        // guest emails of every other tenant's bookings — audit #16.
         //
-        // Post-fix: non-PlatformAdmin callers see only their own
-        // tenant's rows (no NULL-tenant orphans). PlatformAdmin sees
-        // everything (RLS already permits via the GUC fallback).
+        // Slice 4.V2.3 (M.17 parity) — post-M.15.3 the controller carries
+        // plain `[Authorize]`; without an explicit handler-level check any
+        // authenticated same-tenant caller (guest with a membership) could
+        // enumerate the notification log. Mirror the RetryNotificationHandler
+        // two-branch pattern: PlatformAdmin sees everything; tenant_admin
+        // sees their tenant only; anyone else → 403.
         //
-        // Follow-up note: the RLS policy itself could be tightened to
-        // gate NULL rows on is_platform_admin; deferred because the
-        // policy change has cross-module implications (every nullable-
-        // tenant table) and needs a product decision per audit #16.b.
+        // §7-Q3-A locked: keep the app-layer filter as the enforcement
+        // point. RLS tighten deferred to a dedicated OPS.M.10.1 slice
+        // (audit #16.b).
         var q = db.Logs.AsNoTracking();
         if (!currentUser.IsPlatformAdmin)
         {
-            var callerTenant = currentUser.TenantId
-                ?? throw new ForbiddenException("Notification log requires a tenant membership.");
+            if (currentUser.TenantId is not { } callerTenant)
+            {
+                throw new ForbiddenException("Notification log requires a tenant membership.");
+            }
+            if (!currentUser.HasTenantRole(callerTenant, "tenant_admin"))
+            {
+                throw new ForbiddenException(
+                    "Notification log requires tenant_admin role in the tenant.");
+            }
             q = q.Where(x => x.TenantId == callerTenant);
         }
         if (request.Status.HasValue)
