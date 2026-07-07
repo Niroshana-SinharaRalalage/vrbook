@@ -1,0 +1,6 @@
+{
+  "FirstName": "Alex",
+  "HasReturnTo": true,
+  "ReturnTo": "https://app.vrbook.example.com/properties/sunny-villa",
+  "PropertiesUrl": "https://app.vrbook.example.com/properties"
+}

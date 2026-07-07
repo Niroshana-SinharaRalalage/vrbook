@@ -1,0 +1,14 @@
+<p>Hi {{FirstName}},</p>
+
+<p>You're signed in to {{AppName}}.</p>
+
+{{#HasReturnTo}}
+<p>Continue where you left off: <a href="{{ReturnTo}}">{{ReturnTo}}</a></p>
+{{/HasReturnTo}}
+{{^HasReturnTo}}
+<p>Browse properties: <a href="{{PropertiesUrl}}">{{PropertiesUrl}}</a></p>
+{{/HasReturnTo}}
+
+<p>Reply to this email if you need help.</p>
+
+<p>— The {{AppName}} team</p>

@@ -32,8 +32,10 @@ public enum NotificationKind
     // of-user templates. Reserved at 40+ so the booking/owner enums stay stable.
     // TenantNotificationHandlers queues TenantWelcome on TenantMembershipCreated
     // when the row is the tenant's first tenant_admin membership; GuestWelcome
-    // fires on UserRegistered for non-tenant-admin signups.
+    // fires on UserRegistered for every signup (double-welcome for founding
+    // tenant admins is an accepted edge — see SLICE_4_PLAN_V2 §5-Q2).
     TenantWelcome = 40,
+    GuestWelcome = 41,
 }
 
 public enum NotificationStatus
