@@ -67,7 +67,7 @@ Load-bearing traps captured as reference memories; ignore at your own peril:
 ## Staging environment
 
 - **Resource group:** `rg-vrbook-staging`.
-- **Postgres:** `psql-vrbook-staging-v2.postgres.database.azure.com`, DB `postgres` (yes, not `vrbook`), user `vrbook_admin`. Public-network + IP-firewalled. Owner-Home-Office IP `174.104.204.213` + `AllowAzureServices` + CAE-Outbound `135.18.171.52` on the firewall.
+- **Postgres:** `psql-vrbook-staging-v2.postgres.database.azure.com`, DB `vrbook`, user `vrbook_admin`. Public-network + IP-firewalled. Owner-Home-Office IP `174.104.204.213` + `AllowAzureServices` + CAE-Outbound `135.18.171.52` on the firewall. `postgres` (the built-in system DB on the same server) is NOT the app DB; every connection string must set `Database=vrbook`. INFRA.1 shipped with `Database=postgres` by accident and cost a full session to unwind on 2026-07-08 — the Bicep `vrbook` DB child resource + `10-store-secrets.ps1` placeholder guard against a repeat.
 - **API:** `ca-vrbook-api-staging` Container App. Image tag = commit SHA.
 - **Web:** `ca-vrbook-web-staging` Container App. Image tag = commit SHA.
 - **ACR:** `crvrbookstaging.azurecr.io`.

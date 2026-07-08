@@ -75,6 +75,9 @@ param administratorLoginPassword string
 @description('Postgres major version.')
 param postgresVersion string = '16'
 
+@description('App database name. Must be `vrbook` — the default. Every connection string in KV must set `Database=vrbook`. A stray `Database=postgres` (the built-in system DB) will silently succeed but leaves the app writing to the wrong database — this happened during OPS.INFRA.1 and cost a full session to diagnose.')
+param databaseName string = 'vrbook'
+
 var serverName = empty(serverNameOverride) ? 'psql-vrbook-${env}' : serverNameOverride
 
 resource pg 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
@@ -135,6 +138,20 @@ resource requireSslConfig 'Microsoft.DBforPostgreSQL/flexibleServers/configurati
   }
 }
 
+// The `vrbook` application database. Bicep child-resource create is idempotent —
+// re-deploys against an existing DB no-op. This resource exists to make the
+// database name a first-class IaC declaration; without it the DB name was
+// implicit and drifted to `postgres` (the built-in default) during INFRA.1.
+resource appDb 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-08-01' = {
+  parent: pg
+  name: databaseName
+  properties: {
+    charset: 'UTF8'
+    collation: 'en_US.utf8'
+  }
+}
+
 output id string = pg.id
 output name string = pg.name
 output fqdn string = pg.properties.fullyQualifiedDomainName
+output databaseName string = appDb.name

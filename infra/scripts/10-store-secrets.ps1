@@ -65,9 +65,13 @@ Set-KvSecret -Name 'postgres-admin-password' `
     -Description 'PostgreSQL Flexible Server admin password. Provisioned by Bicep.'
 
 # Placeholder so Bicep deploy doesn't fail when looking for the secret ref.
-# Real connection strings get written by Bicep itself after the resources exist.
-Set-KvSecret -Name 'postgres-cs' -Value 'pending-bicep-deploy' `
-    -Description 'Postgres ConnectionString. Overwritten by Bicep post-deploy.'
+# The operator writes the real connection string post-Bicep-deploy via:
+#   az keyvault secret set --vault-name <kv> --name postgres-cs --value \
+#     "Host=<fqdn>;Database=vrbook;Username=vrbook_admin;Password=<pwd>;Ssl Mode=Require;Trust Server Certificate=true"
+# Database name MUST be `vrbook`. `postgres` (the built-in default) is not the app DB.
+# INFRA.1 shipped with `Database=postgres` by accident and cost a full session to unwind.
+Set-KvSecret -Name 'postgres-cs' -Value 'pending-bicep-deploy;Database=vrbook' `
+    -Description 'Postgres ConnectionString. Overwritten by operator post-Bicep-deploy. MUST include Database=vrbook.'
 Set-KvSecret -Name 'redis-cs' -Value 'pending-bicep-deploy' `
     -Description 'Redis ConnectionString. Overwritten by Bicep post-deploy.'
 Set-KvSecret -Name 'signalr-cs' -Value 'pending-bicep-deploy' `
