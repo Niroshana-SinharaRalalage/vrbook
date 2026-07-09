@@ -53,6 +53,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VrBook.Workers.Notification
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VrBook.Modules.Reports", "Modules\VrBook.Modules.Reports\VrBook.Modules.Reports.csproj", "{01932867-4AA1-4C20-9A79-B737785EBEAD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VrBook.Api.PactTests", "..\tests\VrBook.Api.PactTests\VrBook.Api.PactTests.csproj", "{7B618F9F-0DFF-4DE9-9CC7-65EC050EC5DB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -154,6 +156,10 @@ Global
 		{01932867-4AA1-4C20-9A79-B737785EBEAD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{01932867-4AA1-4C20-9A79-B737785EBEAD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{01932867-4AA1-4C20-9A79-B737785EBEAD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7B618F9F-0DFF-4DE9-9CC7-65EC050EC5DB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7B618F9F-0DFF-4DE9-9CC7-65EC050EC5DB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7B618F9F-0DFF-4DE9-9CC7-65EC050EC5DB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7B618F9F-0DFF-4DE9-9CC7-65EC050EC5DB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{9B4592B7-6CC8-45DD-BB8F-7FE95B825303} = {E4951728-CEE3-46DE-93A4-193D26ED33FD}

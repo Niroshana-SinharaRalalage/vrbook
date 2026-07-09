@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>VrBook.Api.PactTests</RootNamespace>
+    <IsTestProject>true</IsTestProject>
+    <Description>
+      Slice OPS.1 — provider-side pact verification of the SPA's consumer expectations
+      captured in contracts/pacts/vrbook-web-vrbook-api.json. Every fact carries
+      [Trait("Category","Pact")] so it doesn't collide with the existing
+      Category!=Integration filter. Runs on a PactVerifierFixture (subclass of
+      TwoTenantApiFixture) so pact + integration tests share the Postgres testcontainer
+      + all-module migrations + tenant seed.
+
+      OPS.1.1: project skeleton only (this commit). PactVerifierFixture +
+      PactProviderStateHandler + PactVerifierTests land in OPS.1.3.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\VrBook.Api\VrBook.Api.csproj" />
+    <ProjectReference Include="..\..\src\VrBook.Contracts\VrBook.Contracts.csproj" />
+    <ProjectReference Include="..\VrBook.Api.IntegrationTests\VrBook.Api.IntegrationTests.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Microsoft.NET.Test.Sdk + xunit + xunit.runner.visualstudio + FluentAssertions
+         are added centrally to every IsTestProject via src/Directory.Build.targets.
+         PactNet + WebApplicationFactory package refs land in OPS.1.3 alongside the
+         actual verifier fixture; keeping this file dep-lean during OPS.1.1 so a
+         package-restore failure can't wedge the skeleton commit. -->
+  </ItemGroup>
+
+</Project>
