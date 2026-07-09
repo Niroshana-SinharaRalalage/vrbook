@@ -63,6 +63,12 @@ test-results/
 .eslintcache
 .stylelintcache
 
+# ---- Slice OPS.2 Playwright storage state (persona sessions) ----
+# NEVER commit — session tokens for staging Entra CIAM personas. Regenerated
+# on every CI run + on every fresh local dev session via global-setup.ts.
+# See docs/OPS_2_PLAYWRIGHT_PLAN.md §4 risk #6 + web/tests/e2e/README.md.
+web/tests/e2e/.auth/
+
 # ---- Environment files ----
 .env
 .env.local
