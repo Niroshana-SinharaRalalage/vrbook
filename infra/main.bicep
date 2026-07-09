@@ -48,6 +48,16 @@ param migratorImage string = 'mcr.microsoft.com/azuredocs/containerapps-hellowor
 @description('Container image for the Next.js web frontend.')
 param webImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
+@description('Slice OPS.M.22.6 — declarative pre-M.22 platform admin backfill list. Each entry becomes an idempotent identity.users row via VrBook.Migrator.SeedPlatformAdminsBackfill on every deploy. Empty list = no-op. Staging default carries the owner; prod cutover adds team leads before first deploy.')
+param seedPlatformAdmins array = env == 'staging'
+  ? [
+      {
+        email: 'niroshanaks@gmail.com'
+        displayName: 'Niroshana'
+      }
+    ]
+  : []
+
 // ---------- Derived flags & sizing ----------
 var isProd = env == 'prod'
 var isStaging = env == 'staging'
@@ -494,6 +504,19 @@ module bookingCompletionJob 'modules/container-app-job.bicep' = {
 }
 
 // ---------- DB migrator (manual-trigger job) ----------
+// Slice OPS.M.22.6 — the migrator additionally carries the
+// Bootstrap:SeedPlatformAdmins backfill array as flattened env vars
+// (`Bootstrap__SeedPlatformAdmins__N__Email` / `_DisplayName`). Empty
+// list = zero extra env vars = zero backfill work at migrator start.
+// Every entry produces an idempotent identity.users insert (SeedPlatform
+// AdminsBackfill.RunAsync). Kept OUT of apiEnvVars so the api / workers
+// don't carry backfill config they don't consume.
+var backfillEnvVars = flatten(map(range(0, length(seedPlatformAdmins)), i => [
+  { name: 'Bootstrap__SeedPlatformAdmins__${i}__Email', value: seedPlatformAdmins[i].email }
+  { name: 'Bootstrap__SeedPlatformAdmins__${i}__DisplayName', value: seedPlatformAdmins[i].displayName }
+]))
+var migratorEnvVars = concat(apiEnvVars, backfillEnvVars)
+
 module migratorJob 'modules/container-app-job.bicep' = {
   name: 'migrator-job'
   params: {
@@ -509,7 +532,7 @@ module migratorJob 'modules/container-app-job.bicep' = {
     replicaTimeoutSeconds: 1800
     cpu: '0.5'
     memory: '1Gi'
-    envVars: apiEnvVars
+    envVars: migratorEnvVars
     secrets: apiSecrets
     keyVaultName: kv.outputs.name
   }

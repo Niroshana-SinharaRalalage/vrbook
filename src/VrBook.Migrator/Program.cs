@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
+using VrBook.Migrator;
 using VrBook.Modules.Booking;
 using VrBook.Modules.Catalog;
 using VrBook.Modules.Identity;
@@ -52,6 +53,10 @@ try
     builder.Services.AddLoyaltyDbContextForMigrator(builder.Configuration);
     builder.Services.AddNotificationsDbContextForMigrator(builder.Configuration);
 
+    // Slice OPS.M.22.6 — Bicep-declarative platform admin backfill.
+    // Registers as scoped so it can be resolved once the host is built.
+    builder.Services.AddScoped<SeedPlatformAdminsBackfill>();
+
     using var host = builder.Build();
 
     Log.Information("Migrator starting. Environment={Env}", host.Services.GetRequiredService<IHostEnvironment>().EnvironmentName);
@@ -70,6 +75,15 @@ try
         Log.Information("Migrating {DbContext}", name);
         await ctx.Database.MigrateAsync();
         Log.Information("Migrated {DbContext} ✓", name);
+    }
+
+    // Slice OPS.M.22.6 — declarative platform-admin backfill runs AFTER
+    // migrations so the M.22.2 pre_seeded_at column is guaranteed present.
+    // No-op when Bootstrap:SeedPlatformAdmins is empty; safe on every deploy.
+    using (var backfillScope = host.Services.CreateScope())
+    {
+        var backfill = backfillScope.ServiceProvider.GetRequiredService<SeedPlatformAdminsBackfill>();
+        await backfill.RunAsync();
     }
 
     Log.Information("Migrator complete.");
