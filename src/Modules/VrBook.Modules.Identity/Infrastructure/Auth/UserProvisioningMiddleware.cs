@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using VrBook.Domain.Common;
 using VrBook.Modules.Identity.Application.Users.Commands;
 using VrBook.Modules.Identity.Domain;
 using VrBook.Modules.Identity.Infrastructure.Persistence;
@@ -33,6 +34,16 @@ namespace VrBook.Modules.Identity.Infrastructure.Auth;
 /// </summary>
 public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<UserProvisioningMiddleware> logger)
 {
+    /// <summary>
+    /// Slice OPS.M.22 §6 — request paths where the admin-preseed gate is
+    /// bypassed. The SPA needs <c>/api/v1/me</c> + <c>/api/v1/me/tenants</c>
+    /// to render the rejection page (M.22.7) even for a token whose email
+    /// hasn't been operator-provisioned. Matches the M.12 Layer 2 pattern
+    /// in <c>AdminSocialIdpRejectionMiddleware</c>.
+    /// </summary>
+    private static readonly PathString MePath = new("/api/v1/me");
+    private static readonly PathString MeTenantsPath = new("/api/v1/me/tenants");
+
     public async Task InvokeAsync(HttpContext ctx, IMediator mediator, IdentityDbContext db, IConfiguration configuration)
     {
         if (ctx.User?.Identity?.IsAuthenticated == true)
@@ -113,6 +124,63 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<Use
                     var tenantIssuerHost = configuration["EntraExternalId:TenantIssuerHost"];
                     var provider = IdentityProviderClassifier.Classify(idpClaim, tenantIssuerHost);
 
+                    // Slice OPS.M.22 §3-§6 admin-preseed gate.
+                    // Read the CIAM flow marker (tfp first, acr fallback) and
+                    // compare against the configured admin flow name. If the
+                    // token came from AdminSignUpSignIn AND the email is
+                    // unknown (or matches a NON-pre-seeded row) → refuse with
+                    // AdminAccountNotProvisionedException. The whitelist
+                    // (/api/v1/me + /api/v1/me/tenants) skips the throw so
+                    // the SPA's rejection page (M.22.7) can render — else the
+                    // SPA hits a 401 on its very first call and can't parse
+                    // the problem-type payload.
+                    //
+                    // Guest-flow tokens AND legacy tokens with no flow marker
+                    // fall through to the unchanged Branch 3 lazy-provision
+                    // path — self-serve guest signup is unaffected. Owner-
+                    // locked in plan §5-Q1: admins pre-seeded, guests
+                    // self-serve.
+                    var adminFlowName = configuration["EntraExternalId:AdminFlowName"];
+                    var tokenFlow = ctx.User.FindFirstValue(HttpCurrentUser.EntraFlowTfpClaim)
+                                    ?? ctx.User.FindFirstValue(HttpCurrentUser.EntraFlowAcrClaim);
+                    var isAdminFlow = !string.IsNullOrWhiteSpace(adminFlowName)
+                                      && !string.IsNullOrWhiteSpace(tokenFlow)
+                                      && string.Equals(tokenFlow, adminFlowName, StringComparison.OrdinalIgnoreCase);
+
+                    if (isAdminFlow)
+                    {
+                        var normalizedEmail = email.Trim().ToLowerInvariant();
+                        var preSeededHit = await db.Users
+                            .Where(u => EF.Functions.ILike(((string)(object)u.Email), normalizedEmail)
+                                        && u.PreSeededAt != null)
+                            .Select(u => u.Id)
+                            .FirstOrDefaultAsync(ctx.RequestAborted);
+
+                        if (preSeededHit == Guid.Empty)
+                        {
+                            // Path whitelist: /me + /me/tenants stay reachable
+                            // so the SPA rejection page can render (M.22.7).
+                            // For every other admin path, throw 401.
+                            var reqPath = ctx.Request.Path;
+                            var whitelisted = reqPath.StartsWithSegments(MeTenantsPath, StringComparison.OrdinalIgnoreCase)
+                                              || reqPath.Equals(MePath, StringComparison.OrdinalIgnoreCase);
+                            if (!whitelisted)
+                            {
+                                logger.LogWarning(
+                                    "OPS.M.22 admin-preseed gate fired. Email={Email} Oid={Oid} Flow={Flow} Path={Path}",
+                                    email, oid, tokenFlow, reqPath.Value);
+                                throw new AdminAccountNotProvisionedException(email, oid);
+                            }
+
+                            // Whitelisted path — do NOT provision, do NOT
+                            // stamp AppUserId. Downstream reads ICurrentUser
+                            // as anonymous-shaped so /me can shape a response
+                            // the SPA can interpret (M.22.7 renders on it).
+                            await next(ctx);
+                            return;
+                        }
+                    }
+
                     var userId = await mediator.Send(new ProvisionOrLinkUserCommand(
                         Provider: provider,
                         ExternalId: oid,
@@ -191,6 +259,15 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<Use
                                 HttpCurrentUser.TenantIdClaimType, activeTenantId.Value.ToString()));
                         }
                     }
+                }
+                catch (AdminAccountNotProvisionedException)
+                {
+                    // Slice OPS.M.22 §6 — must propagate to the ProblemDetails
+                    // mapper. Swallowing it here (as the generic catch does
+                    // for defensiveness) would drop the 401 shape and let the
+                    // request continue as anonymous, breaking the admin-gate
+                    // invariant.
+                    throw;
                 }
                 catch (Exception ex)
                 {

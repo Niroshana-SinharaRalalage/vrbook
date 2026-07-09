@@ -151,13 +151,25 @@ public sealed class OpsM22_AdminPreSeedShapeTests
         var text = File.ReadAllText(path);
         text.Should().Contain("EntraFlow",
             because: "M.22.4 gates lazy provisioning on the flow marker. If the middleware " +
-                     "stops reading EntraFlow, it will treat admin-flow tokens the same as " +
+                     "stops reading EntraFlow (via HttpCurrentUser.EntraFlowTfpClaim / " +
+                     "EntraFlowAcrClaim), it will treat admin-flow tokens the same as " +
                      "guest-flow tokens and lazy-provision unknown-email admin sign-ins.");
-        text.Should().Contain("pre_seeded_at",
-            because: "M.22.4 links the incoming oid to the pre-seeded row IFF pre_seeded_at " +
-                     "is not null (email-hit path). If the middleware stops reading the " +
-                     "column, admin-flow email-hit paths silently link any Entra token to " +
-                     "any user row — a real auth-boundary regression.");
+        text.Should().Contain("PreSeededAt",
+            because: "M.22.4 links the incoming oid to the pre-seeded row IFF PreSeededAt " +
+                     "is not null (email-hit path — the User.PreSeededAt property backed by " +
+                     "the pre_seeded_at column). If the middleware stops reading the property, " +
+                     "admin-flow email-hit paths silently link any Entra token to any user " +
+                     "row — a real auth-boundary regression.");
+        text.Should().Contain("AdminAccountNotProvisionedException",
+            because: "M.22.4 refuses admin-flow tokens on unknown email with this specific " +
+                     "exception. A refactor that swallows the throw or replaces it with a " +
+                     "generic exception breaks the 401 shape the SPA rejection page (M.22.7) " +
+                     "switches on.");
+        text.Should().Contain("AdminFlowName",
+            because: "The admin-flow marker is compared against the configured " +
+                     "EntraExternalId:AdminFlowName. If the middleware stops reading the " +
+                     "config, every token is treated as guest-flow and the admin-gate never " +
+                     "fires.");
     }
 
     /// <summary>
