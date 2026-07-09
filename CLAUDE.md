@@ -2,6 +2,26 @@
 
 Repo-scoped context so a fresh session doesn't have to re-derive everything. Not a design doc — a working briefing. Full design lives in [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) + [`docs/adr/`](docs/adr/) + `OPS_M_*_PLAN.md` / `OPS_M_*_CLOSE_OUT.md`.
 
+## Project overview
+
+**Product**: VrBook — direct-booking vacation rental platform. Guests search + book properties; property owners (tenants) manage listings, confirm/reject bookings, chat with guests, sync iCal feeds, run reports; platform admin manages tenants. Multi-tenant SaaS on Azure. Full product spec at [`docs/BookingApp_Proposal.md`](docs/BookingApp_Proposal.md).
+
+**Where we are (2026-07-09)**: 🎉 Phase 1 (product) complete + Phase 1.5 (multi-tenancy + Entra auth) complete. Every slice ✅ on staging with CI green. Launch-hardening in progress: OPS.1 shape-complete (Pact), OPS.2 in progress (Playwright). Currently ~17 of ~23 tracked slices shipped.
+
+**Path to production** (per Option A sequencing locked 2026-06-27 in MASTER_PLAN §2):
+
+| Phase | Slices | State | What "done" means |
+|---|---|---|---|
+| **Phase 1** — product | Slices 0–7 | ✅ | Booking lifecycle + notifications + reviews/loyalty + chat/pricing + reports/realtime |
+| **Phase 1.5** — multi-tenancy | OPS.M.0–22 + INFRA.1 | ✅ | Tenant aggregate + Entra External ID + admin/social auth split + admin pre-seed + Stripe Connect + RLS |
+| **Phase 1 launch-ready** | OPS.1–8 (7 slices) | 🚧 in progress | Pact + Playwright + k6 load + ZAP + Trivy + Stripe key rotation + DKIM. **After OPS.8: prod launch is unblocked.** |
+| **Phase 3** — hotel rooms | Slices 8+9 | ⏭ post-launch | Rooms-within-property + multi-unit cart (one guest books N rooms in one Stripe checkout) |
+| **Phase 4** — OTA bundling | Slice 10 | ⏭ post-launch | Cross-tenant itineraries (Stay + Flight + Car + Activity) with FX + per-leg cancellation |
+
+See [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) §1 for the row-per-slice table (with commit ranges + close-out doc links) and §3 for the full "what done means" per phase.
+
+**Environment**: staging live at `https://ca-vrbook-web-staging.icydesert-abf3fa4e.eastus2.azurecontainerapps.io` (web) + `ca-vrbook-api-staging.icydesert-abf3fa4e.eastus2.azurecontainerapps.io` (API). Prod not deployed yet — cutover blocked on OPS.1–8. All CI green on develop.
+
 ## Owner-locked policies (invariant — do NOT re-derive, do NOT re-ask)
 
 Policies the owner has locked. Assume they hold; don't propose alternatives unless the owner explicitly reopens them.
