@@ -85,6 +85,29 @@ describe('<AdminAuthGuard />', () => {
     expect(screen.queryByTestId('admin-content')).not.toBeInTheDocument();
   });
 
+  it("redirects admin-not-provisioned to /auth/admin-not-provisioned with the sign-in email", async () => {
+    useAuthMock.mockReturnValue({ isAuthenticated: true, isBusy: false });
+    useAdminGuardMock.mockReturnValue({
+      status: 'admin-not-provisioned',
+      signInEmail: 'new-admin@example.com',
+    });
+    const { AdminAuthGuard } = await import('./AdminAuthGuard');
+    render(<AdminAuthGuard><div data-testid="admin-content">forbidden</div></AdminAuthGuard>);
+    expect(replaceMock).toHaveBeenCalledWith(
+      `/auth/admin-not-provisioned?email=${encodeURIComponent('new-admin@example.com')}`,
+    );
+    expect(screen.queryByTestId('admin-content')).not.toBeInTheDocument();
+  });
+
+  it("redirects admin-not-provisioned to /auth/admin-not-provisioned WITHOUT query when the email is unavailable", async () => {
+    useAuthMock.mockReturnValue({ isAuthenticated: true, isBusy: false });
+    useAdminGuardMock.mockReturnValue({ status: 'admin-not-provisioned' });
+    const { AdminAuthGuard } = await import('./AdminAuthGuard');
+    render(<AdminAuthGuard><div data-testid="admin-content">forbidden</div></AdminAuthGuard>);
+    expect(replaceMock).toHaveBeenCalledWith('/auth/admin-not-provisioned');
+    expect(screen.queryByTestId('admin-content')).not.toBeInTheDocument();
+  });
+
   it('waits for guard status = loading rather than rendering children', async () => {
     useAuthMock.mockReturnValue({ isAuthenticated: true, isBusy: false });
     useAdminGuardMock.mockReturnValue({ status: 'loading' });

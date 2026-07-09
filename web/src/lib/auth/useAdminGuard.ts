@@ -12,12 +12,15 @@ export type AdminGuardStatus =
   | 'loading'
   | 'unauthenticated'
   | 'ok'
-  | 'social-admin-rejected';
+  | 'social-admin-rejected'
+  | 'admin-not-provisioned';
 
 export interface AdminGuardResult {
   readonly status: AdminGuardStatus;
   /** Non-null when status='social-admin-rejected'; identifies which provider so the error page can name it. */
   readonly identityProvider?: string;
+  /** Non-null when status='admin-not-provisioned'; the token's email so the rejection page can help the operator find the right seed hint. */
+  readonly signInEmail?: string;
 }
 
 /**
@@ -63,10 +66,26 @@ export const useAdminGuard = (): AdminGuardResult => {
   if (meQuery.isPending || tenantsQuery.isPending) {
     return { status: 'loading' };
   }
+  // Slice OPS.M.22.7 — admin-not-provisioned detection.
+  // The M.22.4 middleware whitelists /me + /me/tenants (so the SPA can render
+  // this rejection page), but GetMeHandler still throws Forbidden when the
+  // token has no matching identity.users row. That specific 403 on /me for an
+  // authenticated user with a valid token = an unprovisioned admin — no other
+  // code path produces a 403 on /me. See docs/OPS_M_22_ADMIN_PRESEED_PLAN.md §6.
+  const meStatus = (meQuery.error as { status?: number } | undefined)?.status;
+  if (meStatus === 403 || meStatus === 401) {
+    const claimsForEmail = (account.idTokenClaims ?? {}) as Record<string, unknown>;
+    const emailFromClaim =
+      (typeof claimsForEmail.email === 'string' ? claimsForEmail.email : undefined) ??
+      (typeof claimsForEmail.preferred_username === 'string' ? claimsForEmail.preferred_username : undefined) ??
+      undefined;
+    return { status: 'admin-not-provisioned', signInEmail: emailFromClaim };
+  }
+
   if (meQuery.isError || tenantsQuery.isError || !meQuery.data || !tenantsQuery.data) {
-    // Fail-open: we couldn't fetch the whitelisted /me endpoints, so we don't
-    // have evidence of the reject condition. Let downstream API calls surface
-    // the error via the standard `admin/error.tsx` branch.
+    // Fail-open: we couldn't fetch the whitelisted /me endpoints for a
+    // different reason (transient 5xx, network). Downstream API calls will
+    // surface the error via the standard `admin/error.tsx` branch.
     return { status: 'ok' };
   }
 

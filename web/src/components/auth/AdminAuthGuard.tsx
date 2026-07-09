@@ -38,6 +38,14 @@ export const AdminAuthGuard = ({ children }: { readonly children: ReactNode }) =
         ? `?provider=${encodeURIComponent(guard.identityProvider)}`
         : '';
       router.replace(`/auth/admin-social-idp-rejected${q}`);
+      return;
+    }
+    // Slice OPS.M.22.7 — admin-not-provisioned rejection route.
+    if (guard.status === 'admin-not-provisioned') {
+      const q = guard.signInEmail
+        ? `?email=${encodeURIComponent(guard.signInEmail)}`
+        : '';
+      router.replace(`/auth/admin-not-provisioned${q}`);
     }
   }, [
     isAuthenticated,
@@ -46,9 +54,15 @@ export const AdminAuthGuard = ({ children }: { readonly children: ReactNode }) =
     router,
     guard.status,
     guard.identityProvider,
+    guard.signInEmail,
   ]);
 
-  if (!isAuthenticated || guard.status === 'social-admin-rejected' || guard.status === 'loading') {
+  if (
+    !isAuthenticated
+    || guard.status === 'social-admin-rejected'
+    || guard.status === 'admin-not-provisioned'
+    || guard.status === 'loading'
+  ) {
     return (
       <main className="flex min-h-dvh items-center justify-center">
         <div className="text-center text-sm text-muted-foreground">
