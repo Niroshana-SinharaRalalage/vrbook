@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { SiteHeaderAuth } from './SiteHeaderAuth';
 import { SiteHeaderNav } from './SiteHeaderNav';
+import { SiteHeaderRoleBadge } from './SiteHeaderRoleBadge';
 
 /**
  * Server-rendered header shell. The nav row is delegated to
@@ -9,6 +10,11 @@ import { SiteHeaderNav } from './SiteHeaderNav';
  * an `Admin` link on the signed-in user's operator role via
  * `useMe()`. The rest of the header — branding + sign-in/out
  * button — stays in the server tree to minimize the JS bundle.
+ *
+ * <p>{@link SiteHeaderRoleBadge} sits between the nav and the sign-out
+ * button so a PlatformAdmin / TenantAdmin session is visible at a
+ * glance without clicking into the admin surface. Renders nothing for
+ * anonymous or regular-guest sessions.</p>
  */
 export const SiteHeader = () => {
   return (
@@ -19,8 +25,9 @@ export const SiteHeader = () => {
           <span className="text-brand-maroon-700 dark:text-brand-orange-500">VrBook</span>
         </Link>
 
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4">
           <SiteHeaderNav />
+          <SiteHeaderRoleBadge />
           <SiteHeaderAuth />
         </div>
       </div>
