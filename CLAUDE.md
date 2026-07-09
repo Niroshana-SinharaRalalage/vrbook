@@ -20,9 +20,13 @@ Policies the owner has locked. Assume they hold; don't propose alternatives unle
 - **Infra:** Bicep, Azure Container Apps + Container App Jobs, ACR, Key Vault, App Insights + Log Analytics, Postgres Flexible Server, ACS Email. See `infra/main.bicep`.
 - **CI/CD:** GitHub Actions. `cd-staging-api.yml` (backend + infra + workers + migrator + smoke) and `cd-staging-web.yml` (Next.js + Docker + smoke). Both deploy to Azure Container Apps in `rg-vrbook-staging`.
 
-## Phase 1 slice state (as of 2026-07-06)
+## Phase 1 slice state (as of 2026-07-09)
 
-All slices shipped to staging; MASTER_PLAN is the authoritative index. Key recent close-outs:
+🎉 **Phase 1 complete** (Slices 0–7 all ✅ on staging). Phase 1.5 shipped through OPS.M.22. MASTER_PLAN is the authoritative index; key recent close-outs below.
+
+**2026-07-09 milestone**: Slices 5 + 6 + 7 all confirmed ✅ via gap analysis — every deliverable in each slice's plan had already been delivered incrementally through the OPS.M.* stack (mostly M.13.6, M.16, Slice 4 V2, and the Slice 6/7 commits themselves). Phase 1 finished quietly during Phase 1.5 execution. Follow-ups filed as **Slice OPS.M.23 candidates**: ETag on `/threads`, `ThreadByBookingFilterTests`, 4 report handler integration tests, `NegotiateEndpointTests`, `useTentativeBookingPush.test.ts`. None block core functionality; all are polish/coverage.
+
+Next slot: **Slice OPS.1 — Pact contract tests** (first of the 7 launch-hardening slices).
 
 - **OPS.M.12** — Social IdPs (Google + Microsoft consumer + Facebook + Apple) via `GuestSignUpSignIn` + admin-vs-social surface split. Owner-locked policy: admins Entra-local only. Two-layer defence (REFUSE-AT-PROVISIONING + middleware belt). See [`docs/OPS_M_12_CLOSE_OUT.md`](docs/OPS_M_12_CLOSE_OUT.md) + [`docs/runbooks/social_idp_setup.md`](docs/runbooks/social_idp_setup.md).
 - **OPS.INFRA.1** — Staging Postgres public-access rebuild (V1 → V2 blue/green). V2 = `psql-vrbook-staging-v2.postgres.database.azure.com`. See [`docs/OPS_INFRA_1_STAGING_POSTGRES_PUBLIC_REBUILD_PLAN.md`](docs/OPS_INFRA_1_STAGING_POSTGRES_PUBLIC_REBUILD_PLAN.md).
