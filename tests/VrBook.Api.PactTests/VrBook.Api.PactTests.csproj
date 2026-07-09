@@ -24,10 +24,11 @@
 
   <ItemGroup>
     <!-- Microsoft.NET.Test.Sdk + xunit + xunit.runner.visualstudio + FluentAssertions
-         are added centrally to every IsTestProject via src/Directory.Build.targets.
-         PactNet + WebApplicationFactory package refs land in OPS.1.3 alongside the
-         actual verifier fixture; keeping this file dep-lean during OPS.1.1 so a
-         package-restore failure can't wedge the skeleton commit. -->
+         are added centrally to every IsTestProject via src/Directory.Build.targets. -->
+    <PackageReference Include="PactNet" />
+    <!-- WebApplicationFactory ships with the .NET SDK; explicit ref for clarity
+         because IntegrationTests already has it and this project doesn't inherit. -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
   </ItemGroup>
 
 </Project>

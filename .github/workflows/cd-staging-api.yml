@@ -110,7 +110,7 @@ jobs:
           dotnet test ${{ env.SOLUTION }} \
             --no-build \
             --configuration Release \
-            --filter "Category!=Integration" \
+            --filter "Category!=Integration&Category!=Pact" \
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults \
             --logger "trx;LogFileName=unit.trx"
@@ -125,6 +125,22 @@ jobs:
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults \
             --logger "trx;LogFileName=integration.trx"
+
+      # Slice OPS.1.3 — provider-side pact verification. Runs the
+      # PactVerifierFixture (subclass of TwoTenantApiFixture — same
+      # Postgres testcontainer surface) + replays the interactions in
+      # contracts/pacts/vrbook-web-vrbook-api.json. `continue-on-error:
+      # true` per plan §5-Q1 for the OPS.1.3 → OPS.1.6 informational
+      # window; OPS.1.7 flips it to blocking.
+      - name: Pact provider verification
+        continue-on-error: true
+        run: |
+          dotnet test ${{ env.SOLUTION }} \
+            --no-build \
+            --configuration Release \
+            --filter "Category=Pact" \
+            --results-directory ./TestResults \
+            --logger "trx;LogFileName=pact.trx"
 
       - name: Upload test results
         if: always()

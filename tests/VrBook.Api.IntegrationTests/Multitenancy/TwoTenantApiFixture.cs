@@ -60,7 +60,12 @@ namespace VrBook.Api.IntegrationTests.Multitenancy;
 /// crosses tenant boundaries — the M.9 policies would otherwise reject the
 /// cross-tenant INSERTs.</para>
 /// </summary>
-public sealed class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
+// Slice OPS.1.3 — unsealed so PactVerifierFixture in
+// tests/VrBook.Api.PactTests/ can subclass, reusing the Postgres
+// testcontainer + all-module migrations + persona seeds. Base class stays
+// authoritative for the seed shape; subclass overrides ConfigureWebHost
+// only to add the pact-states endpoint.
+public class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
 {
     /// <summary>Deterministic so xUnit failure messages are grep-able.</summary>
     public static readonly Guid TenantA = Guid.Parse("aaaaaaaa-1010-0000-0000-000000000001");
