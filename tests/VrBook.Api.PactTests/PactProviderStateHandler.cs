@@ -70,11 +70,23 @@ public sealed class PactProviderStateHandler
         // the "a guest can search properties" expectation.
         _dispatch["a guest can search properties"] = () => Task.CompletedTask;
 
-        // OPS.1.4 will register states #2-#7 (Tentative booking B1,
-        // Confirmed booking B1 strict/moderate cancellation policies,
-        // conflicting booking on date range).
-        // OPS.1.5 will register states #8-#10 (SLA worker fired, sync
-        // conflict SC1, guest G1 is Silver tier).
+        // OPS.1.4 state #2 — no seed needed. Base fixture's TenantA
+        // property P1 is available for any future date range in a fresh
+        // testcontainer (no bookings pre-exist). The pact interaction just
+        // needs the property to exist.
+        _dispatch["tenant A property P1 is available for D1-D2"] = () => Task.CompletedTask;
+
+        // OPS.1.4 state #7 — the pact interaction expects a 409 conflict
+        // response, so the state seeds a booking that would collide with
+        // the pact's requested date range. OPS.1.5 will land the actual
+        // insert once the verifier is unskipped; for now the state is
+        // registered as a no-op so the dispatch table succeeds.
+        _dispatch["date range D1-D2 on property P1 is already booked"] = () => Task.CompletedTask;
+
+        // OPS.1.5 will register states #3-#6 (Tentative booking B1,
+        // Confirmed booking B1 strict/moderate cancellation policies) +
+        // #8-#10 (SLA worker fired, sync conflict SC1, guest G1 is
+        // Silver tier) with actual DB seeds.
     }
 
     /// <summary>

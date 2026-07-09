@@ -69,10 +69,20 @@ describe('flow-0 — infrastructure sanity', () => {
 });
 
 // -----------------------------------------------------------------------------
-// OPS.1.4 will add: flow-1 (booking end-to-end), flow-4 (cancellation refund),
-//                    flow-5 (concurrent booking).
-// OPS.1.5 will add: flow-2 (SLA auto-confirm tail), flow-3 (iCal conflict tail),
-//                    flow-7 (loyalty tier promotion tail).
+// OPS.1.4 outcome: 2 additional interactions (flow-1 hold + flow-5 409 conflict)
+// were drafted in this commit range but reverted because PactV3's mock server
+// hits "Worker exited unexpectedly" when a single provider const is reused
+// across multiple `executeTest` calls in vitest's node pool — even with
+// singleFork: true. Root cause traces to Pact's Rust core cleanup between
+// runs. OPS.1.5 will fix by giving each interaction its own PactV3 instance
+// or migrating to the newer PactV4 API (which decouples MockServer lifecycle
+// from executeTest). The state dispatch table registrations for #2 + #7 stay
+// so the provider side is ahead of the consumer side; enrichment lands as
+// soon as the pact-writer wiring settles.
+//
+// OPS.1.5 will add: flow-1 hold + place + confirm + flow-4 cancellation refund
+//                    + flow-5 (201 + 409) + flow-2 (SLA tail) + flow-3 (iCal
+//                    conflict tail) + flow-7 (loyalty tier promotion tail).
 // OPS.1.6 will add: flow-6 carve-out drift-detector (skipped test pointing at
 //                    ADR-0018).
 // -----------------------------------------------------------------------------
