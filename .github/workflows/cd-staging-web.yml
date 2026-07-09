@@ -62,6 +62,20 @@ jobs:
       - name: Test (Vitest)
         run: npm test -- --run --passWithNoTests
 
+      # Slice OPS.1.2 — pact consumer + drift gate. Regenerates
+      # ../contracts/pacts/vrbook-web-vrbook-api.json; `git diff
+      # --exit-code` fails if a dev changed a call shape but forgot
+      # to re-commit the file. See docs/runbooks/pact-contract-drift.md
+      # (lands OPS.1.7) for triage.
+      - name: Pact consumer + drift gate
+        run: |
+          npm run test:pact
+          cd ..
+          if ! git diff --exit-code contracts/pacts/; then
+            echo "::error::Pact drift — the SPA consumer expectations changed but contracts/pacts/vrbook-web-vrbook-api.json was not committed. Run 'cd web && npm run test:pact' locally, then 'git add contracts/pacts/' and re-push."
+            exit 1
+          fi
+
       - name: Build
         run: npm run build
 

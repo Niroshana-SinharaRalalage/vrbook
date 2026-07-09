@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:pact": "vitest run --config tests/pacts/vitest.pact.config.ts",
     "gen:api": "openapi --input ../contracts/openapi.yaml --output ./src/lib/api/generated --client fetch --useOptions --useUnionTypes"
   },
   "dependencies": {
@@ -36,6 +37,7 @@
     "zod": "3.23.8"
   },
   "devDependencies": {
+    "@pact-foundation/pact": "13.2.0",
     "@playwright/test": "1.49.0",
     "@testing-library/jest-dom": "6.6.3",
     "@testing-library/react": "16.0.1",
