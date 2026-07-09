@@ -75,15 +75,29 @@ public sealed class OpsM22_AdminPreSeedShapeTests
     [Fact]
     public void AdminAccountNotProvisionedException_type_exists_and_maps_to_401()
     {
-        var identityAssembly = typeof(UserProvisioningMiddleware).Assembly;
-        var exceptionType = identityAssembly.GetType(
-            "VrBook.Modules.Identity.Infrastructure.Auth.AdminAccountNotProvisionedException")
-            ?? typeof(UserProvisioningMiddleware).Assembly.GetType(
-                "VrBook.Modules.Identity.Application.Users.Commands.AdminAccountNotProvisionedException");
+        // The exception lives in the Domain assembly alongside its M.12
+        // sibling AdminSocialIdpRejectedException (per the M.12 pattern —
+        // both are domain-signal exceptions the API middleware layer maps
+        // to specific status codes). Namespace-flexible probe searches all
+        // three candidate namespaces so an intra-project relocation still
+        // satisfies the invariant.
+        var candidates = new[]
+        {
+            typeof(VrBook.Domain.Common.DomainException).Assembly,
+            typeof(UserProvisioningMiddleware).Assembly,
+        };
+        var exceptionType = candidates
+            .SelectMany(a => a.GetTypes())
+            .FirstOrDefault(t => t.Name == "AdminAccountNotProvisionedException");
         exceptionType.Should().NotBeNull(
             because: "M.22.4 middleware throws this on unknown-email + admin-flow tokens; " +
                      "it must exist as a named type so the ProblemDetails mapper can route it " +
                      "to 401 with problem type admin_account_not_provisioned per plan §3/§6.");
+        exceptionType!.IsAbstract.Should().BeFalse();
+        exceptionType.IsSealed.Should().BeTrue(
+            because: "domain-signal exceptions are sealed — a sub-type would be caught by " +
+                     "the specific mapper AND the generic Exception fallback, doubling the " +
+                     "response body.");
 
         var problemTypesAssembly = typeof(VrBook.Contracts.Common.ProblemTypes).Assembly;
         var problemTypesType = problemTypesAssembly.GetType("VrBook.Contracts.Common.ProblemTypes");

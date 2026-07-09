@@ -95,3 +95,30 @@ public sealed class AdminSocialIdpRejectedException : ForbiddenException
     public bool IsPlatformAdmin { get; }
     public IReadOnlyCollection<Guid> AttemptedTenantIds { get; }
 }
+
+/// <summary>
+/// Slice OPS.M.22 — thrown by <c>UserProvisioningMiddleware</c> when a valid
+/// Entra admin-flow token arrives for an email that has no pre-seeded
+/// <c>identity.users</c> row. Token is valid; the account just hasn't been
+/// provisioned by an operator. Maps to <b>401</b> (not 403) with
+/// <c>ProblemTypes.AdminAccountNotProvisioned</c> — SPA
+/// <c>/auth/admin-not-provisioned</c> page switches on the problem type URI
+/// and offers a sign-out CTA per plan §7.
+/// </summary>
+public sealed class AdminAccountNotProvisionedException : DomainException
+{
+    public AdminAccountNotProvisionedException(string email, string entraOid)
+        : base($"Admin account not provisioned. Email='{email}', EntraOid='{entraOid}'. " +
+               "The operator must pre-seed this admin via POST /api/v1/admin/platform/users/seed " +
+               "before the account can sign in.")
+    {
+        Email = email;
+        EntraOid = entraOid;
+    }
+
+    /// <summary>Fixed rule string constant. Matches the ProblemDetails Extensions key.</summary>
+    public const string Rule = "admin_account_not_provisioned";
+
+    public string Email { get; }
+    public string EntraOid { get; }
+}

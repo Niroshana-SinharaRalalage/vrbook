@@ -64,6 +64,29 @@ public static class ProblemDetailsConfig
                 Detail = ex.Message,
             });
 
+            // Slice OPS.M.22 — specific mapping for the admin-preseed gate.
+            // 401 (NOT 403). Token is valid; the account just isn't
+            // provisioned. Registered here (not after the generic Domain
+            // mapper) so Hellang matches this before falling through.
+            // The SPA at /auth/admin-not-provisioned switches on this
+            // Type URI + Rule extension.
+            opts.Map<AdminAccountNotProvisionedException>(ex => new ProblemDetails
+            {
+                Type = ProblemTypes.AdminAccountNotProvisioned,
+                Title = "Admin account not provisioned.",
+                Status = StatusCodes.Status401Unauthorized,
+                Detail = "Your account hasn't been provisioned yet. Contact your operator " +
+                         "with the email address you're signing in with; once seeded, sign in again.",
+                Extensions =
+                {
+                    ["rule"] = AdminAccountNotProvisionedException.Rule,
+                    // Email + EntraOid deliberately omitted from response body
+                    // — audit-log only. The ILogger carries them for Log
+                    // Analytics; leaking them to an unauthenticated response
+                    // surface would help account-enumeration attacks.
+                },
+            });
+
             opts.Map<BusinessRuleViolationException>(ex => new ProblemDetails
             {
                 Type = ProblemTypes.Validation,

@@ -24,4 +24,13 @@ public static class ProblemTypes
     /// (IsPlatformAdmin or any tenant membership) hits this shape.
     /// </summary>
     public const string AdminSocialIdpRejected = $"{Base}/admin-social-idp-rejected";
+
+    /// <summary>
+    /// Slice OPS.M.22 — surface for the middleware admin-preseed gate. A
+    /// valid Entra admin-flow token arrives for an email with no
+    /// operator-provisioned <c>identity.users</c> row → the middleware
+    /// refuses with this shape. SPA <c>/auth/admin-not-provisioned</c>
+    /// switches on this URI.
+    /// </summary>
+    public const string AdminAccountNotProvisioned = $"{Base}/admin-account-not-provisioned";
 }

@@ -27,6 +27,18 @@ public sealed class User : AggregateRoot
     public bool EmailVerified { get; private set; }
     public DateTimeOffset? LastLoginAt { get; private set; }
 
+    /// <summary>
+    /// Slice OPS.M.22 — non-null when this row was created via
+    /// <c>SeedAdminUserCommand</c> (operator pre-seeded an admin BEFORE the
+    /// admin's first sign-in). Null for guest rows (lazy-provisioned by
+    /// <c>UserProvisioningMiddleware</c> Branch 3) and for admin rows that
+    /// have completed the first-sign-in link. Kept as an audit trail after
+    /// linking — a truthy value means "operator vouched, not random signup".
+    /// The admin-gate middleware reads this on the email-hit path to
+    /// authorize the identity link.
+    /// </summary>
+    public DateTimeOffset? PreSeededAt { get; private set; }
+
     private User() { }   // EF Core
 
     /// <summary>
@@ -65,6 +77,60 @@ public sealed class User : AggregateRoot
             user.Raise(new UserEmailVerified(user.Id, email.Value));
         }
         return user;
+    }
+
+    /// <summary>
+    /// Slice OPS.M.22 — operator pre-seeds an admin's <c>identity.users</c>
+    /// row BEFORE the admin's first sign-in. Stamps <see cref="PreSeededAt"/>
+    /// so <c>UserProvisioningMiddleware</c> can distinguish this row
+    /// from a lazy-provisioned guest on the email-hit path. The row starts
+    /// without any linked <c>user_identities</c>; the first admin-flow
+    /// sign-in adds the (provider='entra', external_id=oid) mapping.
+    ///
+    /// <para><b>Does NOT raise <c>UserEmailVerified</c></b> — the operator
+    /// vouches by pre-seeding; formal email verification happens on first
+    /// sign-in when Entra returns the token with <c>email_verified=true</c>.</para>
+    ///
+    /// <para>Global <c>is_platform_admin</c> and per-tenant memberships are
+    /// applied by <c>SeedAdminUserHandler</c> after this factory constructs
+    /// the aggregate, so the seed transaction can atomically create the
+    /// row + platform-admin flag + memberships in one write.</para>
+    /// </summary>
+    public static User PreSeedForOperator(
+        Email email,
+        string displayName,
+        DateTimeOffset seededAt)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
+
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = email,
+            DisplayName = displayName.Trim(),
+            EmailVerified = false,
+            PreSeededAt = seededAt,
+        };
+
+        user.Raise(new UserRegistered(user.Id, email.Value, user.DisplayName));
+        return user;
+    }
+
+    /// <summary>
+    /// Slice OPS.M.22 — called by <c>UserProvisioningMiddleware</c>
+    /// on the admin-flow email-hit path to complete the pre-seed link:
+    /// stamps <see cref="EmailVerified"/> true (Entra verified the address
+    /// via OTP or password), leaves <see cref="PreSeededAt"/> as-is
+    /// (audit trail). Idempotent — safe to call on every subsequent
+    /// sign-in.
+    /// </summary>
+    public void CompletePreSeedLink()
+    {
+        if (!EmailVerified)
+        {
+            EmailVerified = true;
+            Raise(new UserEmailVerified(Id, Email.Value));
+        }
     }
 
     public void UpdateProfile(string displayName, PhoneNumber phone)

@@ -131,3 +131,41 @@ public sealed record MyTenantMembershipDto(
     string Status,
     string Role,
     bool IsPrimary);
+
+/// <summary>
+/// Slice OPS.M.22 §3 — request body for <c>POST /api/v1/admin/platform/users/seed</c>.
+/// PlatformAdmin-only. Pre-creates an <c>identity.users</c> row with
+/// <c>pre_seeded_at</c> set so the admin's first sign-in via
+/// <c>AdminSignUpSignIn</c> flow links the arriving Entra oid to this shell row.
+///
+/// <para>Idempotent on normalized email: repeat requests for the same email
+/// return the existing row's id + honour the memberships merge; a
+/// request whose email collides with an ALREADY-linked (non-pre-seeded)
+/// row returns 409.</para>
+/// </summary>
+public sealed record SeedAdminUserRequest(
+    string Email,
+    string DisplayName,
+    bool IsPlatformAdmin,
+    IReadOnlyList<SeedAdminUserTenantMembership> TenantMemberships);
+
+/// <summary>
+/// Slice OPS.M.22 §3 — one (tenant, role) pair the seeded admin will be a
+/// member of. <c>Role</c> follows the <c>identity.tenant_memberships.role</c>
+/// enum ("tenant_admin" today; "tenant_member" reserved).
+/// </summary>
+public sealed record SeedAdminUserTenantMembership(
+    Guid TenantId,
+    string Role,
+    bool IsPrimary);
+
+/// <summary>
+/// Slice OPS.M.22 §3 — response from <c>POST /api/v1/admin/platform/users/seed</c>.
+/// <c>Created</c> = true on fresh insert (201), false on idempotent re-hit (200).
+/// <c>MembershipsCreated</c> lists the tenant ids that got a new membership row
+/// on THIS request (already-existing memberships are omitted).
+/// </summary>
+public sealed record SeedAdminUserResult(
+    Guid UserId,
+    bool Created,
+    IReadOnlyList<Guid> MembershipsCreated);

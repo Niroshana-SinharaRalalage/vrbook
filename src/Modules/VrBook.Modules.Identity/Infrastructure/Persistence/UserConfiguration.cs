@@ -47,6 +47,11 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         b.Property(u => u.EmailVerified).HasColumnName("email_verified").HasDefaultValue(false);
         b.Property(u => u.LastLoginAt).HasColumnName("last_login_at");
 
+        // Slice OPS.M.22 — non-null for operator pre-seeded admin rows.
+        // Nullable so guest lazy provisioning stays unchanged (NULL for
+        // rows born via UserProvisioningMiddleware Branch 3).
+        b.Property(u => u.PreSeededAt).HasColumnName("pre_seeded_at");
+
         // Audit + soft-delete columns inherited from AggregateRoot
         b.Property(u => u.CreatedAt).HasColumnName("created_at");
         b.Property(u => u.CreatedBy).HasColumnName("created_by");
