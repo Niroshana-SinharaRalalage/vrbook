@@ -88,6 +88,20 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
     public const string IdpClaim = "idp";
 
     /// <summary>
+    /// Slice OPS.M.22 §3 — JWT claim name carrying the Entra CIAM user
+    /// flow marker. Primary: <c>tfp</c> (Trust Framework Policy — Azure
+    /// B2C legacy naming Entra External ID inherited).
+    /// </summary>
+    public const string EntraFlowTfpClaim = "tfp";
+
+    /// <summary>
+    /// Slice OPS.M.22 §3 — JWT claim name for the newer CIAM Authentication
+    /// Context Reference. Consulted only if <see cref="EntraFlowTfpClaim"/>
+    /// is absent.
+    /// </summary>
+    public const string EntraFlowAcrClaim = "acr";
+
+    /// <summary>
     /// Slice OPS.M.12 — canonical string used in
     /// <c>identity.user_identities.provider</c> for Entra-local
     /// identities. Constant kept here so producers and readers agree.
@@ -212,6 +226,40 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
         accessor.HttpContext?.User.FindFirstValue("emails")
         ?? accessor.HttpContext?.User.FindFirstValue(ClaimTypes.Email)
         ?? accessor.HttpContext?.User.FindFirstValue("email");
+
+    /// <summary>
+    /// Slice OPS.M.22 §3 — the Entra CIAM user flow that minted this token,
+    /// or <c>null</c> when the token doesn't carry a flow marker. Reads
+    /// <c>tfp</c> first, falls back to <c>acr</c>. Consumers compare the
+    /// raw value against configured
+    /// <c>EntraExternalId:AdminFlowName</c> / <c>:GuestFlowName</c> to
+    /// decide admin vs guest.
+    /// </summary>
+    public string? EntraFlow
+    {
+        get
+        {
+            var ctx = accessor.HttpContext;
+            if (ctx is null)
+            {
+                return null;
+            }
+
+            var tfp = ctx.User.FindFirstValue(EntraFlowTfpClaim);
+            if (!string.IsNullOrWhiteSpace(tfp))
+            {
+                return tfp;
+            }
+
+            var acr = ctx.User.FindFirstValue(EntraFlowAcrClaim);
+            if (!string.IsNullOrWhiteSpace(acr))
+            {
+                return acr;
+            }
+
+            return null;
+        }
+    }
 
     public bool IsAuthenticated => accessor.HttpContext?.User.Identity?.IsAuthenticated == true;
 

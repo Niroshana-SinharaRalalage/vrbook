@@ -34,6 +34,25 @@ public interface ICurrentUser
     bool IsAuthenticated { get; }
 
     /// <summary>
+    /// Slice OPS.M.22 §3 — the Entra CIAM user flow that minted this token.
+    /// Source: JWT <c>tfp</c> claim first (Azure B2C legacy naming that Entra
+    /// External ID inherited); <c>acr</c> second (newer CIAM); null when neither
+    /// is present. Consumers compare the raw string against the configured
+    /// <c>EntraExternalId:AdminFlowName</c> / <c>:GuestFlowName</c> values to
+    /// decide whether the caller took the admin flow (<c>AdminSignUpSignIn</c>)
+    /// or the guest flow (<c>GuestSignUpSignIn</c>).
+    /// <para>Read by <c>UserProvisioningMiddleware</c>'s M.22.4 admin-gate:
+    /// admin-flow tokens on unknown emails REFUSE with
+    /// <c>AdminAccountNotProvisionedException</c>; guest-flow tokens on
+    /// unknown emails follow the lazy-provision Branch 3 path unchanged.</para>
+    /// <para>Null for anonymous requests. Also null for legacy single-flow
+    /// tenants that don't emit tfp/acr at all — in which case the middleware
+    /// treats the token as coming from the tenant-default flow (usually the
+    /// guest flow) per plan §4 risk #1.</para>
+    /// </summary>
+    string? EntraFlow { get; }
+
+    /// <summary>
     /// OPS.M.8 §3.1 (D1) + §3.2 (D2) — DB-authoritative platform-admin flag.
     /// Source: <c>identity.users.is_platform_admin</c>, materialized by
     /// <c>UserProvisioningMiddleware</c> per ADR-0014's DB-wins precedence.
