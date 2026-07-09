@@ -106,8 +106,18 @@ export const msalConfig: Configuration = {
  * `docs/identity/setup.md` §3), NOT `${clientId}/.default` — the latter would
  * mint a token whose `aud` is the SPA itself, which fails the audience check
  * on every authenticated /api/* call with a 401 audience mismatch.
+ *
+ * The `email` scope is required for Entra External ID to emit the `email`
+ * claim in the ID token when a user signs in through a federated IdP (e.g.
+ * Google via GuestSignUpSignIn). Without it, the Entra token carries only
+ * `preferred_username` set to the synthetic `{oid}@<tenant>.onmicrosoft.com`
+ * UPN, and the API-side UserProvisioningMiddleware falls back to that as the
+ * user's email — creating a row with a fake `@vrbook.onmicrosoft.com` email
+ * instead of the real Gmail. Requesting `email` alongside the API scope makes
+ * Entra include the user's `mail` attribute (populated from Google's
+ * `email_verified` claim during the federation) in every ID token.
  */
-export const apiScopes: string[] = ['api://vrbook/access_as_user'];
+export const apiScopes: string[] = ['api://vrbook/access_as_user', 'email'];
 
 /**
  * Build a per-flow `RedirectRequest`. The `authority` override sends the

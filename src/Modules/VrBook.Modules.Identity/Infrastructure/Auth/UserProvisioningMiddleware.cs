@@ -51,9 +51,21 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<Use
                     // when a real email claim is available (previous
                     // signature-ordering bug shipped rows keyed on the fake
                     // email; see LA trace 3c4bff266643b848dec1b075a9c9a5b3).
+                    //
+                    // 2026-07-08 fix — CIAM federated Google sign-in path:
+                    // preferred_username carries the SYNTHETIC UPN
+                    // `{oid}@<tenant>.onmicrosoft.com`, NOT the real Google
+                    // email. The real email lives in either `email` claim
+                    // (when the `email` scope is requested and the mail
+                    // attribute is populated) OR `verified_primary_email`
+                    // (CIAM's authoritative primary email, sourced from the
+                    // user's PrimaryAuthoritativeEmail attribute). Both are
+                    // now checked BEFORE preferred_username so a federated
+                    // guest never lands with a synthetic UPN as email.
                     var rawEmail = ctx.User.FindFirstValue("emails")
                                    ?? ctx.User.FindFirstValue("email")
                                    ?? ctx.User.FindFirstValue(ClaimTypes.Email)
+                                   ?? ctx.User.FindFirstValue("verified_primary_email")
                                    ?? ctx.User.FindFirstValue("preferred_username")
                                    ?? ctx.User.FindFirstValue("upn");
                     // Reject synthetic-looking values (e.g. a raw oid mistakenly

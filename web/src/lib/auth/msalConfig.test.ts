@@ -35,7 +35,7 @@ afterEach(() => {
 describe('msalConfig.apiScopes', () => {
   it('requests the API exposed scope, not the SPA client id', async () => {
     const { apiScopes } = await import('./msalConfig');
-    expect(apiScopes).toEqual(['api://vrbook/access_as_user']);
+    expect(apiScopes).toEqual(['api://vrbook/access_as_user', 'email']);
   });
 
   it('does not use the ${clientId}/.default pattern', async () => {
@@ -96,7 +96,7 @@ describe('msalConfig.loginRequestFor', () => {
 
   it('requests the API exposed scope regardless of flow', async () => {
     const { loginRequestFor } = await import('./msalConfig');
-    expect(loginRequestFor('admin').scopes).toEqual(['api://vrbook/access_as_user']);
-    expect(loginRequestFor('guest').scopes).toEqual(['api://vrbook/access_as_user']);
+    expect(loginRequestFor('admin').scopes).toEqual(['api://vrbook/access_as_user', 'email']);
+    expect(loginRequestFor('guest').scopes).toEqual(['api://vrbook/access_as_user', 'email']);
   });
 });

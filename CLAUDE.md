@@ -2,6 +2,16 @@
 
 Repo-scoped context so a fresh session doesn't have to re-derive everything. Not a design doc — a working briefing. Full design lives in [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) + [`docs/adr/`](docs/adr/) + `OPS_M_*_PLAN.md` / `OPS_M_*_CLOSE_OUT.md`.
 
+## Owner-locked policies (invariant — do NOT re-derive, do NOT re-ask)
+
+Policies the owner has locked. Assume they hold; don't propose alternatives unless the owner explicitly reopens them.
+
+- **Auth: admins vs guests IdP surface** (2026-07-05).
+  - **Platform Admin + Tenant Admin** → Entra-local email + password ONLY. NEVER Google / Microsoft / Facebook / Apple / any social IdP. Enforced by ADR-0016 + `ProvisionOrLinkUserHandler` Layer 1 + `AdminSocialIdpRejectionMiddleware` Layer 2.
+  - **Guest** → email + password OR any social IdP.
+  - When wiring MSAL / Entra user flows / social IdP config: admin flow gets email-only; guest flow gets email + socials. Do not merge into one flow. Do not add social buttons on the admin surface. See [`docs/adr/0016-admin-vs-social-idp-surface-split.md`](docs/adr/0016-admin-vs-social-idp-surface-split.md).
+- **Admin accounts must be operator-pre-seeded before first sign-in** (2026-07-07). Guests self-serve; admins do NOT. OPS.M.22 is the slice that ships the pre-seed shape. Until then, "sign-in-first + manual promote via SQL / API" is the working shim.
+
 ## Stack
 
 - **Backend:** .NET 8 modular monolith, MediatR, EF Core 8, Postgres 16 with per-context schemas. Modules: `Identity`, `Catalog`, `Booking`, `Pricing`, `Payment`, `Sync`, `Reviews`, `Messaging`, `Notifications`, `Loyalty`, `Admin`, `Reports`. See [`docs/adr/0001-modular-monolith.md`](docs/adr/0001-modular-monolith.md).
