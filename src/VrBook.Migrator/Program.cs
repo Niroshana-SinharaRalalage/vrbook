@@ -57,6 +57,11 @@ try
     // Registers as scoped so it can be resolved once the host is built.
     builder.Services.AddScoped<SeedPlatformAdminsBackfill>();
 
+    // Slice OPS.2.2 — Bicep-declarative Playwright E2E fixture backfill
+    // (isolated e2e-tenant + pre-seeded owner/platform-admin personas).
+    // No-op unless Bootstrap:E2e:Enabled is true (staging only).
+    builder.Services.AddScoped<SeedE2EBackfill>();
+
     using var host = builder.Build();
 
     Log.Information("Migrator starting. Environment={Env}", host.Services.GetRequiredService<IHostEnvironment>().EnvironmentName);
@@ -84,6 +89,15 @@ try
     {
         var backfill = backfillScope.ServiceProvider.GetRequiredService<SeedPlatformAdminsBackfill>();
         await backfill.RunAsync();
+    }
+
+    // Slice OPS.2.2 — E2E fixture backfill runs AFTER migrations so the
+    // is_e2e column (OpsM2) + pre_seeded_at column (M.22) are guaranteed
+    // present. No-op unless Bootstrap:E2e:Enabled=true; safe on every deploy.
+    using (var e2eScope = host.Services.CreateScope())
+    {
+        var e2eBackfill = e2eScope.ServiceProvider.GetRequiredService<SeedE2EBackfill>();
+        await e2eBackfill.RunAsync();
     }
 
     Log.Information("Migrator complete.");

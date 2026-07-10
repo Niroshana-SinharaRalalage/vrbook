@@ -98,6 +98,20 @@ Set-KvSecret -Name 'entra-web-client-id' -Value 'pending-identity-setup' `
 Set-KvSecret -Name 'entra-tenant-issuer-host' -Value 'pending-identity-setup' `
     -Description 'EntraExternalId__TenantIssuerHost: External tenant issuer host (e.g. vrbookcid.ciamlogin.com) used by IdentityProviderClassifier.'
 
+# Slice OPS.2.2 — Playwright E2E persona passwords. NOT bound by any Container
+# App secretRef (the nightly workflow fetches them via `az keyvault secret show`
+# at run time), so they don't gate a Bicep deploy — but seed placeholders here
+# so the vault inventory is complete and the operator has an obvious slot to
+# fill. The operator sets the REAL passwords when creating the three Entra CIAM
+# personas per docs/OPS_2_PLAYWRIGHT_PLAN.md §7 + the E2E runbook. Passwords
+# live ONLY in KV, never in source. See docs/adr/0019 (lands OPS.2.8).
+Set-KvSecret -Name 'e2e-guest-password' -Value 'pending-identity-setup' `
+    -Description 'E2E_GUEST_PASSWORD: Playwright guest persona (e2e-guest@vrbook.test) Entra-local password. Set by operator when the CIAM persona is created; staging only.'
+Set-KvSecret -Name 'e2e-owner-password' -Value 'pending-identity-setup' `
+    -Description 'E2E_OWNER_PASSWORD: Playwright owner/tenant-admin persona (e2e-owner@vrbook.test) Entra-local password. Set by operator; staging only.'
+Set-KvSecret -Name 'e2e-platform-admin-password' -Value 'pending-identity-setup' `
+    -Description 'E2E_PLATFORM_ADMIN_PASSWORD: Playwright platform-admin persona (e2e-platform-admin@vrbook.test) Entra-local password. Set by operator; staging only.'
+
 # ---- Prompted external secrets ----
 Write-Step "External providers -- enter values now (press Enter to skip & set later)"
 

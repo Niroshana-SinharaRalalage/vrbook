@@ -58,6 +58,9 @@ param seedPlatformAdmins array = env == 'staging'
     ]
   : []
 
+@description('Slice OPS.2.2 — enable the Playwright E2E fixture backfill (isolated e2e-tenant + pre-seeded e2e-owner / e2e-platform-admin personas via VrBook.Migrator.SeedE2EBackfill). Staging only; MUST stay false in prod so the E2E marker never appears on a production tenant. Consumed as Bootstrap:E2e:Enabled by the migrator.')
+param bootstrapE2eTenantEnabled bool = env == 'staging'
+
 // ---------- Derived flags & sizing ----------
 var isProd = env == 'prod'
 var isStaging = env == 'staging'
@@ -515,7 +518,13 @@ var backfillEnvVars = flatten(map(range(0, length(seedPlatformAdmins)), i => [
   { name: 'Bootstrap__SeedPlatformAdmins__${i}__Email', value: seedPlatformAdmins[i].email }
   { name: 'Bootstrap__SeedPlatformAdmins__${i}__DisplayName', value: seedPlatformAdmins[i].displayName }
 ]))
-var migratorEnvVars = concat(apiEnvVars, backfillEnvVars)
+// Slice OPS.2.2 — the E2E fixture backfill is a single boolean flag. Prod
+// resolves to false so SeedE2EBackfill is a no-op and no is_e2e=true row is
+// ever created outside staging.
+var e2eBackfillEnvVars = [
+  { name: 'Bootstrap__E2e__Enabled', value: string(bootstrapE2eTenantEnabled) }
+]
+var migratorEnvVars = concat(apiEnvVars, backfillEnvVars, e2eBackfillEnvVars)
 
 module migratorJob 'modules/container-app-job.bicep' = {
   name: 'migrator-job'

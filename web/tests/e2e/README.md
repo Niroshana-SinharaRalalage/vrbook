@@ -10,12 +10,13 @@ Slice OPS.2 (`docs/OPS_2_PLAYWRIGHT_PLAN.md`) lands the E2E harness covering ~30
 | `guest/*.spec.ts` | 10 authed guest scenarios. `guest-authed` project. | OPS.2.4 |
 | `owner/*.spec.ts` | 9 owner / tenant-admin scenarios. `owner-authed` project. | OPS.2.5 |
 | `platform-admin/*.spec.ts` | 6 platform-admin scenarios. `platform-admin-authed` project. | OPS.2.6 |
-| `fixtures/personas.ts` | Persona records + env-var reads. | OPS.2.2 |
-| `fixtures/auth.fixture.ts` | Storage state overlay fixture. | OPS.2.2 |
-| `support/pageObjects/*.ts` | Thin POMs. Incremental. | OPS.2.3–OPS.2.6 |
-| `support/testTenant.ts` | `uniqueRunId()`, `createTestProperty(page)`. | OPS.2.2 |
-| `global-setup.ts` | MSAL sign-ins + storage state writes. | OPS.2.2 |
-| `.auth/` | **Gitignored.** Session-local storage state. | OPS.2.2 |
+| `fixtures/personas.ts` | Persona records + env-var password reads. | OPS.2.2 |
+| `fixtures/auth.fixture.ts` | Re-injects the persona sessionStorage (MSAL token cache) on top of the project `storageState`. Import `test`/`expect` from here in authed specs. | OPS.2.2 |
+| `support/pageObjects/*.ts` | Thin POMs (`BasePage`, `HomePage`). Incremental. | OPS.2.2+ |
+| `support/testTenant.ts` | `RUN_ID`, `uniqueRunId()`, `scopedName()`, `E2E_TENANT_SLUG`. Data factories (`createTestProperty`/`createTestBooking`) land with the scenarios that consume them. | OPS.2.2 |
+| `support/stripeTestCards.ts` | Stripe test-mode card constants. | OPS.2.2 |
+| `global-setup.ts` | `setup` project — one real MSAL sign-in per persona; writes storage state + session snapshot. | OPS.2.2 |
+| `.auth/` | **Gitignored.** Session-local `<persona>.storageState.json` + `.session.json`. | OPS.2.2 |
 
 ## Running locally
 
@@ -42,7 +43,7 @@ Two workflows:
 
 ## Auth model
 
-Real MSAL redirect against staging Entra CIAM (owner-locked in plan §5-Q2-a). Three Entra-local personas, NO MFA, NO CA, seeded via `SeedE2eBackfill` (M.22.6 pattern).
+Real MSAL redirect against staging Entra CIAM (owner-locked in plan §5-Q2-a). Three Entra-local personas, NO MFA, NO CA. The two admin personas (`e2e-owner`, `e2e-platform-admin`) are pre-seeded via `VrBook.Migrator.SeedE2EBackfill` (M.22.6 pattern, gated on `Bootstrap:E2e:Enabled`); the guest persona lazy-provisions on first sign-in like a real guest. Because MSAL uses `cacheLocation: 'sessionStorage'`, `global-setup.ts` persists the sessionStorage token cache alongside `storageState`, and `auth.fixture.ts` re-injects it — plain `storageState` alone would leave every authed API call with no bearer.
 
 **Google OAuth is out of scope for Playwright** (owner-locked in ADR-0019, plan §5-Q2-a rationale + §6). Weekly manual walk in `docs/runbooks/social_idp_setup.md`.
 

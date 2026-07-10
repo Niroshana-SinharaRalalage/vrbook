@@ -77,6 +77,15 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
             .HasColumnName("suspended_reason")
             .HasMaxLength(500);
 
+        // Slice OPS.2.2 — nullable shadow property: NULL for real tenants; the
+        // migrator's SeedE2eBackfill sets TRUE (via raw SQL) on the isolated
+        // e2e-tenant only. Mapped as a shadow property because no domain
+        // behaviour reads or writes it — the column is purely a test-data
+        // marker owned by the SQL seed. Declared here so the EF model snapshot
+        // tracks it and future migrations don't attempt to drop it.
+        // See docs/OPS_2_PLAYWRIGHT_PLAN.md §6.
+        b.Property<bool?>("is_e2e").HasColumnName("is_e2e");
+
         b.Property(t => t.CreatedAt).HasColumnName("created_at");
         b.Property(t => t.CreatedBy).HasColumnName("created_by");
         b.Property(t => t.UpdatedAt).HasColumnName("updated_at");
