@@ -358,7 +358,7 @@ Scheduled inside `OPS` since the suite spans every prior agent's frontend work.
 These are not agent-context items per §20.2; they're operational gates the proposal calls out (§14, §18, §22). Tracked here so they don't get lost.
 
 - **OPS.1** Pact contract tests (FE ↔ API) — at least the 7 §18.2 mandated flows
-- **OPS.2** Playwright E2E suite (~30 scenarios) — F1.1 deliverable
+- **OPS.2** Playwright E2E suite — ✅ eng-complete 2026-07-10 (31 scenarios; anon smoke blocking + live-validated; authed 26 informational nightly, go green after operator persona walk). See [`OPS_2_CLOSE_OUT.md`](OPS_2_CLOSE_OUT.md) + [`OPS_LAUNCH_COMPLETION_PLAN.md`](OPS_LAUNCH_COMPLETION_PLAN.md) for the remaining OPS.3–8 launch path (k6/ZAP compressed to one-time runs; OPS.1.9 post-launch).
 - **OPS.3** k6 load test: Booking flow at 50 RPS sustained 5 min, P95 < 1s
 - **OPS.4** OWASP ZAP baseline scan in CI
 - **OPS.5** Trivy + SBOM signing in image build (currently deferred to "prod-CD" that doesn't exist)
