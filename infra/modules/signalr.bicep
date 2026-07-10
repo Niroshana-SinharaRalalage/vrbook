@@ -1,7 +1,13 @@
 // signalr.bicep — Azure SignalR Service, Serverless mode (per §15.1).
-// Standard 1 unit. Used for real-time messaging between guest/owner.
-// In Serverless mode, the API doesn't host SignalR hubs — clients negotiate against
-// the API which returns a SignalR Service access token.
+// Used for real-time messaging between guest/owner.
+//
+// Slice OPS.INFRA.2 (2026-07-09) — staging right-sizing. Standard S1
+// ($48/mo) was overprovisioned for single-owner staging testing. Free F1
+// = $0/mo, 20 concurrent connections, 20K messages/day — sole client is
+// the operator so this is comfortably sized. Prod stays on Standard S1.
+//
+// In Serverless mode, the API doesn't host SignalR hubs — clients negotiate
+// against the API which returns a SignalR Service access token.
 
 @description('Environment short name (dev | staging | prod).')
 param env string
@@ -24,14 +30,22 @@ param keyVaultName string
 
 var sigrName = 'sr-vrbook-${env}'
 
+// Slice OPS.INFRA.2 — cheapest-workable SKU per env. Free F1 (staging/dev)
+// = $0/mo, 20 concurrent, 20K messages/day. Standard S1 (prod) = ~$48/mo,
+// 1000 concurrent, 1M messages/day.
+var sigrSkuName = env == 'prod' ? 'Standard_S1' : 'Free_F1'
+var sigrSkuTier = env == 'prod' ? 'Standard' : 'Free'
+// Free tier caps capacity at 1.
+var sigrCapacity = env == 'prod' ? capacity : 1
+
 resource sigr 'Microsoft.SignalRService/signalR@2024-03-01' = {
   name: sigrName
   location: location
   tags: tags
   sku: {
-    name: 'Standard_S1'
-    tier: 'Standard'
-    capacity: capacity
+    name: sigrSkuName
+    tier: sigrSkuTier
+    capacity: sigrCapacity
   }
   kind: 'SignalR'
   properties: {

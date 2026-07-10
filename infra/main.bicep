@@ -67,13 +67,36 @@ var isStaging = env == 'staging'
 var isDev = env == 'dev'
 
 // Postgres Flexible Server SKU NAME (without tier prefix). Tier passed separately via skuTier.
-var pgSku = isProd ? 'Standard_D4ds_v5' : (isStaging ? 'Standard_D2ds_v5' : 'Standard_B2s')
-var pgTier = isProd || isStaging ? 'GeneralPurpose' : 'Burstable'
-var pgBackupRetention = isProd ? 35 : 14
+//
+// Slice OPS.INFRA.2 (2026-07-09) — staging right-sizing:
+//   * D2ds_v5 GeneralPurpose (~$110/mo compute) → B1ms Burstable (~$15/mo).
+//     Staging carries one operator + Playwright E2E; burstable easily covers it.
+//     Cross-tier scaling (GP → Burstable) is an in-place operation with brief
+//     downtime, supported by Azure Postgres Flex Server.
+//   * Backup retention 14d → 7d for staging (still comfortable; free storage
+//     up to 100% of provisioned).
+//   * Storage stays at 128 GB — Azure Flex Server does NOT support storage
+//     shrink; setting a smaller size than current fails deployment. A future
+//     blue/green rebuild could drop it to 32 GB and save ~$10/mo, but the
+//     operational cost is not worth ~$10/mo. Tracked as OPS.INFRA.3 candidate.
+//   * prod stays on D4ds_v5 GeneralPurpose 256 GB; unchanged.
+var pgSku = isProd ? 'Standard_D4ds_v5' : (isStaging ? 'Standard_B1ms' : 'Standard_B2s')
+var pgTier = isProd ? 'GeneralPurpose' : 'Burstable'
+var pgBackupRetention = isProd ? 35 : 7
 var pgStorageGB = isProd ? 256 : 128
 
-var apiMinReplicas = env == 'dev' ? 0 : 1
-var apiMaxReplicas = isProd ? 10 : 5
+// Slice OPS.INFRA.2 — scale-to-zero for staging API + web. First cold-start
+// costs ~2-4s vs prod's always-warm min=1. Prod stays on min=1 for SLO;
+// dev+staging idle 20+ hours a day and don't need a warm replica.
+var apiMinReplicas = isProd ? 1 : 0
+var apiMaxReplicas = isProd ? 10 : 3
+
+// Slice OPS.INFRA.2 — cheapest-workable container-app resource envelope.
+// Staging + dev on 0.5 vCPU / 1 GiB fits comfortably under the 180K vCPU-sec
+// / 360K GiB-sec / 2M-request monthly free grant even with sporadic traffic;
+// prod stays at 1.0 / 2Gi.
+var apiCpu = isProd ? '1.0' : '0.5'
+var apiMemory = isProd ? '2Gi' : '1Gi'
 
 // Front Door deferred for staging — the staging WAF policy needs Premium_AzureFrontDoor
 // SKU to use managed rules (Standard rejects ManagedRules per WAF schema). Enable for prod
@@ -386,8 +409,8 @@ module apiApp 'modules/container-app.bicep' = {
     externalIngress: true
     minReplicas: apiMinReplicas
     maxReplicas: apiMaxReplicas
-    cpu: '1.0'
-    memory: '2Gi'
+    cpu: apiCpu
+    memory: apiMemory
     envVars: apiEnvVars
     secrets: apiSecrets
     keyVaultName: kv.outputs.name
@@ -585,8 +608,9 @@ module webApp 'modules/container-app.bicep' = {
     workloadProfileName: 'Consumption'
     targetPort: 3000
     externalIngress: true
-    minReplicas: env == 'dev' ? 0 : 1
-    maxReplicas: isProd ? 5 : 3
+    // Slice OPS.INFRA.2 — staging + dev scale-to-zero (was min=1 for staging).
+    minReplicas: isProd ? 1 : 0
+    maxReplicas: isProd ? 5 : 2
     cpu: '0.5'
     memory: '1Gi'
     envVars: webEnvVars
