@@ -1,0 +1,87 @@
+# =============================================================================
+# perf-k6.yml
+#   Slice OPS.3 — one-time (workflow_dispatch) k6 load test of the booking
+#   funnel: 50 RPS / 5 min / P95 < 1s. Compressed to a manual pre-launch run per
+#   OPS_LAUNCH_COMPLETION_PLAN §2 — NOT a per-push gate. MUST target a prod-sized
+#   surface (prod pre-cutover, or staging temporarily upsized to GP PG +
+#   minReplicas>=1); the default target is staging and will NOT be representative
+#   until upsized — set base_url + confirm sizing before trusting a pass.
+# =============================================================================
+name: perf-k6
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "API base URL to load-test (prod-sized target). Blank = discover staging API FQDN."
+        required: false
+        default: ""
+      property_slug:
+        description: "Seed property slug"
+        required: false
+        default: "e2e-smoke-property"
+      property_id:
+        description: "Seed property GUID"
+        required: false
+        default: "e2e00000-0000-0000-0000-000000000001"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  k6:
+    name: k6 booking-funnel (50 RPS / 5 min)
+    runs-on: ubuntu-latest
+    env:
+      RESOURCE_GROUP: rg-vrbook-staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        if: inputs.base_url == ''
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve target URL
+        id: target
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.base_url }}" ]; then
+            URL="${{ inputs.base_url }}"
+          else
+            FQDN=$(az containerapp show -n ca-vrbook-api-staging -g "$RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)
+            URL="https://$FQDN"
+            echo "::warning::Targeting staging ($URL) — NOT prod-sized. Upsize (GP PG + minReplicas>=1) or pass base_url for a representative run."
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Target: $URL"
+
+      - name: Install k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run k6 booking-funnel
+        env:
+          BASE_URL: ${{ steps.target.outputs.url }}
+          PROPERTY_SLUG: ${{ inputs.property_slug }}
+          PROPERTY_ID: ${{ inputs.property_id }}
+        run: |
+          k6 run \
+            -e BASE_URL="$BASE_URL" \
+            -e PROPERTY_SLUG="$PROPERTY_SLUG" \
+            -e PROPERTY_ID="$PROPERTY_ID" \
+            --summary-export=k6-summary.json \
+            perf/k6/booking-funnel.js
+
+      - name: Upload k6 summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-summary
+          path: k6-summary.json
+          retention-days: 30
+          if-no-files-found: ignore
