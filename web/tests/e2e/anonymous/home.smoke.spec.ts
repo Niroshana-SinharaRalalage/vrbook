@@ -12,6 +12,10 @@ test('home renders hero, primary CTA and header @smoke', async ({ page }) => {
   await page.goto('/');
 
   await expect(page.getByRole('heading', { level: 1 })).toContainText(/hand-picked rentals/i);
-  await expect(page.getByRole('link', { name: /browse stays/i })).toBeVisible();
+  // "Browse stays" appears in both the hero and the footer — scope to the hero
+  // CTA in <main> so the assertion targets exactly one element.
+  await expect(
+    page.getByRole('main').getByRole('link', { name: /browse stays/i }),
+  ).toBeVisible();
   await expect(page.getByRole('banner')).toBeVisible();
 });

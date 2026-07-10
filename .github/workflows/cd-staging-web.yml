@@ -306,23 +306,32 @@ jobs:
           echo "api=$API" >> "$GITHUB_OUTPUT"
           echo "Web: https://$WEB   API: https://$API"
 
-      - name: Warm up (both origins scale to zero independently)
+      - name: Warm up + wait for seed fixture
         env:
           WEB: https://${{ steps.fqdn.outputs.web }}
           API: https://${{ steps.fqdn.outputs.api }}
         run: |
           set -uo pipefail
+          # $2 = max attempts (× 2s). Both web + API scale to zero
+          # independently (OPS.INFRA.2); the seed property is written by the
+          # MIGRATOR in the separate cd-staging-api workflow, so on a push that
+          # touches both lanes this may still be seeding when we arrive — hence
+          # the generous attempt budget on the property gate.
           warm() {
-            local url=$1
-            for i in $(seq 1 30); do
+            local url=$1 max=${2:-30}
+            for i in $(seq 1 "$max"); do
               code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 "$url" || echo 000)
-              if [ "$code" = "200" ]; then echo "  warm: $url ($code)"; return 0; fi
-              echo "  [$i/30] $url -> $code, waiting…"; sleep 2
+              if [ "$code" = "200" ]; then echo "  ready: $url ($code)"; return 0; fi
+              echo "  [$i/$max] $url -> $code, waiting…"; sleep 2
             done
-            echo "::error::$url never returned 200 during warm-up"; return 1
+            echo "::error::$url never returned 200 within $((max*2))s"; return 1
           }
-          warm "$WEB/"
-          warm "$API/health/ready"
+          warm "$WEB/" 30
+          warm "$API/health/ready" 30
+          # Gate the detail/quote specs on the deterministic seed property
+          # (SeedE2EBackfill). Anonymous GET returns 200 only once the migrator
+          # has committed it. ~5 min budget covers the cross-workflow lag.
+          warm "$API/api/v1/properties/e2e-smoke-property" 150
 
       - name: Run anonymous smoke (Chromium, blocking)
         env:
