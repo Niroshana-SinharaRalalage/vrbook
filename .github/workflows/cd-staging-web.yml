@@ -59,6 +59,11 @@ jobs:
           npm run lint
           npm run typecheck
 
+      # Slice OPS.2.7 — E2E suite invariant guard (blocking): asserts the
+      # scenario count (drift) + that .auth/ stays gitignored.
+      - name: E2E suite invariants
+        run: npm run check:e2e-suite
+
       - name: Test (Vitest)
         run: npm test -- --run --passWithNoTests
 

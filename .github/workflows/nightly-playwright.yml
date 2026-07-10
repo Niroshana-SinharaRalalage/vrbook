@@ -1,0 +1,122 @@
+# =============================================================================
+# nightly-playwright.yml
+#   Slice OPS.2.7 — runs the AUTHED Playwright E2E projects (guest / owner /
+#   platform-admin) against deployed staging on a nightly cron. INFORMATIONAL
+#   during the OPS.2 landing window (continue-on-error) per plan §5-Q4-a; the
+#   blocking-flip is OPS.2.9 after ~2 weeks of stable soak. The anonymous smoke
+#   stays BLOCKING in cd-staging-web.yml — this file never gates a deploy.
+#
+#   Persona passwords come from Key Vault (e2e-{guest,owner,platform-admin}-
+#   password), masked into the environment. Requires the operator to have
+#   provisioned the three Entra CIAM personas + set those KV secrets (OPS.2.8
+#   walk); until then global-setup fails fast with a secret-free message and the
+#   run is red-but-non-gating.
+# =============================================================================
+name: nightly-playwright
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # 06:00 UTC daily
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: nightly-playwright
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "20"
+  RESOURCE_GROUP: rg-vrbook-staging
+  KEY_VAULT: kv-vrbook-staging
+
+jobs:
+  authed-e2e:
+    name: authed e2e (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    continue-on-error: true # informational during the OPS.2 landing window
+    defaults:
+      run:
+        working-directory: web
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [guest-authed, owner-authed, platform-admin-authed]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install (npm ci)
+        run: npm ci --no-audit --no-fund
+
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+
+      - name: Install Chromium (+ OS deps)
+        run: npx playwright install --with-deps chromium
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Discover web + API FQDNs
+        id: fqdn
+        run: |
+          set -euo pipefail
+          WEB=$(az containerapp show -n ca-vrbook-web-staging -g "$RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)
+          API=$(az containerapp show -n ca-vrbook-api-staging -g "$RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)
+          echo "web=$WEB" >> "$GITHUB_OUTPUT"
+          echo "api=$API" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch persona passwords from Key Vault
+        run: |
+          set -euo pipefail
+          for p in guest owner platform-admin; do
+            secret=$(az keyvault secret show --vault-name "$KEY_VAULT" --name "e2e-${p}-password" --query value -o tsv)
+            echo "::add-mask::${secret}"
+            var="E2E_$(echo "$p" | tr 'a-z-' 'A-Z_')_PASSWORD"
+            echo "${var}=${secret}" >> "$GITHUB_ENV"
+          done
+
+      - name: Warm both origins
+        env:
+          WEB: https://${{ steps.fqdn.outputs.web }}
+          API: https://${{ steps.fqdn.outputs.api }}
+        run: |
+          set -uo pipefail
+          warm() { for i in $(seq 1 30); do c=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 "$1" || echo 000); [ "$c" = "200" ] && { echo "warm: $1"; return 0; }; sleep 2; done; echo "::warning::$1 not warm"; }
+          warm "$WEB/"
+          warm "$API/health/ready"
+
+      - name: Run ${{ matrix.project }}
+        env:
+          PLAYWRIGHT_BASE_URL: https://${{ steps.fqdn.outputs.web }}
+        run: npx playwright test --project=${{ matrix.project }}
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.project }}
+          path: web/playwright-report
+          retention-days: 14
+          if-no-files-found: ignore
