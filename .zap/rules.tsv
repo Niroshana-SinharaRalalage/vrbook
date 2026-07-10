@@ -1,0 +1,13 @@
+# Slice OPS.4 — OWASP ZAP baseline rule overrides (suppression baseline).
+#
+# Tab-separated: <ruleId>\t<action>\t<comment>
+#   action: IGNORE | WARN | FAIL
+# Use IGNORE only for a triaged false-positive / accepted finding, with a
+# comment recording who/when/why. The go-live gate is: run the baseline against
+# the near-final surface, triage every WARN/FAIL, and either fix it or add a
+# justified IGNORE line here — no un-triaged HIGH remains.
+#
+# Example:
+#   10096	IGNORE	2026-07-10 <name>: timestamp disclosure — cosmetic, accepted
+#
+# (empty — populate during the pre-launch ZAP triage)

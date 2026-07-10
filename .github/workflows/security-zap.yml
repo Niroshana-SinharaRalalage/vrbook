@@ -1,0 +1,71 @@
+# =============================================================================
+# security-zap.yml
+#   Slice OPS.4 — one-time (workflow_dispatch) OWASP ZAP baseline (passive) scan
+#   of the deployed web surface. Compressed to a manual pre-launch run per
+#   OPS_LAUNCH_COMPLETION_PLAN §2 — NOT a per-push gate. Informational
+#   (fail_action: false); the go-live gate is a triaged report with no
+#   un-triaged HIGH. Suppressions live in .zap/rules.tsv.
+# =============================================================================
+name: security-zap
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: "Target base URL to scan. Blank = discover staging web FQDN."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+  issues: write
+
+jobs:
+  zap-baseline:
+    name: ZAP baseline (passive)
+    runs-on: ubuntu-latest
+    env:
+      RESOURCE_GROUP: rg-vrbook-staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        if: inputs.target_url == ''
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve target URL
+        id: target
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.target_url }}" ]; then
+            URL="${{ inputs.target_url }}"
+          else
+            FQDN=$(az containerapp show -n ca-vrbook-web-staging -g "$RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)
+            URL="https://$FQDN"
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Target: $URL"
+
+      - name: Warm target (scale-to-zero)
+        run: |
+          for i in $(seq 1 20); do
+            c=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 "${{ steps.target.outputs.url }}/" || echo 000)
+            [ "$c" = "200" ] && break; sleep 3
+          done
+
+      - name: ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: ${{ steps.target.outputs.url }}
+          rules_file_name: .zap/rules.tsv
+          # Informational during the launch window — the go-live gate is a
+          # human triage of the report, not an auto-fail.
+          fail_action: false
+          allow_issue_writing: false
+          cmd_options: "-a"
