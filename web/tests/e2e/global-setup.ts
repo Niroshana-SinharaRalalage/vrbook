@@ -9,6 +9,7 @@ import {
   requirePassword,
   type Persona,
 } from './fixtures/personas';
+import { E2E_TENANT_SLUG } from './support/testTenant';
 
 /**
  * Slice OPS.2.2 — authentication setup, run as the `setup` Playwright project.
@@ -90,6 +91,26 @@ const waitForMsalSession = async (page: Page): Promise<void> => {
     .toBe(true);
 };
 
+/**
+ * OPS.2.5 — ensure the owner's active tenant (`vrbook:active-tenant`) is set in
+ * sessionStorage before the session snapshot. Exercises the real
+ * single-membership auto-select; falls through the tenant picker if needed.
+ */
+const establishOwnerTenantContext = async (page: Page): Promise<void> => {
+  await page.goto('/admin');
+  // If auto-select hasn't landed, the admin guard bounces to the picker.
+  if (new URL(page.url()).pathname.startsWith('/select-tenant')) {
+    await page.getByRole('button').filter({ hasText: E2E_TENANT_SLUG }).first().click();
+    await page.waitForURL((url) => url.pathname.startsWith('/admin'), { timeout: 30_000 });
+  }
+  await expect
+    .poll(() => page.evaluate(() => window.sessionStorage.getItem('vrbook:active-tenant')), {
+      timeout: 30_000,
+      message: 'active tenant never established for the owner persona',
+    })
+    .not.toBeNull();
+};
+
 const authenticate = async (page: Page, persona: Persona): Promise<void> => {
   const password = requirePassword(persona);
   ensureAuthDir();
@@ -102,6 +123,17 @@ const authenticate = async (page: Page, persona: Persona): Promise<void> => {
     timeout: 45_000,
   });
   await waitForMsalSession(page);
+
+  // OPS.2.5 — owner persona: establish + confirm the active tenant BEFORE
+  // snapshotting. The single-membership auto-select in /auth/callback writes
+  // `vrbook:active-tenant` to sessionStorage ASYNCHRONOUSLY (after getMyTenants),
+  // which can race the capture below. Drive /admin, fall through /select-tenant
+  // if the auto-select hasn't landed, and poll until the key exists so the
+  // captured session reliably carries tenant context. Platform-admin is
+  // 0-membership (routes to /admin/platform, no active tenant) — skip it.
+  if (persona.key === 'owner') {
+    await establishOwnerTenantContext(page);
+  }
 
   // Persist cookies + localStorage.
   await page.context().storageState({ path: persona.storageStatePath });

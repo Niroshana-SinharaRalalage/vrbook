@@ -74,6 +74,17 @@ public sealed class SeedE2EBackfill(
     private const string SmokePropertySlug = "e2e-smoke-property";
     private static readonly Guid SmokePropertyId = new("e2e00000-0000-0000-0000-000000000001");
 
+    // Slice OPS.2.5 — two Tentative bookings on the seed property for the owner
+    // confirm/reject specs. Fixed GUIDs mirrored in testTenant.ts
+    // (E2E_TENTATIVE_BOOKING_CONFIRM_ID / _REJECT_ID). Each migrator run RESETS
+    // them back to Tentative (owner specs consume them → Confirmed/Rejected), so
+    // a fresh deploy re-arms them; the specs skip gracefully if a prior nightly
+    // already consumed them without a redeploy. guest_user_id is synthetic — no
+    // cross-schema FK enforces it (booking FKs are child-table only).
+    private static readonly Guid ConfirmBookingId = new("e2e00000-0000-0000-0000-000000000010");
+    private static readonly Guid RejectBookingId = new("e2e00000-0000-0000-0000-000000000011");
+    private static readonly Guid SyntheticGuestUserId = new("e2e00000-0000-0000-0000-0000000000f0");
+
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
         var enabled = configuration.GetValue<bool>("Bootstrap:E2e:Enabled");
@@ -109,6 +120,9 @@ public sealed class SeedE2EBackfill(
             // without its plan (the quote smoke would then 404).
             await UpsertE2eSmokePropertyAsync(conn, tenantId, ownerId, cancellationToken);
             await UpsertE2eSmokePricingPlanAsync(conn, tenantId, cancellationToken);
+            // OPS.2.5 — arm the two Tentative bookings for owner confirm/reject.
+            await UpsertE2eTentativeBookingAsync(conn, tenantId, ConfirmBookingId, "E2ECONFIRM", cancellationToken);
+            await UpsertE2eTentativeBookingAsync(conn, tenantId, RejectBookingId, "E2EREJECT", cancellationToken);
 
             await using (var cmd = conn.CreateCommand())
             {
@@ -119,12 +133,12 @@ INSERT INTO identity.migration_audit
 VALUES (gen_random_uuid(),
         'OpsM2_SeedE2EBackfill',
         'bicep-declarative-e2e-fixture',
-        5,
+        7,
         @notes,
         NOW())";
                 var p = cmd.CreateParameter();
                 p.ParameterName = "notes";
-                p.Value = $"tenant={TenantSlug} owner={OwnerEmail} platform_admin={PlatformAdminEmail} smoke_property={SmokePropertySlug}";
+                p.Value = $"tenant={TenantSlug} owner={OwnerEmail} platform_admin={PlatformAdminEmail} smoke_property={SmokePropertySlug} tentative_bookings=2";
                 cmd.Parameters.Add(p);
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
@@ -434,6 +448,71 @@ VALUES (gen_random_uuid(), @propId, 100.00, 100.00, 'USD',
         await ins.ExecuteNonQueryAsync(cancellationToken);
         logger.LogInformation(
             "OPS.2.3 inserted e2e smoke pricing plan (property={PropertyId}).", SmokePropertyId);
+    }
+
+    /// <summary>
+    /// Slice OPS.2.5 — idempotently arm a Tentative booking on the seed property
+    /// for the owner confirm/reject specs. Keyed on the fixed <paramref name="id"/>;
+    /// on re-run RESETS status→Tentative and clears the confirm/cancel timestamps
+    /// so a fresh deploy re-arms a booking a prior run consumed. No booking-guest
+    /// or line-item child rows are needed for the confirm/reject panel to render
+    /// (it gates only on <c>status == 'Tentative'</c>). tenant_id MUST match the
+    /// property's tenant (RLS + the owner's active-tenant scope).
+    /// </summary>
+    private async Task UpsertE2eTentativeBookingAsync(
+        System.Data.Common.DbConnection conn,
+        Guid tenantId,
+        Guid id,
+        string reference,
+        CancellationToken cancellationToken)
+    {
+        bool exists;
+        await using (var read = conn.CreateCommand())
+        {
+            read.Transaction = db.Database.CurrentTransaction!.GetDbTransaction();
+            read.CommandText = @"SELECT 1 FROM booking.bookings WHERE ""Id"" = @id FOR UPDATE";
+            AddParam(read, "id", id);
+            await using var r = await read.ExecuteReaderAsync(cancellationToken);
+            exists = await r.ReadAsync(cancellationToken);
+        }
+
+        if (exists)
+        {
+            await using var upd = conn.CreateCommand();
+            upd.Transaction = db.Database.CurrentTransaction!.GetDbTransaction();
+            upd.CommandText = @"UPDATE booking.bookings
+                                SET status = 'Tentative',
+                                    tentative_until = NOW() + INTERVAL '365 days',
+                                    confirmed_at = NULL, cancelled_at = NULL,
+                                    cancellation_reason = NULL, tenant_id = @tenantId,
+                                    deleted_at = NULL, updated_at = NOW()
+                                WHERE ""Id"" = @id";
+            AddParam(upd, "id", id);
+            AddParam(upd, "tenantId", tenantId);
+            await upd.ExecuteNonQueryAsync(cancellationToken);
+            logger.LogInformation("OPS.2.5 reset e2e Tentative booking {Id} ({Ref}).", id, reference);
+            return;
+        }
+
+        await using var ins = conn.CreateCommand();
+        ins.Transaction = db.Database.CurrentTransaction!.GetDbTransaction();
+        ins.CommandText = @"
+INSERT INTO booking.bookings
+    (""Id"", reference, property_id, property_title, guest_user_id, guest_display_name,
+     checkin_date, checkout_date, guest_count, status, source, currency,
+     subtotal, fees, taxes, discount, total, cancellation_policy, tentative_until,
+     tenant_id, row_version, created_at, updated_at)
+VALUES (@id, @reference, @propId, 'E2E Smoke Test Property', @guestId, 'E2E Guest',
+        DATE '2031-03-01', DATE '2031-03-03', 2, 'Tentative', 'Direct', 'USD',
+        200.00, 0, 0, 0, 200.00, 'Flexible', NOW() + INTERVAL '365 days',
+        @tenantId, 0, NOW(), NOW())";
+        AddParam(ins, "id", id);
+        AddParam(ins, "reference", reference);
+        AddParam(ins, "propId", SmokePropertyId);
+        AddParam(ins, "guestId", SyntheticGuestUserId);
+        AddParam(ins, "tenantId", tenantId);
+        await ins.ExecuteNonQueryAsync(cancellationToken);
+        logger.LogInformation("OPS.2.5 inserted e2e Tentative booking {Id} ({Ref}).", id, reference);
     }
 
     private static void AddParam(System.Data.Common.DbCommand cmd, string name, object value)

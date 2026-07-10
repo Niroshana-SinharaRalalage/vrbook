@@ -28,6 +28,15 @@ export const E2E_SMOKE_PROPERTY_SLUG = 'e2e-smoke-property';
 export const E2E_SMOKE_PROPERTY_ID = 'e2e00000-0000-0000-0000-000000000001';
 
 /**
+ * Two Tentative bookings on the seed property, seeded by SeedE2EBackfill for
+ * the owner confirm/reject specs (OPS.2.5). Reset to Tentative on every migrator
+ * run (deploy). MUST stay in sync with ConfirmBookingId / RejectBookingId in
+ * src/VrBook.Migrator/SeedE2EBackfill.cs.
+ */
+export const E2E_TENTATIVE_BOOKING_CONFIRM_ID = 'e2e00000-0000-0000-0000-000000000010';
+export const E2E_TENTATIVE_BOOKING_REJECT_ID = 'e2e00000-0000-0000-0000-000000000011';
+
+/**
  * A short, filesystem/URL-safe id unique to this process. Uses the CI run id
  * when present (stable across the setup + authed projects of one CI job), else
  * a timestamp+random suffix for local runs.
