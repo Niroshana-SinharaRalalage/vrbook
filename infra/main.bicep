@@ -92,11 +92,18 @@ var apiMinReplicas = isProd ? 1 : 0
 var apiMaxReplicas = isProd ? 10 : 3
 
 // Slice OPS.INFRA.2 — cheapest-workable container-app resource envelope.
-// Staging + dev on 0.5 vCPU / 1 GiB fits comfortably under the 180K vCPU-sec
-// / 360K GiB-sec / 2M-request monthly free grant even with sporadic traffic;
-// prod stays at 1.0 / 2Gi.
+//   * API (staging+dev): 0.5 vCPU / 1 GiB. Live working set ~200 MiB idle;
+//     under load a 12-module .NET monolith + EF/MediatR climbs to 400-700 MiB
+//     — 1 GiB is the correct floor. Below that risks OOM (GC starts at ~75%
+//     of limit → 384 MiB for a 512 MiB container).
+//   * Web (staging+dev): 0.25 vCPU / 0.5 GiB. Next.js standalone runs at
+//     ~108 MiB working set; 512 MiB has 4x headroom.
+//   * Both scale-to-zero (min=0) with cold-start ~2-4s on first request.
+//   * Prod stays 1.0/2Gi (api) + 0.5/1Gi (web); untouched until prod cutover.
 var apiCpu = isProd ? '1.0' : '0.5'
 var apiMemory = isProd ? '2Gi' : '1Gi'
+var webCpu = isProd ? '0.5' : '0.25'
+var webMemory = isProd ? '1Gi' : '0.5Gi'
 
 // Front Door deferred for staging — the staging WAF policy needs Premium_AzureFrontDoor
 // SKU to use managed rules (Standard rejects ManagedRules per WAF schema). Enable for prod
@@ -117,6 +124,9 @@ module net 'modules/network.bicep' = {
     env: env
     location: location
     tags: tags
+    // Slice OPS.INFRA.2 — only carry the Redis DNS zone when redis is actually
+    // deployed. Currently deployRedis=false everywhere → skip the zone (~$0.50/mo).
+    includeRedisDns: deployRedis
   }
 }
 
@@ -611,8 +621,8 @@ module webApp 'modules/container-app.bicep' = {
     // Slice OPS.INFRA.2 — staging + dev scale-to-zero (was min=1 for staging).
     minReplicas: isProd ? 1 : 0
     maxReplicas: isProd ? 5 : 2
-    cpu: '0.5'
-    memory: '1Gi'
+    cpu: webCpu
+    memory: webMemory
     envVars: webEnvVars
     secrets: [
       { name: 'entra-web-authority-admin', keyVaultSecretName: 'entra-web-authority-admin' }

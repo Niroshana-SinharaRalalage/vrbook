@@ -3,11 +3,17 @@
 //   snet-apps  — delegated to Microsoft.App/environments for Container Apps Env
 //   snet-data  — hosts Private Endpoints for Postgres + Redis
 // Private DNS zones:
-//   privatelink.postgres.database.azure.com
-//   privatelink.redis.cache.windows.net
+//   privatelink.postgres.database.azure.com  (always)
+//   privatelink.redis.cache.windows.net       (only when includeRedisDns=true;
+//     Slice OPS.INFRA.2 gates this on the deployRedis flag from main.bicep —
+//     Redis is currently not deployed anywhere, so the DNS zone was pure
+//     dead weight (~$0.50/mo). Re-enable when the redis module comes back.)
 
 @description('Environment short name (dev | staging | prod).')
 param env string
+
+@description('Whether to provision the privatelink.redis.cache.windows.net private DNS zone + VNet link. Should mirror main.bicep`s deployRedis flag — otherwise the DNS zone is orphaned.')
+param includeRedisDns bool = false
 
 @description('Azure region.')
 param location string
@@ -179,7 +185,7 @@ resource pgDnsZone 'Microsoft.Network/privateDnsZones@2024-06-01' = {
   tags: tags
 }
 
-resource redisDnsZone 'Microsoft.Network/privateDnsZones@2024-06-01' = {
+resource redisDnsZone 'Microsoft.Network/privateDnsZones@2024-06-01' = if (includeRedisDns) {
   name: 'privatelink.redis.cache.windows.net'
   location: 'global'
   tags: tags
@@ -198,7 +204,7 @@ resource pgDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-0
   }
 }
 
-resource redisDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = {
+resource redisDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = if (includeRedisDns) {
   parent: redisDnsZone
   name: '${vnetName}-link'
   location: 'global'
@@ -217,4 +223,4 @@ output appsSubnetId string = '${vnet.id}/subnets/${appsSubnetName}'
 output dataSubnetId string = '${vnet.id}/subnets/${dataSubnetName}'
 output pgSubnetId string = '${vnet.id}/subnets/${pgSubnetName}'
 output pgPrivateDnsZoneId string = pgDnsZone.id
-output redisPrivateDnsZoneId string = redisDnsZone.id
+output redisPrivateDnsZoneId string = includeRedisDns ? redisDnsZone.id : ''
