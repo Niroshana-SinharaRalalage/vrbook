@@ -317,12 +317,31 @@ jobs:
 
       - name: Bicep deploy
         run: |
-          az deployment group create \
-            -g ${{ env.RESOURCE_GROUP }} \
-            -f infra/main.bicep \
-            -p infra/environments/staging.bicepparam \
-            --query "{provisioningState:properties.provisioningState, outputs:properties.outputs}" \
-            -o json
+          set -uo pipefail
+          # OPS.INFRA.3 — bounded retry on the transient Azure `ServerIsBusy` /
+          # `Conflict` that the B1ms Burstable Postgres (OPS.INFRA.2) throws when
+          # it serialises control-plane config writes (e.g. require_secure_transport)
+          # and rejects a concurrent one mid-operation. Retry only on that class;
+          # any other failure fails fast.
+          attempt=1; max=3
+          while :; do
+            echo "== Bicep deploy attempt $attempt/$max =="
+            out=$(az deployment group create \
+              -g ${{ env.RESOURCE_GROUP }} \
+              -f infra/main.bicep \
+              -p infra/environments/staging.bicepparam \
+              --query "{provisioningState:properties.provisioningState, outputs:properties.outputs}" \
+              -o json 2>&1) && { echo "$out"; break; }
+            echo "$out"
+            if echo "$out" | grep -qiE "ServerIsBusy|Conflict|another operation"; then
+              if [ "$attempt" -ge "$max" ]; then
+                echo "::error::Bicep deploy still failing on ServerIsBusy after $max attempts"; exit 1
+              fi
+              echo "Transient ServerIsBusy — backing off 30s and retrying…"; sleep 30
+              attempt=$((attempt+1)); continue
+            fi
+            echo "::error::Bicep deploy failed (non-transient)"; exit 1
+          done
 
   # ---- Migrate: run EF migrations against staging Postgres ---------------
   migrate:
@@ -491,30 +510,38 @@ jobs:
           echo "fqdn=$FQDN" >> "$GITHUB_OUTPUT"
           echo "API FQDN: https://$FQDN"
 
-      - name: Wait for active revision to match deployed image (max 3 min)
+      # OPS.INFRA.3 — scale-to-zero-aware convergence (see cd-staging-web.yml
+      # for the full rationale). minReplicas=0 means a fresh revision sits
+      # ScaledToZero with no replica to be Healthy until traffic arrives; the
+      # old "Running && Healthy" gate never converged. (1) confirm the active
+      # revision serves the pushed image and isn't Failed; (2) warm it 0->1 and
+      # treat /health/live 200 as the readiness signal. The image-match in step
+      # 1 also guards against the OLD revision serving 200 during traffic shift.
+      - name: Converge + warm the new revision (scale-to-zero aware)
         env:
           EXPECTED_IMAGE: ${{ vars.ACR_NAME }}.azurecr.io/vrbook-api:${{ github.sha }}
+          WARM_URL: https://${{ steps.fqdn.outputs.fqdn }}/health/live
         run: |
-          set -euo pipefail
-          # Don't trust /health/live alone — the OLD revision can serve 200
-          # while traffic is still shifting. Poll the platform until the active
-          # revision is running the image we just pushed.
-          for i in $(seq 1 36); do
-            ACTIVE=$(az containerapp revision list \
-              -n ca-vrbook-api-staging \
-              -g ${{ env.RESOURCE_GROUP }} \
-              --query "[?properties.active].{name:name, image:properties.template.containers[0].image, state:properties.runningState, health:properties.healthState}" \
-              -o json)
-            echo "[$i/36] active revisions: $ACTIVE"
-            MATCH=$(echo "$ACTIVE" | jq -r --arg img "$EXPECTED_IMAGE" '.[] | select(.image==$img and .state=="Running" and .health=="Healthy") | .name' | head -1)
-            if [ -n "$MATCH" ]; then
-              echo "Active revision $MATCH is serving the expected image"
-              exit 0
-            fi
+          set -uo pipefail
+          echo "== Step 1: active revision serves the expected image (max 5 min) =="
+          matched=""
+          for i in $(seq 1 60); do
+            ACTIVE=$(az containerapp revision list -n ca-vrbook-api-staging -g ${{ env.RESOURCE_GROUP }} \
+              --query "[?properties.active].{name:name, image:properties.template.containers[0].image, state:properties.runningState}" -o json)
+            echo "[$i/60] $ACTIVE"
+            NAME=$(echo "$ACTIVE" | jq -r --arg img "$EXPECTED_IMAGE" '.[] | select(.image==$img and .state!="Failed") | .name' | head -1)
+            if [ -n "$NAME" ]; then matched="$NAME"; echo "active revision $NAME serves $EXPECTED_IMAGE"; break; fi
             sleep 5
           done
-          echo "::error::Active revision did not converge on $EXPECTED_IMAGE within 3 min"
-          exit 1
+          if [ -z "$matched" ]; then echo "::error::active revision never converged on $EXPECTED_IMAGE within 5 min"; exit 1; fi
+
+          echo "== Step 2: warm 0->1 and confirm a 200 (max 3 min) =="
+          for i in $(seq 1 45); do
+            code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 20 "$WARM_URL" || echo 000)
+            if [ "$code" = "200" ]; then echo "warm: $WARM_URL ($code)"; exit 0; fi
+            echo "[$i/45] $WARM_URL -> $code, warming…"; sleep 4
+          done
+          echo "::error::revision converged but never served 200 after warm-up"; exit 1
 
       - name: Smoke endpoints
         env:
