@@ -285,9 +285,32 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,scope=${{ matrix.name }},mode=max
 
-      # Trivy + Syft are deferred to prod-CD to save staging quota.
-      # When the prod pipeline lands, add: name=='api' (or matrix-level)
-      # SBOM + Trivy gates so we never push an HIGH-CVE image to prod.
+      # Slice OPS.5 — image vulnerability scan (INFORMATIONAL). Scans the
+      # freshly-built local image before push. Compressed to a pre-launch review
+      # per OPS_LAUNCH_COMPLETION_PLAN §2 (not a blocking gate during the launch
+      # window). Pre-launch go-live gate: review the latest SARIF, no un-triaged
+      # HIGH/CRITICAL-fixable. Suppressions in .trivyignore. SBOM signing →
+      # post-launch backlog.
+      - name: Trivy image scan (informational)
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: sarif
+          output: trivy-${{ matrix.name }}.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+
+      - name: Upload Trivy SARIF
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ matrix.name }}
+          path: trivy-${{ matrix.name }}.sarif
+          retention-days: 14
+          if-no-files-found: ignore
 
       - name: Push image to ACR
         run: docker push ${{ env.IMAGE }}

@@ -1,0 +1,12 @@
+# Slice OPS.5 — Trivy vulnerability suppressions.
+#
+# One CVE id per line to suppress a triaged finding. Every entry MUST carry a
+# comment: who triaged it, when, and why it's acceptable (not exploitable in our
+# context / no fix available / accepted risk). The pre-launch go-live gate is:
+# review the latest `trivy-*` SARIF artifact and confirm no un-triaged
+# HIGH/CRITICAL-fixable finding remains outside this file.
+#
+# Format:
+#   CVE-2024-XXXXX   # 2026-07-10 <name>: <reason>
+#
+# (empty — populate during the pre-launch Trivy triage)

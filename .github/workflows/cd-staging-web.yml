@@ -153,7 +153,29 @@ jobs:
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max
 
-      # Trivy + Syft deferred to prod-CD - same rationale as cd-staging-api.
+      # Slice OPS.5 — image vulnerability scan (INFORMATIONAL); see
+      # cd-staging-api.yml for rationale. Pre-launch go-live gate: review SARIF,
+      # no un-triaged HIGH/CRITICAL-fixable. Suppressions in .trivyignore.
+      - name: Trivy image scan (informational)
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: sarif
+          output: trivy-web.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+
+      - name: Upload Trivy SARIF
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-web
+          path: trivy-web.sarif
+          retention-days: 14
+          if-no-files-found: ignore
 
       - name: Push image to ACR
         run: docker push ${{ env.IMAGE }}
