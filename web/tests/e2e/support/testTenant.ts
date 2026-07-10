@@ -48,3 +48,20 @@ export const RUN_ID = uniqueRunId();
  * e.g. `scopedName('Cozy Cabin')` → `"[e2e ci123] Cozy Cabin"`.
  */
 export const scopedName = (label: string): string => `[e2e ${RUN_ID}] ${label}`;
+
+/**
+ * A short, unique, far-future check-in/check-out range (`yyyy-mm-dd`) for the
+ * booking specs. Tentative holds block availability, so booking the shared
+ * seed property on fixed dates would conflict across runs — this spreads each
+ * run's booking across a wide future window to keep them independent. The
+ * quote handler validates only checkout>checkin + guests + min/max stay (no
+ * past/availability check), so any future range is accepted.
+ */
+export const futureStayDates = (): { checkin: string; checkout: string } => {
+  // Base ~2 years out; jitter by a random day offset within a ~3-year window.
+  const base = new Date(Date.UTC(2031, 0, 1));
+  const offsetDays = Math.floor(Math.random() * 1000);
+  const checkinMs = base.getTime() + offsetDays * 86_400_000;
+  const iso = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+  return { checkin: iso(checkinMs), checkout: iso(checkinMs + 2 * 86_400_000) };
+};
