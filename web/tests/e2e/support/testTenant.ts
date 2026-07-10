@@ -17,6 +17,17 @@
 export const E2E_TENANT_SLUG = 'e2e-tenant';
 
 /**
+ * Deterministic public property + its GUID, seeded by
+ * VrBook.Migrator.SeedE2EBackfill (OPS.2.3). The anonymous detail-by-slug smoke
+ * navigates to `/properties/${E2E_SMOKE_PROPERTY_SLUG}`; the anonymous quote
+ * smoke POSTs to `/api/v1/properties/${E2E_SMOKE_PROPERTY_ID}/quotes`.
+ * MUST stay in sync with the SmokePropertySlug / SmokePropertyId constants in
+ * src/VrBook.Migrator/SeedE2EBackfill.cs.
+ */
+export const E2E_SMOKE_PROPERTY_SLUG = 'e2e-smoke-property';
+export const E2E_SMOKE_PROPERTY_ID = 'e2e00000-0000-0000-0000-000000000001';
+
+/**
  * A short, filesystem/URL-safe id unique to this process. Uses the CI run id
  * when present (stable across the setup + authed projects of one CI job), else
  * a timestamp+random suffix for local runs.

@@ -243,3 +243,97 @@ jobs:
 
           echo ""
           echo "Smoke OK on $WEB"
+
+  # ---- Playwright anonymous smoke: browser-level flow correctness ---------
+  # Slice OPS.2.3 — 5 anonymous *.smoke.spec.ts run against deployed staging.
+  # BLOCKING from day one (plan §5-Q4-a). Chromium only. The curl `smoke` job
+  # above proves reachability; this proves the React trees actually render +
+  # the anonymous quote funnel calculates. Runs AFTER `smoke` so the web
+  # container is already warm-ish, but a warm-and-wait step re-primes both the
+  # web (Next.js SSR) and API replicas because staging scales to zero
+  # independently (OPS.INFRA.2).
+  playwright-smoke:
+    name: playwright-smoke (anonymous)
+    needs: smoke
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install (npm ci against committed lock)
+        run: npm ci --no-audit --no-fund
+
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+
+      - name: Install Chromium (+ OS deps)
+        run: npx playwright install --with-deps chromium
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Discover web + API FQDNs
+        id: fqdn
+        run: |
+          set -euo pipefail
+          WEB=$(az containerapp show -n ca-vrbook-web-staging -g ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          API=$(az containerapp show -n ca-vrbook-api-staging -g ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "web=$WEB" >> "$GITHUB_OUTPUT"
+          echo "api=$API" >> "$GITHUB_OUTPUT"
+          echo "Web: https://$WEB   API: https://$API"
+
+      - name: Warm up (both origins scale to zero independently)
+        env:
+          WEB: https://${{ steps.fqdn.outputs.web }}
+          API: https://${{ steps.fqdn.outputs.api }}
+        run: |
+          set -uo pipefail
+          warm() {
+            local url=$1
+            for i in $(seq 1 30); do
+              code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 "$url" || echo 000)
+              if [ "$code" = "200" ]; then echo "  warm: $url ($code)"; return 0; fi
+              echo "  [$i/30] $url -> $code, waiting…"; sleep 2
+            done
+            echo "::error::$url never returned 200 during warm-up"; return 1
+          }
+          warm "$WEB/"
+          warm "$API/health/ready"
+
+      - name: Run anonymous smoke (Chromium, blocking)
+        env:
+          PLAYWRIGHT_BASE_URL: https://${{ steps.fqdn.outputs.web }}
+        run: npx playwright test --project=smoke
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-smoke
+          path: web/playwright-report
+          retention-days: 7
+          if-no-files-found: ignore

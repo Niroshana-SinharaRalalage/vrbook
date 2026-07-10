@@ -38,7 +38,7 @@ npx playwright test --project=guest-authed
 
 Two workflows:
 
-1. **`cd-staging-web.yml` → `playwright-smoke` job** — anonymous smoke, blocking on every push (from OPS.2.3). Chromium only.
+1. **`cd-staging-web.yml` → `playwright-smoke` job** — anonymous smoke (5 specs), **blocking** on every push (shipped OPS.2.3). Runs after the curl `smoke` job; warms both web + API origins (staging scales to zero) before Playwright. Chromium only.
 2. **`.github/workflows/nightly-playwright.yml`** — cron `0 6 * * *` UTC. Three authed projects. `continue-on-error: true` for OPS.2 landing window; blocking-flip target OPS.2.9.
 
 ## Auth model
@@ -47,9 +47,13 @@ Real MSAL redirect against staging Entra CIAM (owner-locked in plan §5-Q2-a). T
 
 **Google OAuth is out of scope for Playwright** (owner-locked in ADR-0019, plan §5-Q2-a rationale + §6). Weekly manual walk in `docs/runbooks/social_idp_setup.md`.
 
+## Seeded smoke fixture (OPS.2.3)
+
+`SeedE2EBackfill` also seeds ONE deterministic public property (`slug='e2e-smoke-property'`, GUID `e2e00000-0000-0000-0000-000000000001`, `is_active=true`) + a single USD pricing plan under `e2e-tenant`. The anonymous detail-by-slug + quote smokes target it by the constants in `support/testTenant.ts` (`E2E_SMOKE_PROPERTY_SLUG` / `E2E_SMOKE_PROPERTY_ID`), which mirror the C# constants in `src/VrBook.Migrator/SeedE2EBackfill.cs` — **keep the two in sync**.
+
 ## Test data reset
 
-`runId` namespacing (owner-locked in plan §5-Q3-a). Every mutating test stamps `runId = <ISO-timestamp>-<random-6>` on property titles + booking `guest_notes`. Isolated `e2e-tenant` scopes all pollution. Nightly janitor deferred (POLISH.6).
+`runId` namespacing (owner-locked in plan §5-Q3-a). Every mutating test stamps `RUN_ID` (via `scopedName()`) on property titles + booking notes. Isolated `e2e-tenant` scopes all pollution. Nightly janitor deferred (POLISH.6).
 
 ## Not tested here
 

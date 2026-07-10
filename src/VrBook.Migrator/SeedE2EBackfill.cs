@@ -62,6 +62,18 @@ public sealed class SeedE2EBackfill(
     private const string PlatformAdminEmail = "e2e-platform-admin@vrbook.test";
     private const string PlatformAdminDisplayName = "E2E Platform Admin";
 
+    // Slice OPS.2.3 — deterministic public property + pricing plan for the
+    // anonymous smoke suite (detail-by-slug + unauthenticated quote). Mirrored
+    // in web/tests/e2e/support/testTenant.ts (E2E_SMOKE_PROPERTY_SLUG /
+    // E2E_SMOKE_PROPERTY_ID) — keep the two in sync. The GUID is intentionally
+    // human-recognizable + obviously synthetic so it never collides with a real
+    // Guid.NewGuid() row and the quote spec can hardcode it. The property is
+    // is_active=true so it clears the Catalog public-read RLS carve-out
+    // (OpsM9_1a: USING is_active=true AND deleted_at IS NULL); the plan's
+    // tenant_id MUST match so the quote handler's RLS-scoped plan read sees it.
+    private const string SmokePropertySlug = "e2e-smoke-property";
+    private static readonly Guid SmokePropertyId = new("e2e00000-0000-0000-0000-000000000001");
+
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
         var enabled = configuration.GetValue<bool>("Bootstrap:E2e:Enabled");
@@ -92,6 +104,12 @@ public sealed class SeedE2EBackfill(
             await UpsertPreSeededUserAsync(
                 conn, PlatformAdminEmail, PlatformAdminDisplayName, isPlatformAdmin: true, cancellationToken);
 
+            // Slice OPS.2.3 — the anonymous smoke fixture (property + plan).
+            // Shares the wrapping transaction so a property can never land
+            // without its plan (the quote smoke would then 404).
+            await UpsertE2eSmokePropertyAsync(conn, tenantId, ownerId, cancellationToken);
+            await UpsertE2eSmokePricingPlanAsync(conn, tenantId, cancellationToken);
+
             await using (var cmd = conn.CreateCommand())
             {
                 cmd.Transaction = db.Database.CurrentTransaction!.GetDbTransaction();
@@ -101,19 +119,20 @@ INSERT INTO identity.migration_audit
 VALUES (gen_random_uuid(),
         'OpsM2_SeedE2EBackfill',
         'bicep-declarative-e2e-fixture',
-        3,
+        5,
         @notes,
         NOW())";
                 var p = cmd.CreateParameter();
                 p.ParameterName = "notes";
-                p.Value = $"tenant={TenantSlug} owner={OwnerEmail} platform_admin={PlatformAdminEmail}";
+                p.Value = $"tenant={TenantSlug} owner={OwnerEmail} platform_admin={PlatformAdminEmail} smoke_property={SmokePropertySlug}";
                 cmd.Parameters.Add(p);
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
 
             await tx.CommitAsync(cancellationToken);
             logger.LogInformation(
-                "OPS.2.2 e2e backfill committed. tenant={TenantId} owner={OwnerId}", tenantId, ownerId);
+                "OPS.2.2/2.3 e2e backfill committed. tenant={TenantId} owner={OwnerId} smokeProperty={PropertyId}",
+                tenantId, ownerId, SmokePropertyId);
         }
         catch (Exception ex)
         {
@@ -283,6 +302,138 @@ VALUES (gen_random_uuid(), @userId, @tenantId, 'tenant_admin', TRUE, 0, NOW(), N
         logger.LogInformation(
             "OPS.2.2 inserted e2e owner tenant_admin membership (user={UserId}, tenant={TenantId}).",
             userId, tenantId);
+    }
+
+    /// <summary>
+    /// Slice OPS.2.3 — idempotently seed the deterministic public property that
+    /// backs the anonymous detail-by-slug + quote smokes. Keyed on the fixed
+    /// <see cref="SmokePropertyId"/>; on re-run only re-asserts the RLS-relevant
+    /// flags (<c>is_active</c>, <c>tenant_id</c>). All owned-value-object columns
+    /// (address / capacity / check-in window) are NOT NULL in the DB and set to
+    /// synthetic constants. The migrator role has BYPASSRLS, so the raw INSERT
+    /// isn't blocked and no <c>app.tenant_id</c> GUC is needed — the tenant_id
+    /// column is set explicitly.
+    /// </summary>
+    private async Task UpsertE2eSmokePropertyAsync(
+        System.Data.Common.DbConnection conn,
+        Guid tenantId,
+        Guid ownerId,
+        CancellationToken cancellationToken)
+    {
+        bool exists;
+        await using (var read = conn.CreateCommand())
+        {
+            read.Transaction = db.Database.CurrentTransaction!.GetDbTransaction();
+            read.CommandText = @"SELECT 1 FROM catalog.properties
+                                 WHERE ""Id"" = @id FOR UPDATE";
+            AddParam(read, "id", SmokePropertyId);
+            await using var r = await read.ExecuteReaderAsync(cancellationToken);
+            exists = await r.ReadAsync(cancellationToken);
+        }
+
+        if (exists)
+        {
+            await using var upd = conn.CreateCommand();
+            upd.Transaction = db.Database.CurrentTransaction!.GetDbTransaction();
+            upd.CommandText = @"UPDATE catalog.properties
+                                SET is_active = TRUE, tenant_id = @tenantId,
+                                    deleted_at = NULL, updated_at = NOW()
+                                WHERE ""Id"" = @id
+                                  AND (is_active IS DISTINCT FROM TRUE
+                                       OR tenant_id IS DISTINCT FROM @tenantId
+                                       OR deleted_at IS NOT NULL)";
+            AddParam(upd, "id", SmokePropertyId);
+            AddParam(upd, "tenantId", tenantId);
+            await upd.ExecuteNonQueryAsync(cancellationToken);
+            logger.LogInformation(
+                "OPS.2.3 e2e smoke property already exists (id={PropertyId}).", SmokePropertyId);
+            return;
+        }
+
+        await using var ins = conn.CreateCommand();
+        ins.Transaction = db.Database.CurrentTransaction!.GetDbTransaction();
+        ins.CommandText = @"
+INSERT INTO catalog.properties
+    (""Id"", slug, title, description, property_type,
+     street, city, state, postal_code, country, latitude, longitude,
+     max_guests, bedrooms, bathrooms, beds,
+     checkin_from, checkin_to, checkout_by,
+     owner_user_id, tenant_id, is_active, turnover_hours, rating_count,
+     row_version, created_at, updated_at)
+VALUES (@id, @slug, 'E2E Smoke Test Property',
+        'Deterministic property seeded by VrBook.Migrator.SeedE2EBackfill for the OPS.2 Playwright anonymous smoke suite. Not a real listing.',
+        'Villa',
+        '1 E2E Way', 'Testville', 'TS', '00001', 'USA', 0.0, 0.0,
+        4, 2, 1, 2,
+        TIME '15:00:00', TIME '20:00:00', TIME '11:00:00',
+        @ownerId, @tenantId, TRUE, 24, 0,
+        0, NOW(), NOW())";
+        AddParam(ins, "id", SmokePropertyId);
+        AddParam(ins, "slug", SmokePropertySlug);
+        AddParam(ins, "ownerId", ownerId);
+        AddParam(ins, "tenantId", tenantId);
+        await ins.ExecuteNonQueryAsync(cancellationToken);
+        logger.LogInformation(
+            "OPS.2.3 inserted e2e smoke property (id={PropertyId}, slug={Slug}).",
+            SmokePropertyId, SmokePropertySlug);
+    }
+
+    /// <summary>
+    /// Slice OPS.2.3 — idempotently seed the single pricing plan the anonymous
+    /// quote endpoint reads. <c>tenant_id</c> MUST equal the property's tenant:
+    /// the quote handler resolves the tenant from <c>properties.tenant_id</c>
+    /// then reads the plan inside an RLS scope stamped with it, so a mismatch
+    /// hides the plan and the quote 404s. Keyed on the unique
+    /// <c>property_id</c>. No fees / rules / availability rows are needed.
+    /// </summary>
+    private async Task UpsertE2eSmokePricingPlanAsync(
+        System.Data.Common.DbConnection conn,
+        Guid tenantId,
+        CancellationToken cancellationToken)
+    {
+        bool exists;
+        await using (var read = conn.CreateCommand())
+        {
+            read.Transaction = db.Database.CurrentTransaction!.GetDbTransaction();
+            read.CommandText = @"SELECT 1 FROM pricing.pricing_plans
+                                 WHERE property_id = @propId AND deleted_at IS NULL
+                                 FOR UPDATE";
+            AddParam(read, "propId", SmokePropertyId);
+            await using var r = await read.ExecuteReaderAsync(cancellationToken);
+            exists = await r.ReadAsync(cancellationToken);
+        }
+
+        if (exists)
+        {
+            await using var upd = conn.CreateCommand();
+            upd.Transaction = db.Database.CurrentTransaction!.GetDbTransaction();
+            upd.CommandText = @"UPDATE pricing.pricing_plans
+                                SET tenant_id = @tenantId, updated_at = NOW()
+                                WHERE property_id = @propId
+                                  AND tenant_id IS DISTINCT FROM @tenantId";
+            AddParam(upd, "propId", SmokePropertyId);
+            AddParam(upd, "tenantId", tenantId);
+            await upd.ExecuteNonQueryAsync(cancellationToken);
+            logger.LogInformation(
+                "OPS.2.3 e2e smoke pricing plan already exists (property={PropertyId}).", SmokePropertyId);
+            return;
+        }
+
+        await using var ins = conn.CreateCommand();
+        ins.Transaction = db.Database.CurrentTransaction!.GetDbTransaction();
+        ins.CommandText = @"
+INSERT INTO pricing.pricing_plans
+    (""Id"", property_id, base_nightly_rate, weekend_rate, currency,
+     min_stay_nights, max_stay_nights, dynamic_enabled, tenant_id,
+     row_version, created_at, updated_at)
+VALUES (gen_random_uuid(), @propId, 100.00, 100.00, 'USD',
+        1, 30, FALSE, @tenantId,
+        0, NOW(), NOW())";
+        AddParam(ins, "propId", SmokePropertyId);
+        AddParam(ins, "tenantId", tenantId);
+        await ins.ExecuteNonQueryAsync(cancellationToken);
+        logger.LogInformation(
+            "OPS.2.3 inserted e2e smoke pricing plan (property={PropertyId}).", SmokePropertyId);
     }
 
     private static void AddParam(System.Data.Common.DbCommand cmd, string name, object value)

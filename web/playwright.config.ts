@@ -29,6 +29,12 @@ export default defineConfig({
     baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    // OPS.2.3 — staging scales to zero (OPS.INFRA.2) + burstable Postgres, so
+    // the first navigation/action can eat a cold start. Generous ceilings
+    // absorb that jitter without masking a genuinely broken app (a persistently
+    // cold app still fails the CI warm-up gate before Playwright runs).
+    navigationTimeout: 30_000,
+    actionTimeout: 15_000,
   },
   projects: [
     {
