@@ -1,0 +1,68 @@
+# VrBook — Gaps, Stubs & Defects Register (as of 2026-07-11)
+
+Prioritized register of everything incomplete, stubbed, or defective, from the Phase-1 code audit. Each becomes (or maps to) a user story in Phase 3. **Sev:** P0 = correctness/go-live blocker · P1 = fix before/at launch · P2 = tech debt / post-launch.
+
+## A. Correctness defects (config that silently doesn't work)
+
+| # | Sev | Defect | Evidence | Impact |
+|---|---|---|---|---|
+| G1 | **P1** | Loyalty tier thresholds hard-coded in domain; `Loyalty:*Threshold` config is dead | `LoyaltyAccount.cs:65-66` vs appsettings + `main.bicep:381-383` | Ops can't tune loyalty without a code change; config is a lie |
+| G2 | **P1** | Booking Tentative SLA hard-coded to 24h; `Booking:TentativeSlaHours` never read; Bicep comment says "6h" | `Booking.cs:119` | Can't tune the hold-expiry window; internal inconsistency |
+| G3 | P2 | `Booking:HoldDurationMinutes` + `Sync:DefaultPollIntervalMinutes`/`StaleAlertHours` have no consumers | — | Dead config |
+| G4 | P2 | `Sync__DefaultPollIntervalMin` (Bicep) ≠ `Sync:DefaultPollIntervalMinutes` (appsettings) | `main.bicep:374` | Even if wired, the key wouldn't bind |
+| G5 | **P0** | No fail-fast config validation — missing Entra config boots the API with **no token validation** (silent) | `AuthExtensions.cs:30-32`; no `.ValidateOnStart()` anywhere | A misconfigured prod deploy could serve unauthenticated |
+| G6 | **P1** | `stripe-publishable-key` + `acs-sender-address` referenced by Bicep but not seeded by `10-store-secrets.ps1` | §3 CONFIG-INVENTORY | First deploy can fail atomically on secretRef resolution |
+| G7 | P2 | `EntraExternalId:AdminFlowName` read but never provided; admin-flow gate inert until set | `UserProvisioningMiddleware.cs:143` | Admin-vs-guest surface enforcement depends on undocumented config |
+| G8 | P2 | Hard-coded staging API FQDN in web build-arg | `cd-staging-web.yml:149` | Breaks on any CAE environment rebuild |
+
+## B. Stubbed / unimplemented features (return 501 or no-op)
+
+| # | Sev | Item | Evidence |
+|---|---|---|---|
+| G9 | **P1** | **Outbox → Service Bus relay not implemented** — domain events dispatch in-process only; outbox rows never marked dispatched | `OutboxMessage.cs:10-13`, `DomainEventOutboxInterceptor.cs:83-89` |
+| G10 | **P1** | Property **image upload/order/delete** endpoints → 501 (listings can't get photos via API) | `PropertiesController.cs` (A2.1) |
+| G11 | P2 | Booking admin **queue** + **manual booking** → 501 | `BookingsController.cs` (A4.1) |
+| G12 | P2 | Message **attachments** → 501 | `ThreadsController.cs` (A7.5) |
+| G13 | P2 | **Feature-flag runtime** is a no-op stub; `TogglesController`/`AlertsController` → 501 | `StubFeatureToggle.cs`, `AdminController.cs` |
+| G14 | P2 | **Admin module** is a no-op bounded context (TODO) | `AdminModule.cs:17-25` |
+| G15 | P2 | Infra stubs: `StubTaxCalculator`, `StubBookingAvailabilityReader`, `StubExternalChannelConflictChecker` (partly overridden), `NullRealtimeNotifier` fallback | `src/VrBook.Infrastructure/Stubs/` |
+| G16 | P2 | Stripe **dispute** (`charge.dispute.created`) only logs — no dispute domain event/workflow | `HandleStripeWebhookCommand.cs` |
+
+## C. Frontend gaps
+
+| # | Sev | Item | Evidence |
+|---|---|---|---|
+| G17 | **P1** | Home `/` "Featured stays" is **hardcoded placeholder data** ("Featured properties land here") | `web/src/app/page.tsx:23-45` |
+| G18 | **P1** | `/account/profile` is a **stub** (dashed placeholder) | `web/src/app/account/profile/page.tsx` |
+| G19 | **P1** | **No mobile navigation** — primary nav is `hidden md:flex`; links vanish on mobile | `SiteHeaderNav` |
+| G20 | P2 | **No shared UI component library** — only `ui/ConfirmActionModal`; buttons/cards/badges ad-hoc inline Tailwind, copy-pasted per page; two parallel color systems (semantic tokens vs raw `brand-*`) | `web/src/components/ui/` |
+| G21 | P2 | OpenAPI **generated API client empty**/not committed; all access hand-maintained | `web/src/lib/api/generated/` |
+| G22 | P2 | Frontend unit tests skew to auth guards; thin on feature-component rendering | `web/src/**/*.test.tsx` |
+
+## D. Ops / deployment gaps
+
+| # | Sev | Item | Evidence |
+|---|---|---|---|
+| G23 | **P0** | **No prod deploy pipeline** — only `cd-staging-*`; all workflows hardcode `rg-vrbook-staging`; prod would be fully manual | `.github/workflows/` |
+| G24 | **P0** | **No tested rollback** — single-revision 100%-to-latest; blue/green `revision_suffix`/`traffic_weight` inputs defined but unused | `_deploy-container-app.yml` |
+| G25 | **P1** | Backup/restore **not tested** (PG Flex has backups; restore never exercised) | — |
+| G26 | **P1** | Sandbox-only integrations: Stripe TEST, ACS managed domain (no custom DKIM), Entra placeholders | CONFIG-INVENTORY §4 |
+| G27 | P1 | Quality gates informational-only: .NET integration tests, Pact provider verify, Trivy, nightly authed E2E, k6, ZAP | CI workflows |
+| G28 | P2 | Outbound iCal rate limiter is **in-memory per-replica** (not distributed) | `InMemoryHostRateLimiter` |
+| G29 | P2 | Redis not deployed — holds + distributed lock on Postgres/no-op | `deployRedis=false` |
+| G30 | P2 | Optimistic concurrency globally disabled (Phase-1 single-actor) | `BaseDbContext.cs:48-58` |
+| G31 | P2 | Pact provider verifier skipped (WAF/Kestrel adapter pending); 1 of 12 consumer interactions lands (OPS.1.9) | `PactVerifierTests.cs:43` |
+
+## E. Compliance / NFR gaps (to confirm in PRD)
+
+| # | Sev | Item |
+|---|---|---|
+| G32 | P1 | No cookie-consent / GDPR-CCPA surfaces, terms/privacy/cancellation-policy pages, or data-retention policy found — need PRD decisions |
+| G33 | P1 | No WCAG 2.2 AA audit; a11y is baseline-only (roles/aria present, no focus-trap in modal) |
+| G34 | P1 | No i18n / multi-currency display strategy beyond Stripe currency; SEO present on public pages but no sitemap.xml/robots.txt confirmed |
+| G35 | P1 | Analytics / conversion tracking not present — must be live before launch or launch data is lost |
+| G36 | P2 | No documented availability target / RTO / RPO / on-call model |
+
+---
+
+These map into Phase-3 stories. P0/P1 items are launch-relevant; the go-live-specific ones (G23–G27) are tracked in `docs/OPS_LAUNCH_COMPLETION_PLAN.md`.

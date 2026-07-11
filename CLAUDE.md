@@ -2,6 +2,17 @@
 
 Repo-scoped context so a fresh session doesn't have to re-derive everything. Not a design doc — a working briefing. Full design lives in [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) + [`docs/adr/`](docs/adr/) + `OPS_M_*_PLAN.md` / `OPS_M_*_CLOSE_OUT.md`.
 
+## Specification set (planning session 2026-07-11 — in progress)
+
+A full agent-consumable spec set is being produced (documentation-only). **A new agent should read these first:**
+- [`docs/architecture/CURRENT-STATE.md`](docs/architecture/CURRENT-STATE.md) — the whole as-built system in one read (architecture, modules, domain, API, data, RLS, workers, integrations, frontend, tests, CI/CD, environments).
+- [`docs/ops/CONFIG-INVENTORY.md`](docs/ops/CONFIG-INVENTORY.md) — every setting, secret, env var, feature flag, hard-coded value + the per-env matrix.
+- [`docs/ops/CURRENT-GAPS.md`](docs/ops/CURRENT-GAPS.md) — prioritized register of stubs/gaps/defects (P0/P1/P2).
+- [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) — ambiguous business rules awaiting an owner decision (do NOT guess).
+- Coming next (Phase 2–4): `docs/product/PRD.md`, `docs/stories/` + `INDEX.md`, `docs/ops/GO-LIVE-RUNBOOK.md` + `CONFIG-MATRIX.md`, `docs/plan/EXECUTION-PLAN.md` + `AGENT-PROMPTS.md`.
+
+Workflow for this program: **TDD-first** (failing test → minimal impl → refactor), architect-consult before multi-module plans, `frontend-design` skill for UI, `superpowers` for planning/decomposition, code-review/verification gates per story.
+
 ## Project overview
 
 **Product**: VrBook — direct-booking vacation rental platform. Guests search + book properties; property owners (tenants) manage listings, confirm/reject bookings, chat with guests, sync iCal feeds, run reports; platform admin manages tenants. Multi-tenant SaaS on Azure. Full product spec at [`docs/BookingApp_Proposal.md`](docs/BookingApp_Proposal.md).
