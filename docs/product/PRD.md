@@ -102,6 +102,8 @@ Split `Booking → Order + Reservation`; add `ReservableKind`/`ReservableId`; ne
 
 **Open technical questions** (not product — from the design §10): manual-capture-across-N settlement timing, room-inventory lock location, fee-reversal accounting precision, outbox-relay dependency, `app.user_id` fail-safe-deny, FX rate source. Resolved during implementation slices.
 
+> **Validated 2026-07-13** against cited market research ([`COMPETITIVE-RESEARCH.md`](COMPETITIVE-RESEARCH.md)) + an independent architect review. The design's 11 corrections are in [`PHASE-3-4-DESIGN.md`](../architecture/PHASE-3-4-DESIGN.md) §0.5 — **read that block first**. Two review findings are **launch Must-fixes** (added to §6 below); the rest are Phase-3/4 story-level refinements (add a RatePlan dimension, per-state facilitator tax, explicit FX-incidence decision, inventory counter-row lock, 48h SLA, mixed-policy cart display).
+
 ---
 
 ## 6. Pass 2c — Competitive expansion (recommendations)
@@ -113,6 +115,8 @@ Benchmarked against Airbnb, Booking.com, Vrbo, and direct-booking/PMS tooling (L
 | **Stripe Tax + fee transparency** | Automated lodging/sales tax + clear fee breakdown at quote | Legal correctness + trust; OTAs already show all-in pricing | M | **Must (launch)** |
 | **Cancellation-policy engine (2 models)** | Owner-selected policy + platform tiers + refundable upgrade | Table stakes; drives conversion + refund correctness | M | **Must (launch)** |
 | **Listing photos (upload/manage)** | The 501 image endpoints + gallery mgmt UI | A photoless listing doesn't sell — hard blocker | M | **Must (launch)** |
+| **Real application-fee reversal on refund** (review C4) | Actually call `ApplicationFeeRefundService` + persist `fee_reversal_cents` — today it's metadata-only, so platform fees aren't clawed back on refund | Refund correctness / platform revenue integrity | S | **Must (launch)** |
+| **Reconcile MoR / tax posture** (review C5) | Drop `OnBehalfOf=supplier` on the single-tenant charge so the platform is genuinely merchant-of-record for the marketplace-facilitator tax posture | Tax-liability correctness; else supplier is legally MoR, contradicting Stripe-Tax-as-facilitator | S | **Must (launch)** |
 | **Mobile-first booking funnel** | Responsive nav + mobile checkout (currently no mobile nav) | >60% of travel traffic is mobile | M | **Must (launch)** |
 | **SEO + direct-traffic engine** | Sitemap, canonical, structured data (partly present), per-property SEO metadata, fast Core Web Vitals | Direct booking LIVES on organic + owner's own traffic; this is the moat vs OTAs | M | **Must (launch)** |
 | **Guest reviews w/ host response** | ✅ built | Trust/conversion | — | (done) |

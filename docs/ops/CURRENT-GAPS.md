@@ -14,6 +14,8 @@ Prioritized register of everything incomplete, stubbed, or defective, from the P
 | G6 | **P1** | `stripe-publishable-key` + `acs-sender-address` referenced by Bicep but not seeded by `10-store-secrets.ps1` | §3 CONFIG-INVENTORY | First deploy can fail atomically on secretRef resolution |
 | G7 | P2 | `EntraExternalId:AdminFlowName` read but never provided; admin-flow gate inert until set | `UserProvisioningMiddleware.cs:143` | Admin-vs-guest surface enforcement depends on undocumented config |
 | G8 | P2 | Hard-coded staging API FQDN in web build-arg | `cd-staging-web.yml:149` | Breaks on any CAE environment rebuild |
+| G37 | **P1** | **Application-fee reversal on refund is a no-op** — reversal cents written to refund metadata only, never executed via `ApplicationFeeRefundService` | `StripeGateway.cs:135-144`; `RefundForBookingCommand.cs` (found in the 2026-07-13 independent design review, C4) | Platform fee not clawed back on refund; over-refund/negative-balance guard is approximate. Launch-relevant. |
+| G38 | **P1** | **Single-tenant charge sets `OnBehalfOf=supplier`, making the SUPPLIER the merchant-of-record** — contradicts the platform-as-marketplace-facilitator tax posture (Q25) | `StripeGateway.cs:71` (review C5) | Tax liability sits on the wrong entity; incompatible with Stripe-Tax-as-facilitator. Launch-relevant. |
 
 ## B. Stubbed / unimplemented features (return 501 or no-op)
 

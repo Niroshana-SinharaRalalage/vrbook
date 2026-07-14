@@ -8,6 +8,28 @@ Every claim is verified against the code as-built. Source of truth for the PRD "
 
 ---
 
+## 0.5 Review corrections (independent architect review, 2026-07-13) — READ FIRST; SUPERSEDES the affected passages below
+
+A second, independent architect red-teamed this design against the locked requirements + [`../product/COMPETITIVE-RESEARCH.md`](../product/COMPETITIVE-RESEARCH.md) + the code. Verdict: **ship-with-corrections.** The unifying model (§1), rooms model (§2), FX roles (§5), cancellation (§6), sequencing (§7), migration (§8), and Phase 4 (§9) are **sound**. Payments (§3) and the cross-tenant RLS claim (§4) had **code-verified defects**. The 11 corrections below **supersede** the conflicting text later in this doc. Items 1–5 are must-fix-before-stories.
+
+| # | Sev | Correction (supersedes) |
+|---|---|---|
+| C1 | **blocker** | **§3 multi-supplier capture:** "capture-on-first-confirm" is WRONG — a Stripe PI captures once, so first-confirm would charge the guest for legs suppliers B…N haven't approved (violates Q6 manual capture). **Correct model:** resolve all legs by the SLA (confirm / reject / expire) → **one partial capture** = Σ(confirmed legs) via `AmountToCapture` → transfer per confirmed supplier. |
+| C2 | **blocker** | **§4 PaymentIntent is a SECOND cross-tenant object** — the headline "the Order is the ONLY cross-tenant object" is FALSE. An `OrderId`-keyed PI spans M suppliers, but `payment.payment_intents` is tenant-scoped today (RLS + the `pi.TenantId != cmd.TenantId` guard, `RefundForBookingCommand.cs:65`). **Correct:** the PI root moves to **platform/orchestration scope** (read/written via `IRlsBypassDbContextFactory`; only the platform is MoR); `payment.transfers` + refunds carry the per-tenant axis. Add PI re-scoping to §8. |
+| C3 | **blocker** | **§4 RLS write claim is wrong under EF batching** — the interceptor fires **per DbCommand**, and EF batches multiple INSERTs into one command, so "re-stamps per statement" fails a mixed-tenant batch. **Correct:** the atomic N-line Place must **flush per tenant** (N `SaveChanges`, one scope each) **within one serializable transaction**. |
+| C4 | **launch Must** | **Application-fee reversal is a no-op today** — `RefundForBookingCommand`/`StripeGateway.cs:135-144` writes the reversal cents to refund **metadata only**; it never calls `ApplicationFeeRefundService`, so platform fees are NOT actually clawed back on refund. Launch-relevant (single-tenant refunds need it now). Execute the real reversal + persist `fee_reversal_cents` (also fixes the approximate negative-balance guard, §10-Q3/M5). |
+| C5 | **launch Must** | **MoR/tax inconsistency** — the single-tenant destination-charge path sets `OnBehalfOf = supplier` (`StripeGateway.cs:71`), which per research §7 makes the **supplier** the merchant of record + tax-liable party — contradicting the locked platform-as-facilitator posture (Q25). **Correct:** drop `OnBehalfOf` on that path (or explicitly justify) so the platform is genuinely MoR. |
+| C6 | P1 | **§3 tax — "all US states, platform collects+remits" is oversimplified.** Facilitator status + who remits is **per-state** (VA mandates; WA doesn't treat platforms as facilitator for net); "collected ≠ remitted"; hosts may keep filing duties. **Model a per-state facilitator/remitter config + a collected-vs-remitted ledger + host-obligation disclosure.** |
+| C7 | design | **Add a `RatePlan` dimension** (`RoomType × RatePlan`; plan = price × policy × prepayment) — the incumbent-standard unit (research §1). Snapshot the resolved plan onto the Reservation. The two cancellation models (Q24) become **two rate plans**; the "RefundableUpgrade line-item" (§6) folds into this. |
+| C8 | correctness | **§2 room inventory overbooking race** — `COUNT < InventoryCount` with no rows to lock can double-insert at the boundary. **Lock the `booking.room_inventory` counter row `FOR UPDATE`** (that's the real reason to mirror inventory into `booking`, §10-Q2). |
+| C9 | decision | **§5 FX incidence is unresolved** — the design never says what the **Charge currency equals** nor **who bears the ~1% cross-currency-transfer spread** (guest via marked-up display, platform margin, or supplier net). Promote to an explicit open **commercial** decision to resolve when the cart lands (not the "FX source/staleness" framing of §10-Q6). |
+| C10 | consistency | **Use 48h everywhere** (not 24h) for the Tentative SLA (locked Q1) and cite the G2 fix (`Booking.cs:119` hardcodes 24h) as a dependency. |
+| C11 | design | **Specify mixed-policy / mixed-currency cart display** (Q3R requires per-item policy shown in-cart; reconcile N policies + N currencies + per-line tax into one guest-comprehensible total). Confirm the **anonymous-cart** posture — guest-scoped RLS means no server-side cart before sign-in (client-side cart until auth, or checkout forces sign-in). |
+
+Corrections C1–C5 must be reflected before writing §3/§4 stories; C6–C11 are captured as story-level refinements. The prose below is retained for context but is **authoritative only where it does not conflict with the table above**.
+
+---
+
 ## 0. What the code already gives us (verified baseline)
 
 1. **The line-item model is half-built and price-only.** `Booking` (`src/Modules/VrBook.Modules.Booking/Domain/Booking.cs`) owns `_lineItems` (L68) + `_guests`, but `PropertyId`/`PropertyTitle` are root scalars (L22–23), money is root scalars (L31–39), `CancellationPolicy` is a single root enum (L40). `BookingLineItem` carries only `Kind/Label/Quantity/UnitAmount/LineTotal` — no `ReservableId`, `ReservableKind`, `TenantId`, `Policy`, currency, or tax. `Booking.Place(...)` takes one `propertyId` (L77); `BookingPlaced` carries one `PropertyId` (`Contracts/Events/BookingEvents.cs:20`).
