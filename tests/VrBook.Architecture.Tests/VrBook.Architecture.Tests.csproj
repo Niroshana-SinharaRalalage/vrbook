@@ -15,6 +15,11 @@
     <ProjectReference Include="..\..\src\VrBook.Infrastructure\VrBook.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\VrBook.Api\VrBook.Api.csproj" />
     <ProjectReference Include="..\..\src\VrBook.Contracts\VrBook.Contracts.csproj" />
+    <!-- VRB-300 — the endpoint-coverage gate reads RouteMatrix.GetAll() (the
+         single-source enumeration) to enforce matrix-membership-or-exempt.
+         RouteMatrix.Build() is pure data (no Testcontainer), so this reference
+         adds no Docker dependency to the blocking arch-test step. -->
+    <ProjectReference Include="..\VrBook.Api.IntegrationTests\VrBook.Api.IntegrationTests.csproj" />
   </ItemGroup>
 
   <ItemGroup>
