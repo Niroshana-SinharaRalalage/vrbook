@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using FluentAssertions;
 using VrBook.Modules.Identity.Infrastructure.Auth;
 using Xunit;
@@ -24,6 +25,17 @@ namespace VrBook.Api.IntegrationTests.Multitenancy;
 [Collection(nameof(TwoTenantApiCollection))]
 public sealed class CrossTenantEndpointMatrix(TwoTenantApiFixture fixture)
 {
+    /// <summary>A well-formed placeholder for non-tenant/non-property route
+    /// parameters — valid against a <c>:guid</c> constraint so the route binds,
+    /// while naming no real resource (the request 401/403s before it matters).
+    /// Note: this is a Guid; a future matrixed route whose param carries a
+    /// non-guid constraint (e.g. <c>:int</c>) would fail to bind and 404 — an
+    /// intentional signal to give that row a route-appropriate placeholder.</summary>
+    private const string PlaceholderId = "ffffffff-0000-0000-0000-0000000000ff";
+
+    private static readonly Regex PlaceholderRouteParam = new(@"\{[^}]+\}", RegexOptions.Compiled);
+
+
     [Theory]
     [MemberData(nameof(RouteMatrix.GetAll), MemberType = typeof(RouteMatrix))]
     public async Task Endpoint_persona_cross_tenant_status_within_accepted_set(RouteMatrix.Cell cell)
@@ -37,14 +49,35 @@ public sealed class CrossTenantEndpointMatrix(TwoTenantApiFixture fixture)
         };
         var client = fixture.CreateClientAs(personaCookie);
 
-        var resolvedRoute = cell.Route.Replace(
-            "{tenantId}",
-            TwoTenantApiFixture.IdFor(cell.Target switch
-            {
-                RouteMatrix.TargetTenant.A => "A",
-                RouteMatrix.TargetTenant.B => "B",
-                _ => "A", // route still resolves even for non-tenant-scoped endpoints
-            }).ToString("D"));
+        // {tenantId} → the target tenant (the load-bearing substitution: a
+        // cross-tenant cell puts tenant-A's id in the path and sends as OwnerB).
+        // {propertyId} → the target tenant's seeded property, so property-scoped
+        // isolation cells hit a real cross-tenant resource.
+        var targetTenantId = TwoTenantApiFixture.IdFor(cell.Target switch
+        {
+            RouteMatrix.TargetTenant.A => "A",
+            RouteMatrix.TargetTenant.B => "B",
+            _ => "A", // route still resolves even for non-tenant-scoped endpoints
+        });
+        var targetPropertyId = cell.Target == RouteMatrix.TargetTenant.B
+            ? fixture.TenantBPropertyId
+            : fixture.TenantAPropertyId;
+
+        var resolvedRoute = cell.Route
+            .Replace("{tenantId}", targetTenantId.ToString("D"))
+            .Replace("{propertyId}", targetPropertyId.ToString("D"));
+
+        // VRB-300 — any OTHER route parameter ({id}, {bookingId}, {ruleId},
+        // {blockId}, {holdId}, {imageId}, {key}, …) names a resource the request
+        // never reaches for the assertions the matrix makes: the auth challenge
+        // (401) and the tenant/role gate (403) both fire before the handler
+        // loads it. Fill each with a deterministic, well-formed placeholder so
+        // the route binds (including the :guid constraint) and endpoint
+        // selection succeeds — routing to the [Authorize] endpoint is what makes
+        // the 401/403 assertion meaningful. Deeper per-resource isolation
+        // (OwnerB at TenantA's booking/feed → 403/404) is asserted in the
+        // per-module Contract/* tests where the exact resource is seeded.
+        resolvedRoute = PlaceholderRouteParam.Replace(resolvedRoute, PlaceholderId);
 
         HttpRequestMessage request;
         if (cell.BodyFactory is not null)
