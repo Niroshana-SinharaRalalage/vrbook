@@ -21,7 +21,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 
 | ID | Lane | Priority | Status | Branch |
 |---|---|---|---|---|
-| VRB-300 | TEST | Must | TODO | |
+| VRB-300 | TEST | Must | CLAIMED | story/VRB-300 |
 | VRB-200 | CONFIG | Must (P0) | TODO | |
 | VRB-201 | CONFIG | Must | TODO | |
 | VRB-203 | CONFIG | Should | TODO | |
