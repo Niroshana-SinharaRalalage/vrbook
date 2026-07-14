@@ -2,16 +2,20 @@
 
 Repo-scoped context so a fresh session doesn't have to re-derive everything. Not a design doc — a working briefing. Full design lives in [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) + [`docs/adr/`](docs/adr/) + `OPS_M_*_PLAN.md` / `OPS_M_*_CLOSE_OUT.md`.
 
-## Specification set (planning session 2026-07-11 — in progress)
+## Specification set (planning program 2026-07 — COMPLETE) — the working spec
 
-A full agent-consumable spec set is being produced (documentation-only). **A new agent should read these first:**
-- [`docs/architecture/CURRENT-STATE.md`](docs/architecture/CURRENT-STATE.md) — the whole as-built system in one read (architecture, modules, domain, API, data, RLS, workers, integrations, frontend, tests, CI/CD, environments).
-- [`docs/ops/CONFIG-INVENTORY.md`](docs/ops/CONFIG-INVENTORY.md) — every setting, secret, env var, feature flag, hard-coded value + the per-env matrix.
-- [`docs/ops/CURRENT-GAPS.md`](docs/ops/CURRENT-GAPS.md) — prioritized register of stubs/gaps/defects (P0/P1/P2).
-- [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) — ambiguous business rules awaiting an owner decision (do NOT guess).
-- Coming next (Phase 2–4): `docs/product/PRD.md`, `docs/stories/` + `INDEX.md`, `docs/ops/GO-LIVE-RUNBOOK.md` + `CONFIG-MATRIX.md`, `docs/plan/EXECUTION-PLAN.md` + `AGENT-PROMPTS.md`.
+A full agent-consumable spec set now exists (documentation-only program; supersedes `BookingApp_Proposal.md` as the working spec). **A new agent starts at [`docs/README.md`](docs/README.md)** — the discoverable index — then:
+1. [`docs/architecture/CURRENT-STATE.md`](docs/architecture/CURRENT-STATE.md) — whole as-built system in one read.
+2. [`docs/ops/CONFIG-INVENTORY.md`](docs/ops/CONFIG-INVENTORY.md) + [`docs/ops/CURRENT-GAPS.md`](docs/ops/CURRENT-GAPS.md) — every config/secret · P0/P1/P2 defect register.
+3. [`docs/product/PRD.md`](docs/product/PRD.md) + [`docs/product/COMPETITIVE-RESEARCH.md`](docs/product/COMPETITIVE-RESEARCH.md) + [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) — requirements · cited market research · locked decisions (design principle: *standardize the framework, localize values per-property*).
+4. [`docs/architecture/PHASE-3-4-DESIGN.md`](docs/architecture/PHASE-3-4-DESIGN.md) (§0.5 corrections are authoritative) + [`docs/architecture/PHASE-3-4-DESIGN-REVIEW.md`](docs/architecture/PHASE-3-4-DESIGN-REVIEW.md).
+5. [`docs/stories/INDEX.md`](docs/stories/INDEX.md) → the 6 `EPIC-*.md` — **85 TDD-first stories (VRB-101…512)** + gap/correction traceability.
+6. [`docs/plan/EXECUTION-PLAN.md`](docs/plan/EXECUTION-PLAN.md) + [`docs/plan/AGENT-PROMPTS.md`](docs/plan/AGENT-PROMPTS.md) — parallel lanes, file ownership, copy-paste kickoff prompts.
+7. [`docs/ops/CONFIG-MATRIX.md`](docs/ops/CONFIG-MATRIX.md) + [`docs/ops/GO-LIVE-RUNBOOK.md`](docs/ops/GO-LIVE-RUNBOOK.md).
 
-Workflow for this program: **TDD-first** (failing test → minimal impl → refactor), architect-consult before multi-module plans, `frontend-design` skill for UI, `superpowers` for planning/decomposition, code-review/verification gates per story.
+**To pick up implementation:** open `stories/INDEX.md`, choose the next story in your lane (`EXECUTION-PLAN.md`) or paste your lane prompt (`AGENT-PROMPTS.md`), write the failing tests the story names, implement to green, satisfy the DoD (staging + prod verified + monitored). Every P0/P1 gap is its own story; the cross-business cart / OTA are designed (not built) — Phase 3/4, post-launch.
+
+Workflow for this program: **TDD-first** (failing test → minimal impl → refactor), architect-consult before multi-module plans, `frontend-design` skill for UI, `superpowers` for planning/decomposition, code-review/verification gates per story. Lanes own non-overlapping files (a cross-lane need is a dependency or a contract, never a concurrent edit).
 
 ## Project overview
 
