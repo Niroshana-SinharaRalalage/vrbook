@@ -1,6 +1,9 @@
-# VrBook Master Execution Plan
+# VrBook Master Execution Plan  ·  ⛔ SUPERSEDED (legacy)
 
-> **Source of truth for execution order, definition-of-done, and cross-cutting standards.**
+> # ⛔ SUPERSEDED — this is the LEGACY execution plan (proposal A-numbers).
+> The active execution plan is **[`plan/EXECUTION-PLAN.md`](plan/EXECUTION-PLAN.md)** (waves/lanes over the 85-story backlog). Do not follow the numbering below. Kept for provenance only.
+
+> **[historical]** Source of truth for execution order, definition-of-done, and cross-cutting standards.
 > If you (Claude) ever feel uncertain about scope or sequencing, re-read this file
 > before doing anything else. ONE numbering system: the proposal's **A-numbers**.
 > Amendments are `A{N}.{M}`. Frontend = F1. Admin polish = O1. Operational

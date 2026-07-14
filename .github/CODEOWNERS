@@ -17,3 +17,34 @@
 
 # CI/CD pipelines themselves — guarded so a single PR cannot bypass other gates.
 /.github/                 @architects
+
+# =============================================================================
+# Parallel-agent lane guard (Part B / multi-agent execution).
+# The load-bearing shared surfaces below are held by exactly ONE lane per wave
+# (see docs/plan/EXECUTION-PLAN.md). Requiring review here turns "stay in your
+# lane" from an honor-system request into a branch-protection stop sign: a PR
+# that edits another lane's shared surface cannot merge without a sign-off.
+# Enable "Require review from Code Owners" on `develop` (VRB-301) to enforce.
+# =============================================================================
+
+# DI / config wiring — Lane CONFIG (Wave 0), then per EXECUTION-PLAN Wave-1 owner table
+/src/VrBook.Api/Program.cs                          @architects
+# Payments/pricing engine + Stripe — Lane PAY (Wave 1) / P3-CART sub-lane (Wave 3)
+/src/Modules/VrBook.Modules.Payment/                @architects
+/src/Modules/VrBook.Modules.Pricing/                @architects
+# Tenant / RLS core — ONLY the Phase-3 foundation lane (Wave 3) may edit these
+/src/VrBook.Infrastructure/Persistence/TenantGucCommandInterceptor.cs           @architects
+/src/Modules/VrBook.Modules.Booking/Application/Commands/PlaceBookingHandler.cs  @architects
+/src/Modules/VrBook.Modules.Booking/Domain/Booking.cs                           @architects
+# Design-system primitives — Lane DESIGN (Wave 0); every UI lane consumes, none edits
+/web/src/components/ui/                              @architects
+/web/tailwind.config.ts                             @architects
+/web/src/app/globals.css                            @architects
+# API test harness — Lane TEST (Wave 0); harness changes are cross-cutting
+/tests/                                             @architects
+
+# The operating-model docs themselves — change deliberately, with review.
+/CLAUDE.md                                          @architects
+/docs/AGENT-PLAYBOOK.md                             @architects
+/docs/ENGINEERING-RULES.md                          @architects
+/docs/stories/BOARD.md                              @architects

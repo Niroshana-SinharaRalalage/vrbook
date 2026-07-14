@@ -2,7 +2,7 @@
 
 > Phase 1 — an 8-week, modular-monolith build of a direct-booking platform for vacation rentals, with two-way AirBnB iCal sync, Stripe Connect Express payments, and an admin dashboard.
 >
-> Single source of truth: [`BookingApp_Proposal.md`](./BookingApp_Proposal.md). Read it before changing anything.
+> **Working plan & agent entry point:** [`CLAUDE.md`](./CLAUDE.md) → [`docs/AGENT-PLAYBOOK.md`](./docs/AGENT-PLAYBOOK.md) → [`docs/stories/BOARD.md`](./docs/stories/BOARD.md). The original [`BookingApp_Proposal.md`](./BookingApp_Proposal.md) is **historical** — superseded as the working spec by the [`docs/`](./docs/) spec set (retained for ADR provenance).
 
 ---
 
@@ -10,7 +10,7 @@
 
 ```
 .
-├── BookingApp_Proposal.md       # The proposal — authoritative spec
+├── BookingApp_Proposal.md       # Historical proposal (superseded — see docs/ + CLAUDE.md)
 ├── src/                         # .NET 8 backend (Clean Architecture, modular monolith)
 │   ├── VrBook.Domain/           # Aggregates, entities, value objects, domain events (pure)
 │   ├── VrBook.Application/      # Use cases, MediatR handlers, pipeline behaviors

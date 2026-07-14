@@ -9,7 +9,7 @@ How to execute the 85-story backlog ([`../stories/INDEX.md`](../stories/INDEX.md
 ## Load-bearing shared surfaces (SEQUENCED — never parallelise these)
 
 These files are touched by many stories; only ONE lane at a time may hold them, and changes to them gate dependents:
-- **Config schema / DI wiring** — `src/VrBook.Api/Program.cs`, options classes → **Lane CONFIG** owns; lands first.
+- **Config schema / DI wiring** — `src/VrBook.Api/Program.cs`, options classes → **Lane CONFIG** owns; lands first. **Wave-1 DI ownership rule (resolves the CONFIG↔SETTINGS↔PAY overlap the audit flagged):** after Wave 0, `Program.cs` is **frozen** — a feature lane never edits it. Each module registers its own services inside its module's `AddXxxModule(services, config)` extension method **which the lane owns** (in `src/Modules/VrBook.Modules.<Mod>/`); `Program.cs` already calls each `AddXxxModule` once, so adding a handler/option/service is an in-module, in-lane edit. Only adding a *brand-new module* touches `Program.cs`, and that is a sequenced CONFIG-held change. This keeps DI wiring collision-free across parallel Wave-1 lanes.
 - **Design-system primitives** — `web/src/components/ui/*`, `tailwind.config.ts`, `globals.css` → **Lane DESIGN** owns; lands first (the UI lib is thin today — only `ConfirmActionModal`; every UI story needs primitives).
 - **Payments/pricing engine** — `Modules/VrBook.Modules.Payment/*`, `StripeGateway.cs`, `RefundForBookingCommand.cs`, cancellation on `Booking.cs` → **Lane PAY** owns; internally sequenced.
 - **Tenant/RLS core** — `TenantGucCommandInterceptor.cs`, `TenantAuthorizationBehavior.cs`, `PlaceBookingHandler.cs` → only the **Phase-3 foundation lane** touches these (Wave 3); no launch lane does.
@@ -20,10 +20,11 @@ These files are touched by many stories; only ONE lane at a time may hold them, 
 
 ## Waves & lanes
 
-### WAVE 0 — Foundations (must land before feature lanes; run these 3 in parallel)
+### WAVE 0 — Foundations (must land before feature lanes; run these 4 in parallel)
 
 | Lane | Stories | Owns | Why first |
 |---|---|---|---|
+| **TEST** | VRB-300 (API contract suite + endpoint-coverage gate) | `tests/VrBook.Api.IntegrationTests/Contract/*`, the coverage arch test in `tests/VrBook.Architecture.Tests` | The safety net every lane's per-endpoint tests plug into; "keep the API suite green" needs a suite to enforce. Touches no feature code — never collides. |
 | **CONFIG** | VRB-200 (fail-fast), 201 (secrets), 203 (flags), 202/205 (matrix, CORS/rate-limit) | `Program.cs` config wiring, options classes, `infra/scripts/10-store-secrets.ps1`, `Directory.*.props` for validators | Everything reads config; fail-fast + secrets + the flag runtime unblock every other lane. |
 | **DESIGN** | Design-system primitives + VRB-110 focus-trap primitive | `web/src/components/ui/*`, `tailwind.config.ts`, `globals.css` | Every UI story consumes these; building them once prevents copy-paste divergence (G20). |
 | **DEVOPS-prereq** | VRB-301 (prod pipeline), 302 (rollback), 303 (migration strategy), 304 (restore drill), 306 (observability) | `.github/workflows/*`, `infra/*` (+ new `cd-prod.yml`) | "Secrets + staging pipeline + rollback must land early, not the week before launch." |
@@ -75,6 +76,14 @@ These files are touched by many stories; only ONE lane at a time may hold them, 
 
 Failing test → minimal impl → refactor. Each story's TDD plan names the Unit / Integration (Testcontainers Postgres) / E2E (Playwright) tests to write first. Before merge: `dotnet format --verify` + `dotnet publish -c Release` (catches CA1822/CHARSET), `Category!=Integration` filter, `web` lint/typecheck/vitest/`check:e2e-suite`. Use `superpowers:test-driven-development` + `requesting-code-review` per story; `frontend-design` for UI stories.
 
+## Known cross-lane touchpoints (resolved — not overlaps)
+
+The audit flagged three apparent file overlaps. Each is resolved by assigning a single owner + a dependency, so no two lanes edit one file concurrently:
+
+- **`web/src/app/sitemap.ts` + `robots.ts`** — **WEB-GUEST owns them** (VRB-109 builds the SEO engine). VRB-305 (DEVOPS, custom domain/DNS) only *supplies the domain value* VRB-109 consumes; VRB-305 does **not** edit `sitemap.ts`/`robots.ts`. Dependency: VRB-109 reads the prod domain from config once VRB-305 sets it.
+- **SEO surface** — VRB-109 (WEB-GUEST) owns the *engine* (sitemap/robots/canonical/JSON-LD in `web/src/app/*`); VRB-219 (SETTINGS) owns the per-property SEO **settings** UI + storage (`web/src/app/admin/settings/*` + the settings API). Different files, different lanes; VRB-109 renders what VRB-219 stores. No shared file.
+- **`Program.cs` in Wave 1** — resolved by the module-`AddXxxModule` self-registration rule under "Load-bearing shared surfaces" above.
+
 ## Conflict-avoidance summary
 
-The only files >1 story touches are the **load-bearing shared surfaces** above, and each is owned by exactly one lane per wave. Everything else is partitioned by module/route so lanes are truly independent. If two stories ever both need a shared file, the later one is re-scoped to depend on the earlier — never merged concurrently.
+The only files >1 story touches are the **load-bearing shared surfaces** above, and each is owned by exactly one lane per wave. Everything else is partitioned by module/route so lanes are truly independent. If two stories ever both need a shared file, the later one is re-scoped to depend on the earlier — never merged concurrently. `.github/CODEOWNERS` makes a cross-lane edit to a shared surface require the owner's review, so the partition is enforced, not just documented.

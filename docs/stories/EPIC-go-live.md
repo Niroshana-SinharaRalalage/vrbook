@@ -1,5 +1,7 @@
 # EPIC — Staging → Production Go-Live (VRB-3xx)
 
+> **Every story here inherits the global [Definition of Ready + Definition of Done](../ENGINEERING-RULES.md#definition-of-ready-before-you-write-the-first-test).** Before code: **claim the story on [`BOARD.md`](BOARD.md)** (first-push-wins), read it + its `blocked-by`, and **grep for an existing implementation before building one**. TDD; **write API contract tests for every endpoint you touch and keep the VRB-300 suite green**; stay in your lane ([`../plan/EXECUTION-PLAN.md`](../plan/EXECUTION-PLAN.md)); on finish **self-heal the board + docs**. Operating model: [`../AGENT-PLAYBOOK.md`](../AGENT-PLAYBOOK.md). Each story's own DoD is *in addition to* the global one.
+
 - **Epic owner:** Platform Enterprise Architect (agent) + Owner (operator-gated items).
 - **Date:** 2026-07-13.
 - **Status:** Backlog — stories written; execution follows `docs/OPS_LAUNCH_COMPLETION_PLAN.md` critical-path.
@@ -27,6 +29,7 @@ The infra layer is **already prod-parameterized** — `infra/main.bicep` carries
 
 | ID | Title | Priority | Est. | Lane | Prereq or launch-week? |
 |---|---|---|---|---|---|
+| **VRB-300** | API contract test suite (foundation) + endpoint-coverage gate | Must | L | TEST | **WAVE 0 — lands first (safety net for every lane)** |
 | **VRB-301** | Production deploy pipeline (`cd-prod.yml`) | Must | L | Pipeline | **PREREQUISITE — lands first** |
 | **VRB-302** | Tested rollback / blue-green + post-deploy smoke | Must | M | Pipeline | **PREREQUISITE — with VRB-301** |
 | **VRB-303** | Zero-downtime forward-only DB migration + tested rollback + seed data | Must | M | Data | **PREREQUISITE — with VRB-301** |
@@ -43,6 +46,7 @@ The infra layer is **already prod-parameterized** — `infra/main.bicep` carries
 
 ### Prerequisites vs launch-week — read this first
 
+- **Land in Wave 0 (the safety net every other lane builds on):** **VRB-300** (API contract suite + endpoint-coverage gate) — it is not a go-live-week task, it lands *before* the feature lanes so their per-endpoint tests have a suite to plug into. Without it, "keep the API suite green" (the parallel-agent merge rule) has nothing to enforce.
 - **Land early (nothing else is safe until these are green):** **VRB-301** (prod pipeline), **VRB-302** (rollback), **VRB-303** (migration strategy), **VRB-306** (observability armed), and the **VRB-304** restore drill. These are the load-bearing infrastructure of a safe cutover. A launch attempted without a tested rollback and a proven restore is not a launch, it is a gamble.
 - **Land mid (have long lead times or need a near-final surface):** **VRB-305** (DNS/TLS propagation is hours-to-24h), **VRB-311** (analytics must be live *before* the first real visitor or launch data is lost — gap G35), **VRB-307** (security), **VRB-308** (load test against a prod-sized target).
 - **Land late / launch-week (operator-gated, verified against the near-final prod stack):** **VRB-309** (real money — the hardest gate), **VRB-310** (owner UAT sign-off), **VRB-312** (the cutover itself), **VRB-313** (hypercare, begins the moment traffic flips).
@@ -52,6 +56,27 @@ The infra layer is **already prod-parameterized** — `infra/main.bicep` carries
 ---
 
 ## Stories
+
+### VRB-300 — API contract test suite (foundation) + endpoint-coverage gate
+- **Epic:** Go-Live · **Priority:** Must · **Estimate:** L · **Lane:** TEST · **Wave 0 — lands first, before any feature lane claims.**
+- **Narrative:** As any agent shipping into a codebase many agents share, I want a single API contract test suite that exercises **every HTTP endpoint** through the real middleware pipeline against a real Postgres, plus a build-time gate that fails when an endpoint has no contract test, so that no lane can break another lane's endpoint silently and "the suite is green" is a real merge precondition, not a hope. Strategy + tooling: [`../TEST-STRATEGY.md`](../TEST-STRATEGY.md).
+- **Acceptance criteria:**
+  - **Given** the existing `tests/VrBook.Api.IntegrationTests` harness (`TwoTenantApiFixture` + `TwoTenantTestAuthHandler` — Testcontainers Postgres, all-module migrations, two-tenant persona seeds), **when** VRB-300 lands, **then** it **reuses that fixture** (no new harness) and organises endpoint contract tests by module/controller.
+  - **Given** every endpoint currently exposed by the API, **when** the suite runs, **then** each has contract tests covering: **happy path · authentication (anonymous→401) · authorization/tenant-isolation (wrong tenant→403/404, PlatformAdmin-only routes reject owners) · input validation (→400 problem shape) · error contract (documented status + `problem+json`) · idempotency** where the endpoint promises it.
+  - **Given** an **endpoint-coverage arch test**, **when** a controller action has zero contract tests referencing its route, **then** the build **fails** with the offending route named (coverage is enforced, not aspirational). New endpoints join the coverage map only *with* their tests — never as a bare exemption.
+  - **Given** CI, **when** the suite runs, **then** it is a **blocking gate** on `develop` and is wired into `cd-prod.yml` (VRB-301) before the approval gate.
+  - **Given** a developer with Docker up, **when** they run `dotnet test tests/VrBook.Api.IntegrationTests --filter Category=Integration`, **then** the full suite runs locally and green/red matches CI.
+  - **Given** the tenant-isolation cases, **then** at least one test proves an `OwnerB` request for a `TenantA`-scoped resource is denied by RLS/`HasTenantRole`, not merely by a controller check.
+- **TDD plan:** the suite **is** the tests — but bootstrap it TDD-style: (1) write the endpoint-coverage arch test first and watch it fail listing every currently-uncovered route; (2) drive each endpoint's contract tests until the coverage test goes green; (3) prove the gate by deleting one test and asserting the coverage arch test goes red. Seed any extra fixtures a scenario needs inside the test under `RlsBypassScope` using the real domain factories (per TEST-STRATEGY). Categorise every test `Category=Integration` so the CI `Category!=Integration` filter and the Docker-off local filter behave predictably.
+- **Technical notes:** new test files under `tests/VrBook.Api.IntegrationTests/Contract/<Module>/`; the coverage arch test lives in `tests/VrBook.Architecture.Tests` (reflect over `ControllerBase` subclasses + `[Http*]`/route attributes, diff against discovered test coverage via a `[CoversEndpoint("METHOD /route")]` attribute or a naming convention). Assert error bodies as **status + problem `type`**, not custom detail fields (Hellang middleware strips them — [`reference_problem_details_strips_body`]). Do not add any test-only production bypass; `OpsOps2_AdminSurfaceAndTestBackdoorTests` guards that. Coordinate: this suite is the substrate every feature lane's per-endpoint tests plug into (ENGINEERING-RULES §3).
+- **Configuration:** none new. CI: add/confirm the integration-test job runs this suite as blocking (it already runs `VrBook.Api.IntegrationTests`); ensure `cd-prod.yml` includes it pre-approval. dev/staging/prod: n/a (test-time only).
+- **Rollout:** lands to `develop` as the first Wave-0 story; immediately blocking. No runtime/app change ships.
+- **Observability:** CI publishes the suite's pass/fail + endpoint-coverage count as a run summary; a drop in covered-endpoint count is a red flag reviewers watch.
+- **Definition of Done:** every current endpoint has contract tests across the six dimensions → endpoint-coverage arch test green (and proven to fail when a test is removed) → suite blocking on `develop` + wired into `cd-prod.yml` → [`../TEST-STRATEGY.md`](../TEST-STRATEGY.md) reflects the final shape → board row `DONE`.
+- **Dependencies:** blocked-by nothing (foundation). **Blocks nothing hard, but every endpoint-touching story consumes it** — its per-endpoint tests (ENGINEERING-RULES §3) land against this suite. Closes the Part-A "no test-strategy / no API-suite story" gap.
+- **Parallelisation:** Lane = TEST (Wave 0). Owns `tests/VrBook.Api.IntegrationTests/Contract/*` + the coverage arch test in `tests/VrBook.Architecture.Tests`. Runs parallel to CONFIG/DESIGN/DEVOPS-prereq; touches no feature code, so it never collides.
+
+---
 
 ### VRB-301 — Production deploy pipeline
 - **Epic:** Go-Live · **Priority:** Must · **Estimate:** L

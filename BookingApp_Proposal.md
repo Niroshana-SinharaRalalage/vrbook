@@ -1,3 +1,6 @@
+> # ⛔ HISTORICAL — superseded as the working spec
+> This is the original Phase-1 proposal. It is **no longer the working spec**. The current, agent-consumable spec set lives under [`docs/`](docs/) (start at [`CLAUDE.md`](CLAUDE.md) → [`docs/architecture/CURRENT-STATE.md`](docs/architecture/CURRENT-STATE.md) → [`docs/stories/BOARD.md`](docs/stories/BOARD.md)). This document is retained because the ADRs ([`docs/adr/`](docs/adr/)) cite its sections as decision provenance — do not treat its plans/sequencing/status as current.
+
 \# Direct-Booking Vacation Rental Platform
 
 \## Phase 1 Solution Proposal — Single Source of Truth for an 8-Week Multi-Agent Build

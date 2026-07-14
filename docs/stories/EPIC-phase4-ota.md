@@ -1,5 +1,7 @@
 # EPIC — Phase 4: OTA Package / Itinerary Bundling (VRB-5xx)
 
+> **Every story here inherits the global [Definition of Ready + Definition of Done](../ENGINEERING-RULES.md#definition-of-ready-before-you-write-the-first-test).** Before code: **claim the story on [`BOARD.md`](BOARD.md)** (first-push-wins), read it + its `blocked-by`, and **grep for an existing implementation before building one**. TDD; **write API contract tests for every endpoint you touch and keep the VRB-300 suite green**; stay in your lane ([`../plan/EXECUTION-PLAN.md`](../plan/EXECUTION-PLAN.md)); reuse the Phase-3 engine, don't fork it; on finish **self-heal the board + docs**. Operating model: [`../AGENT-PLAYBOOK.md`](../AGENT-PLAYBOOK.md). Build to the **corrected** design ([`../architecture/PHASE-3-4-DESIGN.md`](../architecture/PHASE-3-4-DESIGN.md) §0.5). Each story's own DoD is *in addition to* the global one.
+
 **Status:** Design-complete, implementation-deferred (owner directive 2026-07-13 — Q23: *Phase 3/4 design + document NOW, defer only code*). **Priority:** Could (post-launch, strictly after Phase 3). **Author:** Platform enterprise architect.
 **Companions (read first):** [`../architecture/PHASE-3-4-DESIGN.md`](../architecture/PHASE-3-4-DESIGN.md) §9 + **§0.5 corrections C1–C11**, [`../architecture/PHASE-3-4-DESIGN-REVIEW.md`](../architecture/PHASE-3-4-DESIGN-REVIEW.md), [`../product/COMPETITIVE-RESEARCH.md`](../product/COMPETITIVE-RESEARCH.md) §2/§3, [`../../OPEN-QUESTIONS.md`](../../OPEN-QUESTIONS.md) Q36–Q39.
 

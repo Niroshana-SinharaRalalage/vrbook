@@ -1,3 +1,6 @@
+> # ⛔ SUPERSEDED — DO NOT USE AS THE PLAN
+> This file is **historical**. It says "Next slot: Slice OPS.2" — that is **wrong now**. The launch-hardening OPS slices are complete; the active plan is the **85-story backlog**. A cold agent must use **[`stories/BOARD.md`](stories/BOARD.md)** (story state) + **[`plan/EXECUTION-PLAN.md`](plan/EXECUTION-PLAN.md)** (waves/lanes), bootstrapped via **[`../CLAUDE.md`](../CLAUDE.md)** + **[`AGENT-PLAYBOOK.md`](AGENT-PLAYBOOK.md)**. This doc is kept only for slice-history provenance and its ADR back-links.
+
 # VrBook Master Plan — Single Source of Truth
 
 **Last revised**: 2026-07-09.

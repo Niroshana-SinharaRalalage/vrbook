@@ -1,8 +1,8 @@
 # VrBook — User Story Backlog (INDEX)
 
-**85 stories across 6 epics.** Every story is TDD-first and follows the full template (narrative · Given/When/Then AC · TDD plan · technical notes · UI/UX · configuration · rollout · observability · DoD · dependencies · parallelisation). Grounded in the code with cited paths, and in the locked decisions ([`../../OPEN-QUESTIONS.md`](../../OPEN-QUESTIONS.md)), the PRD ([`../product/PRD.md`](../product/PRD.md)), and the **corrected** Phase 3/4 design ([`../architecture/PHASE-3-4-DESIGN.md`](../architecture/PHASE-3-4-DESIGN.md) §0.5).
+**86 stories across 6 epics** (85 feature/launch + **VRB-300**, the Wave-0 API contract suite). Every story is TDD-first and follows the full template (narrative · Given/When/Then AC · TDD plan · technical notes · UI/UX · configuration · rollout · observability · DoD · dependencies · parallelisation). Grounded in the code with cited paths, and in the locked decisions ([`../../OPEN-QUESTIONS.md`](../../OPEN-QUESTIONS.md)), the PRD ([`../product/PRD.md`](../product/PRD.md)), and the **corrected** Phase 3/4 design ([`../architecture/PHASE-3-4-DESIGN.md`](../architecture/PHASE-3-4-DESIGN.md) §0.5).
 
-**How a fresh agent uses this:** pick a story → read its epic file → write the failing tests named in its TDD plan → implement → satisfy the DoD. Respect the Dependencies + Parallelisation fields (agent lanes own non-overlapping files).
+> **Story STATE lives in [`BOARD.md`](BOARD.md), not here.** This INDEX is the static catalogue (what each story *is* + how they relate); the board is the live `TODO`/`CLAIMED`/`DONE` tracker + the claim protocol. **A fresh agent:** bootstrap per [`../AGENT-PLAYBOOK.md`](../AGENT-PLAYBOOK.md), **claim** a story on the board, read it + its `blocked-by` here → write the failing tests its TDD plan names → implement → satisfy the DoD (the global DoR/DoD in [`../ENGINEERING-RULES.md`](../ENGINEERING-RULES.md) + the story's own). Respect the Dependencies + Parallelisation fields (lanes own non-overlapping files; CODEOWNERS enforces it).
 
 ## Epics & ID ranges
 
@@ -10,7 +10,7 @@
 |---|---|---|---|---|
 | Launch Features | [`EPIC-launch-features.md`](EPIC-launch-features.md) | VRB-101–113 | 13 | **Launch** (10 Must, 3 Should) |
 | Configuration & Settings | [`EPIC-configuration-settings.md`](EPIC-configuration-settings.md) | VRB-200–220 | 21 | **Launch** (platform prereqs early) |
-| Staging→Production Go-Live | [`EPIC-go-live.md`](EPIC-go-live.md) | VRB-301–313 | 13 | **Launch** |
+| Staging→Production Go-Live | [`EPIC-go-live.md`](EPIC-go-live.md) | VRB-300–313 | 14 | **Launch** (VRB-300 API suite = Wave 0) |
 | Phase 3 — Foundation & Rooms | [`EPIC-phase3-foundation-rooms.md`](EPIC-phase3-foundation-rooms.md) | VRB-400–412 | 13 | Post-launch (Could) |
 | Phase 3 — Multi-unit & Cross-business Cart | [`EPIC-phase3-cart.md`](EPIC-phase3-cart.md) | VRB-420–431 | 12 | Post-launch (Could) |
 | Phase 4 — OTA Bundling | [`EPIC-phase4-ota.md`](EPIC-phase4-ota.md) | VRB-500–512 | 13 | Post-launch (Could) |
@@ -95,7 +95,7 @@ PHASE 4:  VRB-500…512  ← Phase 3 cart complete
 ## Parallelisation (agent lanes)
 
 - **Within each epic**, every story's `Parallelisation` field names its lane + the exact files it owns, so non-overlapping stories run concurrently.
-- **Cross-cutting sequenced (NOT parallel):** the Phase-3 foundation reshape (VRB-400–404), the `properties→facilities` rename wave (VRB-405–406), and any story touching `StripeGateway.cs` / `PlaceBookingHandler.cs` / `TenantGucCommandInterceptor.cs` (VRB-104/105, VRB-422/423/424/425, VRB-506) — these share load-bearing files and must be serialized. The full lane map + integration order is Phase 4 of the spec program ([`../plan/EXECUTION-PLAN.md`](../plan/EXECUTION-PLAN.md), forthcoming).
+- **Cross-cutting sequenced (NOT parallel):** the Phase-3 foundation reshape (VRB-400–404), the `properties→facilities` rename wave (VRB-405–406), and any story touching `StripeGateway.cs` / `PlaceBookingHandler.cs` / `TenantGucCommandInterceptor.cs` (VRB-104/105, VRB-422/423/424/425, VRB-506) — these share load-bearing files and must be serialized. The full lane map + integration order + file-ownership rules are in [`../plan/EXECUTION-PLAN.md`](../plan/EXECUTION-PLAN.md); the copy-paste per-lane kickoff prompts are in [`../plan/AGENT-PROMPTS.md`](../plan/AGENT-PROMPTS.md).
 
 ---
 

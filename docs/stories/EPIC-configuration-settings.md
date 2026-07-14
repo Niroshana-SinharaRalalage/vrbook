@@ -1,5 +1,7 @@
 # EPIC — Configuration & Settings (VRB-2xx)
 
+> **Every story here inherits the global [Definition of Ready + Definition of Done](../ENGINEERING-RULES.md#definition-of-ready-before-you-write-the-first-test).** Before code: **claim the story on [`BOARD.md`](BOARD.md)** (first-push-wins), read it + its `blocked-by`, and **grep for an existing implementation before building one**. TDD; **write API contract tests for every endpoint you touch and keep the VRB-300 suite green**; stay in your lane ([`../plan/EXECUTION-PLAN.md`](../plan/EXECUTION-PLAN.md)); on finish **self-heal the board + docs**. Operating model: [`../AGENT-PLAYBOOK.md`](../AGENT-PLAYBOOK.md). Each story's own DoD is *in addition to* the global one.
+
 **Epic owner:** Platform / Config lane · **Status:** ready for GATE 2 story review · **Grounding:** [`docs/ops/CONFIG-INVENTORY.md`](../ops/CONFIG-INVENTORY.md) (primary source), [`docs/ops/CURRENT-GAPS.md`](../ops/CURRENT-GAPS.md), [`docs/architecture/CURRENT-STATE.md`](../architecture/CURRENT-STATE.md), [`docs/product/PRD.md`](../product/PRD.md), [`OPEN-QUESTIONS.md`](../../OPEN-QUESTIONS.md). Companion matrix: [`docs/ops/CONFIG-MATRIX.md`](../ops/CONFIG-MATRIX.md).
 
 ## Intro

@@ -1,41 +1,41 @@
 # VrBook — Claude briefing
 
-Repo-scoped context so a fresh session doesn't have to re-derive everything. Not a design doc — a working briefing. Full design lives in [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) + [`docs/adr/`](docs/adr/) + `OPS_M_*_PLAN.md` / `OPS_M_*_CLOSE_OUT.md`.
+Repo-scoped working context. This file is the **entry point + the invariants + the CI traps**. It does not hold the plan — the plan is the spec set under [`docs/`](docs/). Product: VrBook, a commission-free multi-tenant direct-booking platform (vacation rentals + hotels); guests search/book, tenants manage listings + confirm/reject + sync iCal + report, platform admin manages tenants.
 
-## Specification set (planning program 2026-07 — COMPLETE) — the working spec
+## ⛔ MANDATORY BOOTSTRAP — every fresh session, in order, before any code
 
-A full agent-consumable spec set now exists (documentation-only program; supersedes `BookingApp_Proposal.md` as the working spec). **A new agent starts at [`docs/README.md`](docs/README.md)** — the discoverable index — then:
-1. [`docs/architecture/CURRENT-STATE.md`](docs/architecture/CURRENT-STATE.md) — whole as-built system in one read.
-2. [`docs/ops/CONFIG-INVENTORY.md`](docs/ops/CONFIG-INVENTORY.md) + [`docs/ops/CURRENT-GAPS.md`](docs/ops/CURRENT-GAPS.md) — every config/secret · P0/P1/P2 defect register.
-3. [`docs/product/PRD.md`](docs/product/PRD.md) + [`docs/product/COMPETITIVE-RESEARCH.md`](docs/product/COMPETITIVE-RESEARCH.md) + [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) — requirements · cited market research · locked decisions (design principle: *standardize the framework, localize values per-property*).
-4. [`docs/architecture/PHASE-3-4-DESIGN.md`](docs/architecture/PHASE-3-4-DESIGN.md) (§0.5 corrections are authoritative) + [`docs/architecture/PHASE-3-4-DESIGN-REVIEW.md`](docs/architecture/PHASE-3-4-DESIGN-REVIEW.md).
-5. [`docs/stories/INDEX.md`](docs/stories/INDEX.md) → the 6 `EPIC-*.md` — **85 TDD-first stories (VRB-101…512)** + gap/correction traceability.
-6. [`docs/plan/EXECUTION-PLAN.md`](docs/plan/EXECUTION-PLAN.md) + [`docs/plan/AGENT-PROMPTS.md`](docs/plan/AGENT-PROMPTS.md) — parallel lanes, file ownership, copy-paste kickoff prompts.
-7. [`docs/ops/CONFIG-MATRIX.md`](docs/ops/CONFIG-MATRIX.md) + [`docs/ops/GO-LIVE-RUNBOOK.md`](docs/ops/GO-LIVE-RUNBOOK.md).
+Full detail: [`docs/AGENT-PLAYBOOK.md`](docs/AGENT-PLAYBOOK.md) §1. In brief:
+1. **`git pull --rebase`** on `develop`.
+2. Read **this file** (invariants + traps), **[`docs/AGENT-PLAYBOOK.md`](docs/AGENT-PLAYBOOK.md)** (how to work), **[`docs/ENGINEERING-RULES.md`](docs/ENGINEERING-RULES.md)** (what good work is).
+3. Read **[`docs/architecture/CURRENT-STATE.md`](docs/architecture/CURRENT-STATE.md)** — the as-built system.
+4. Open **[`docs/stories/BOARD.md`](docs/stories/BOARD.md)** — the **single source of truth for story state**.
+5. Identify your **lane** (kickoff prompt or [`docs/plan/EXECUTION-PLAN.md`](docs/plan/EXECUTION-PLAN.md)); if none was given, ask the owner — don't free-lance.
+6. **Claim a story on the board** (first-push-wins lock), then read it + every `blocked-by` in full.
+7. Execute under **TDD**, **in-lane only**, keep the **API suite green**; on finish, **self-heal** the board + docs.
 
-**To pick up implementation:** open `stories/INDEX.md`, choose the next story in your lane (`EXECUTION-PLAN.md`) or paste your lane prompt (`AGENT-PROMPTS.md`), write the failing tests the story names, implement to green, satisfy the DoD (staging + prod verified + monitored). Every P0/P1 gap is its own story; the cross-business cart / OTA are designed (not built) — Phase 3/4, post-launch.
+**Do not free-lance. Do not skip the claim. Do not edit another lane's files.** The board is the lock; [`.github/CODEOWNERS`](.github/CODEOWNERS) is the backstop. A story whose code merged but whose board row still says `CLAIMED` is **not done**.
 
-Workflow for this program: **TDD-first** (failing test → minimal impl → refactor), architect-consult before multi-module plans, `frontend-design` skill for UI, `superpowers` for planning/decomposition, code-review/verification gates per story. Lanes own non-overlapping files (a cross-lane need is a dependency or a contract, never a concurrent edit).
+## Where the work is now
 
-## Project overview
+The 2026-07 planning program is **complete**. A full agent-consumable spec set exists and **supersedes `BookingApp_Proposal.md` and `docs/MASTER_PLAN.md`** as the working plan. Current execution = the **85-story backlog** (86 with the API-suite story), tracked on **[`docs/stories/BOARD.md`](docs/stories/BOARD.md)** and organised into waves/lanes toward launch.
 
-**Product**: VrBook — direct-booking vacation rental platform. Guests search + book properties; property owners (tenants) manage listings, confirm/reject bookings, chat with guests, sync iCal feeds, run reports; platform admin manages tenants. Multi-tenant SaaS on Azure. Full product spec at [`docs/BookingApp_Proposal.md`](docs/BookingApp_Proposal.md).
+> ⚠️ Phase 1 + 1.5 shipped to staging and the OPS.* launch-hardening slices (Pact, Playwright, INFRA) are **historical** — their close-outs + the old `MASTER_PLAN.md` live in [`docs/archive/`](docs/archive/). **Do NOT resume "OPS.2 / Playwright" as the next work.** The next work is the highest-priority `TODO` in your lane on the board.
 
-**Where we are (2026-07-09)**: 🎉 Phase 1 (product) complete + Phase 1.5 (multi-tenancy + Entra auth) complete. Every slice ✅ on staging with CI green. Launch-hardening in progress: OPS.1 shape-complete (Pact), OPS.2 in progress (Playwright). Currently ~17 of ~23 tracked slices shipped.
+**Spec-set map (read as the task needs):**
+| Read | For |
+|---|---|
+| [`docs/architecture/CURRENT-STATE.md`](docs/architecture/CURRENT-STATE.md) | the whole as-built system in one read |
+| [`docs/ops/CONFIG-INVENTORY.md`](docs/ops/CONFIG-INVENTORY.md) · [`docs/ops/CURRENT-GAPS.md`](docs/ops/CURRENT-GAPS.md) | every config/secret · the P0/P1/P2 defect register |
+| [`docs/product/PRD.md`](docs/product/PRD.md) · [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) | requirements · locked product/design decisions |
+| [`docs/architecture/PHASE-3-4-DESIGN.md`](docs/architecture/PHASE-3-4-DESIGN.md) (§0.5 authoritative) | post-launch rooms / cross-business cart / OTA design |
+| [`docs/stories/INDEX.md`](docs/stories/INDEX.md) → the 6 `EPIC-*.md` | the 85 TDD-first stories + gap/correction traceability |
+| [`docs/plan/EXECUTION-PLAN.md`](docs/plan/EXECUTION-PLAN.md) · [`docs/plan/AGENT-PROMPTS.md`](docs/plan/AGENT-PROMPTS.md) | lanes, file ownership, copy-paste kickoff prompts |
+| [`docs/ops/CONFIG-MATRIX.md`](docs/ops/CONFIG-MATRIX.md) · [`docs/ops/GO-LIVE-RUNBOOK.md`](docs/ops/GO-LIVE-RUNBOOK.md) | per-env config · executable cutover |
+| [`docs/TEST-STRATEGY.md`](docs/TEST-STRATEGY.md) | the API contract suite (VRB-300) — tooling, fixtures, auth |
 
-**Path to production** (per Option A sequencing locked 2026-06-27 in MASTER_PLAN §2):
+Design principle (locked): *standardize the framework/machinery, localize the values per-property.* The cross-business cart + OTA bundling are **designed, not built** — Phase 3/4, post-launch.
 
-| Phase | Slices | State | What "done" means |
-|---|---|---|---|
-| **Phase 1** — product | Slices 0–7 | ✅ | Booking lifecycle + notifications + reviews/loyalty + chat/pricing + reports/realtime |
-| **Phase 1.5** — multi-tenancy | OPS.M.0–22 + INFRA.1 | ✅ | Tenant aggregate + Entra External ID + admin/social auth split + admin pre-seed + Stripe Connect + RLS |
-| **Phase 1 launch-ready** | OPS.1–8 (7 slices) | 🚧 in progress | Pact + Playwright + k6 load + ZAP + Trivy + Stripe key rotation + DKIM. **After OPS.8: prod launch is unblocked.** |
-| **Phase 3** — hotel rooms | Slices 8+9 | ⏭ post-launch | Rooms-within-property + multi-unit cart (one guest books N rooms in one Stripe checkout) |
-| **Phase 4** — OTA bundling | Slice 10 | ⏭ post-launch | Cross-tenant itineraries (Stay + Flight + Car + Activity) with FX + per-leg cancellation |
-
-See [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) §1 for the row-per-slice table (with commit ranges + close-out doc links) and §3 for the full "what done means" per phase.
-
-**Environment**: staging live at `https://ca-vrbook-web-staging.icydesert-abf3fa4e.eastus2.azurecontainerapps.io` (web) + `ca-vrbook-api-staging.icydesert-abf3fa4e.eastus2.azurecontainerapps.io` (API). Prod not deployed yet — cutover blocked on OPS.1–8. All CI green on develop.
+**Environment**: staging web `https://ca-vrbook-web-staging.icydesert-abf3fa4e.eastus2.azurecontainerapps.io` + API `ca-vrbook-api-staging.icydesert-abf3fa4e.eastus2.azurecontainerapps.io`. Prod not deployed yet — the go-live epic (VRB-301–313) wires it. All CI green on `develop`.
 
 ## Owner-locked policies (invariant — do NOT re-derive, do NOT re-ask)
 
@@ -55,41 +55,12 @@ Policies the owner has locked. Assume they hold; don't propose alternatives unle
 - **Infra:** Bicep, Azure Container Apps + Container App Jobs, ACR, Key Vault, App Insights + Log Analytics, Postgres Flexible Server, ACS Email. See `infra/main.bicep`.
 - **CI/CD:** GitHub Actions. `cd-staging-api.yml` (backend + infra + workers + migrator + smoke) and `cd-staging-web.yml` (Next.js + Docker + smoke). Both deploy to Azure Container Apps in `rg-vrbook-staging`.
 
-## Phase 1 slice state (as of 2026-07-09)
+## History (archived — do NOT resume as active work)
 
-🎉 **Phase 1 complete** (Slices 0–7 all ✅ on staging). Phase 1.5 shipped through OPS.M.22. MASTER_PLAN is the authoritative index; key recent close-outs below.
+Phase 1 (product, Slices 0–7) + Phase 1.5 (multi-tenancy + Entra External ID auth, OPS.M.0–22 + INFRA.1) shipped to staging. The launch-hardening OPS.1 / OPS.2 / INFRA.3 slices (Pact contract tests, Playwright E2E suite, scale-to-zero-aware deploy convergence) are eng-complete. Their plans + close-outs + the old `MASTER_PLAN.md` now live under [`docs/archive/`](docs/archive/) for provenance — the launch is now driven by the **go-live epic (VRB-301–313)**, which still consumes `docs/OPS_LAUNCH_COMPLETION_PLAN.md` for the OPS.1–8 critical path (that one stays live until VRB-3xx fully absorbs it). Two facts those slices settled are still load-bearing and repeated here so they don't get lost:
 
-**2026-07-09 milestone**: Slices 5 + 6 + 7 all confirmed ✅ via gap analysis — every deliverable in each slice's plan had already been delivered incrementally through the OPS.M.* stack (mostly M.13.6, M.16, Slice 4 V2, and the Slice 6/7 commits themselves). Phase 1 finished quietly during Phase 1.5 execution. Follow-ups filed as **Slice OPS.M.23 candidates**: ETag on `/threads`, `ThreadByBookingFilterTests`, 4 report handler integration tests, `NegotiateEndpointTests`, `useTentativeBookingPush.test.ts`. None block core functionality; all are polish/coverage.
-
-**Slice OPS.1 — Pact contract tests (shape-complete 2026-07-09)**: 5 of 8 sub-commits landed. Consumer harness (@pact-foundation/pact@13.2.0) + 1 working interaction + CI drift gate + provider verifier fixture scaffold (`PactVerifierFixture : TwoTenantApiFixture`) + ADR-0018 flow 6 carve-out + drift runbook. `contracts/pacts/vrbook-web-vrbook-api.json` git-committed (1 interaction, deterministic sha256-verified). Close-out at [`docs/OPS_1_CLOSE_OUT.md`](docs/OPS_1_CLOSE_OUT.md); ADR at [`docs/adr/0018-pact-scope-and-flow-6-carve-out.md`](docs/adr/0018-pact-scope-and-flow-6-carve-out.md); runbook at [`docs/runbooks/pact-contract-drift.md`](docs/runbooks/pact-contract-drift.md). Two engineering-discovery follow-ups filed as **OPS.1.9**: (a) WAF-vs-Kestrel adapter for PactNet's verifier (WebApplicationFactory uses TestServer, in-process only); (b) PactV3 mock-server "Worker exited unexpectedly" when a single provider const is reused across multiple `executeTest` calls (root cause: Pact's Rust core cleanup). OPS.1.9 will land the actual verifier call + 11 remaining pact interactions.
-
-**Slice OPS.2 — Playwright E2E suite (in progress 2026-07-09)**: architect plan committed as [`docs/OPS_2_PLAYWRIGHT_PLAN.md`](docs/OPS_2_PLAYWRIGHT_PLAN.md). All §5 policy questions locked to architect recommendation per owner directive 2026-07-09. 8 sub-commits planned; OPS.2.1 shipped (`21f5075`) — plan doc + `web/tests/e2e/` directory skeleton. OPS.2.2 shipped 2026-07-09 — base infra: `fixtures/personas.ts` (3 personas, env-var passwords, never logged) + `fixtures/auth.fixture.ts` (re-injects sessionStorage since MSAL uses `cacheLocation:'sessionStorage'`, which Playwright `storageState` omits) + `global-setup.ts` (setup-project pattern, one real Entra-CIAM MSAL redirect sign-in per persona → `.auth/<persona>.storageState.json` + `.session.json`) + base POMs (`BasePage`/`HomePage`) + `support/{testTenant,stripeTestCards}.ts` + `playwright.config.ts` reshape (retired blanket `e2e`; added `setup` + 3 `<persona>-authed` projects, Chromium-only, `webServer` undefined → deployed staging). Backend/infra: `is_e2e` nullable col on `identity.tenants` (migration `OpsM2_TenantsAddIsE2eColumn`, mapped as EF shadow property — no domain behaviour) + `VrBook.Migrator.SeedE2EBackfill` (idempotent; seeds isolated `e2e-tenant` + pre-seeded `e2e-owner` tenant_admin + `e2e-platform-admin`; guest lazy-provisions, NOT seeded; gated on `Bootstrap:E2e:Enabled`, staging-only) + Bicep param `bootstrapE2eTenantEnabled` (staging true / prod false) → migrator env `Bootstrap__E2e__Enabled` + three `e2e-*-password` KV placeholders in `10-store-secrets.ps1`. **Live MSAL sign-in unverified in-session** — the three Entra CIAM personas + real KV passwords are operator-provisioned (OPS.2.8 §7 walk); global-setup selectors (`loginfmt`/`passwd`/`idSIButton9`) validate on first live run.
-
-OPS.2.3 shipped 2026-07-10 — anonymous smoke suite (5 `*.smoke.spec.ts` under `anonymous/`: home renders, property search shell, property detail by slug, unauthenticated quote auto-calc, web `/api/health`) + blocking `playwright-smoke` job in `cd-staging-web.yml` after the curl `smoke` (warms both web + API origins first since staging scales to zero, then `npx playwright test --project=smoke`, Chromium only). Architect consult (2026-07-10) resolved the smoke-fixture strategy: `SeedE2EBackfill` extended (OPS.2.3a) to also seed ONE deterministic public property (`slug='e2e-smoke-property'`, fixed GUID `e2e00000-…-001`, `is_active=true` to clear the Catalog public-read RLS carve-out) + a USD pricing plan whose `tenant_id` matches (load-bearing for the quote's RLS-scoped plan read); no booking/availability rows needed. Playwright config got cold-start-tolerant timeouts. TS/C# fixture constants mirrored (`support/testTenant.ts` ↔ `SeedE2EBackfill.cs`).
-
-OPS.2.4 shipped 2026-07-10 — 10 guest authed `guest/*.spec.ts` under the `guest-authed` project: 4 account-page renders (bookings/profile/loyalty/messages, each asserting the real heading AND absence of the SignInGate), header authed-nav + navigate-to-My-trips (2), authed "Book this stay" CTA (1), and a 3-step serial booking lifecycle (place Tentative booking on the seed property with unique far-future dates → appears in My bookings → cancel → Cancelled). No Stripe entry at book time (Phase-1 manual capture). Specs import `test`/`expect` from `fixtures/auth.fixture` (sessionStorage injection); `support/testTenant.ts` gained `futureStayDates()`. **Not run this session** — the `guest-authed` project needs the operator-provisioned Entra personas + KV passwords; verified only via `playwright --list` (10 tests) + strict `tsc`. Does not run in any CI gate yet (playwright-smoke runs only the `smoke` project; authed nightly lands OPS.2.7).
-
-OPS.2.5 + 2.6 shipped 2026-07-10 (architect consult resolved the approach — Option B: author all scenarios, `test.fixme` the one genuinely-blind item). **Owner (10, `owner/*.spec.ts`)**: 5 admin-page renders (dashboard/properties[shows seed property]/bookings/calendar/reports), property-create (reach-form + HTML5 required-validation, + full create-submit as `test.fixme` with drafted selectors for the 2.8 flip), confirm + reject on seeded Tentative bookings (skip-if-consumed guard). **Platform-admin (6, `platform-admin/*.spec.ts`)**: tenant list/detail/search/status-filter (4) + auth-edge pages admin-not-provisioned + admin-social-idp-rejected (2). Supporting changes: `SeedE2EBackfill` seeds 2 Tentative bookings (`ConfirmBookingId`/`RejectBookingId`, reset→Tentative on every deploy); `global-setup` fixes the owner active-tenant capture race (drives /admin → /select-tenant fallback → polls `vrbook:active-tenant` before snapshot; platform-admin skipped — 0-membership); `support/adminContext.ts` `ensureAdminContext` (secondary guard) + booking-id constants mirrored to `SeedE2EBackfill.cs`. **Total suite = 31 scenarios** (anon 5 + guest 10 + owner 10 + platform-admin 6, incl. 1 fixme) — the OPS.2.7 count arch test targets 31, not 30 (architect: honest total, don't pad). Verified: migrator publish -c Release + format clean; e2e strict `tsc`; `playwright --list` 34 (31 + 3 setup). **Authed specs NOT run this session** — all need operator-provisioned Entra personas + KV passwords (OPS.2.8 §7 walk); they run only in the OPS.2.7 informational nightly.
-
-**Slice OPS.2 — ✅ eng-complete 2026-07-10** (`21f5075` → OPS.2.8). OPS.2.7 shipped `nightly-playwright.yml` (informational) + `check:e2e-suite` guard (asserts 31 scenarios + `.auth/` gitignored, blocking in web frontend job) + arch tests `OpsOps2_AdminSurfaceAndTestBackdoorTests` (no admin `[AllowAnonymous]`, no test middleware in prod Program.cs) + `runbooks/playwright-e2e-flake.md`. OPS.2.8 shipped close-out + ADR-0019 + MASTER_PLAN row 17 flip. **Also shipped OPS.INFRA.3** (`c8619cc`, verified green both pipelines): scale-to-zero-aware deploy convergence (warm-the-revision-first — `minReplicas=0` means no replica to be `Healthy` until traffic, so the old `Running && Healthy` gate never converged) + a `ServerIsBusy` retry wrapper on the Bicep deploy. **Pending: the operator persona walk** (3 Entra CIAM personas + `e2e-*-password` KV secrets) turns the 26 authed specs green — see `OPS_2_CLOSE_OUT.md` §7.
-
-## Launch path — [`docs/OPS_LAUNCH_COMPLETION_PLAN.md`](docs/OPS_LAUNCH_COMPLETION_PLAN.md) (architect roadmap, owner directive "complete OPS asap")
-
-Go-live = finish the launch-hardening row. Decisive calls: **compress OPS.3 (k6) + OPS.4 (ZAP) + OPS.5 (Trivy scan) to one-time pre-launch runs** (not blocking CI gates); **OPS.1.9 + SBOM-signing → post-launch backlog**. Hard go-live gates that can't compress: green pipeline (INFRA.3 ✅), anonymous Playwright smoke (✅ blocking), one-time k6/ZAP/Trivy triaged, **OPS.6 Stripe LIVE keys**, **OPS.8 DKIM/SPF**, Entra prod cutover. **Operator long-pole (start in parallel): DKIM/SPF DNS, Stripe LIVE keys, Entra personas** — their latency, not code, gates launch. **Next eng work: OPS.5 Trivy → OPS.3 k6 (prod-sized target) → OPS.4 ZAP.** k6 MUST run against a prod-sized target, not the B1ms-burstable/scale-to-zero staging.
-
-- **OPS.M.12** — Social IdPs (Google + Microsoft consumer + Facebook + Apple) via `GuestSignUpSignIn` + admin-vs-social surface split. Owner-locked policy: admins Entra-local only. Two-layer defence (REFUSE-AT-PROVISIONING + middleware belt). See [`docs/OPS_M_12_CLOSE_OUT.md`](docs/OPS_M_12_CLOSE_OUT.md) + [`docs/runbooks/social_idp_setup.md`](docs/runbooks/social_idp_setup.md).
-- **OPS.INFRA.1** — Staging Postgres public-access rebuild (V1 → V2 blue/green). V2 = `psql-vrbook-staging-v2.postgres.database.azure.com`. See [`docs/OPS_INFRA_1_STAGING_POSTGRES_PUBLIC_REBUILD_PLAN.md`](docs/OPS_INFRA_1_STAGING_POSTGRES_PUBLIC_REBUILD_PLAN.md).
-- **OPS.M.15** — App-role legacy claim reads + `[Authorize(Roles="Owner,Admin")]` drop. 7 sub-commits; 15 arch facts. Close-out at [`docs/OPS_M_15_CLOSE_OUT.md`](docs/OPS_M_15_CLOSE_OUT.md).
-- **OPS.M.16** — Turnover-aware completion. Property `TurnoverHours` + `CompletionDueAt` snapshot + sweep predicate. Close-out at [`docs/OPS_M_16_CLOSE_OUT.md`](docs/OPS_M_16_CLOSE_OUT.md).
-- **OPS.M.17** — Handler-level `HasTenantRole` guards on 4 tenant-scoped admin surfaces (Notifications retry, SyncConflicts resolve, ChannelFeeds CRUD, Reviews moderation). Closes M.15 §3 medium-medium intra-tenant exposure.
-- **OPS.M.18** — M.16 polish: calendar `awaitingTurnover` overlay + [`docs/runbooks/turnover_walk.md`](docs/runbooks/turnover_walk.md).
-- **OPS.M.19** — `RespondToReviewHandler` property-ownership guard (owner-response endpoint; NOT tenant_admin bypass — different semantics).
-- **OPS.M.20** — `TurnoverAwareCompletionTests` integration test pack (6 scenarios, `Category=Integration`, Postgres testcontainer).
-- **OPS.M.21** — M.15 App Roles cleanup finalization (3 atomic sub-commits): SPA nav reshape → `UserDto.IsOwner`/`IsAdmin` drop → DB column drop. ADR-0014 amendment #2 marks the closure. Rollback runbook at [`docs/OPS_M_15_APP_ROLES_CLEANUP_FOLLOWUP_ROLLBACK.md`](docs/OPS_M_15_APP_ROLES_CLEANUP_FOLLOWUP_ROLLBACK.md).
-- **OPS.M.12.9 (2026-07-08)** — Google IdP wired end-to-end on staging. Google Cloud OAuth 2.0 client provisioned; `google-oauth-client-id` + `google-oauth-client-secret` in KV; Entra CIAM `GuestSignUpSignIn` user flow created with Email + Google + Microsoft; both `vrbook-web-staging` (SPA) + `vrbook-api-staging` (API) app registrations assigned to the flow; `email` + `verified_primary_email` optional claims added to both apps (ID + Access); legacy `extn.isAdmin` / `extn.isOwner` optional claims removed from Access token; MSAL `apiScopes` bumped to include `email`; `UserProvisioningMiddleware` gains `verified_primary_email` as email-fallback claim ahead of `preferred_username`. `AdminSignUpSignIn` flow NOT yet created (owner-lock preserved because admin authority currently email+password only via the existing tenant-default flow; explicit split flow lands with OPS.M.22).
-- **OPS.M.12.10 (2026-07-08)** — Role badge in site header. `SiteHeaderRoleBadge` chip shows "Platform Admin" (solid brand-orange) for PlatformAdmin sessions or "Tenant Admin — {tenantName}" (outlined brand-maroon) for `tenant_admin` membership sessions; renders nothing for guests. Data sources match `SiteHeaderNav` (post-M.21 ADR-0014 shape): `useMe().isPlatformAdmin` + `useMyTenants().memberships`. PlatformAdmin trumps any `tenant_admin` membership; picks `isPrimary` membership first else first found. 8 unit tests pin every render state.
-- **Known gap — Google guest access token missing `idp` claim.** ID token has `idp: google.com` correctly; access token does not, so `UserProvisioningMiddleware` classifies federated Google users as `provider=entra` in `identity.user_identities`. `idp` isn't in Entra CIAM's Optional Claims UI — needs a Manifest edit or a resource-app-side hook. Filed as follow-up **OPS.M.12.11** (small, ~half day). Doesn't block guest usage; only matters if a guest is later promoted to admin because Layer 1 REFUSE-AT-PROVISIONING gates on `provider` string.
-- **OPS.M.22 (2026-07-08 → 2026-07-09)** — Admin pre-seed slice shipped end-to-end. 8 sub-commits (`b1f9c8e` RED arch tests → M.22.8 close-out). Ships `identity.users.pre_seeded_at` column + `SeedAdminUserCommand` + `POST /api/v1/admin/platform/users/seed` + middleware admin-gate (`AdminAccountNotProvisionedException` 401 with `admin_account_not_provisioned` problem type) + SPA `/auth/admin-not-provisioned` page + `vrbook-admin.ps1` operator cmdlet + Bicep-declarative backfill (`seedPlatformAdmins` array param → migrator's `SeedPlatformAdminsBackfill` service). Legacy `grant-self-admin.ps1` deleted (post-M.15 dead). See [`docs/OPS_M_22_CLOSE_OUT.md`](docs/OPS_M_22_CLOSE_OUT.md) + [`docs/adr/0017-admin-preseed-required.md`](docs/adr/0017-admin-preseed-required.md). Two known follow-ups: OPS.M.22.10 (strong /me contract for admin-not-provisioned, currently heuristic on 401/403), OPS.M.22.11 (operator staging walk runbook).
+1. **Owner-locked policies** (above) — admin-vs-social IdP split (ADR-0016) + admin pre-seed (ADR-0017).
+2. **Role authority shape** (below) — frozen post-M.21.
 
 Post-M.21 role authority shape (frozen):
 - **Global:** `identity.users.is_platform_admin` boolean → materialized as `ClaimTypes.Role="PlatformAdmin"` by `UserProvisioningMiddleware`.
@@ -98,12 +69,15 @@ Post-M.21 role authority shape (frozen):
 
 ## Working pattern
 
-- **Architect consult before any multi-module / architectural / sequencing plan.** Commit the architect's plan as `docs/OPS_M_*_PLAN.md` for owner review BEFORE executing. Rule captured at [`feedback_consult_architect_for_planning`](../.claude/projects/c--Work-BookingApp/memory/feedback_consult_architect_for_planning.md).
-- **Technical questions in a plan's §5 are architect's call, not owner's** — owner directive 2026-07-06. Adopt architect recommendations directly; consult architect again if unsure. [`feedback_technical_decisions_are_architect_call`](../.claude/projects/c--Work-BookingApp/memory/feedback_technical_decisions_are_architect_call.md).
-- **User pushback = more coverage, not less.** When owner challenges a deferral or partial scope, default to FULL scope. Architect verifies feasibility/order; owner sets breadth/depth.
-- **Scope deferral is an architect consult.** Deferring a non-trivial subset of a locked slice plan's steps requires architect consultation BEFORE the deferral; §11 close-out is for documenting what shipped.
-- **RED-then-GREEN arch tests when useful.** Land arch tests intentionally RED on develop with a documented expected-failure count in the commit message; each subsequent GREEN commit flips one or more facts. See OPS.M.15.1 for the pattern.
-- **Ship complete vertical slices.** Never call a feature "done" without UI. Backend-shipped-without-UI is NOT done. Enterprise-architect scope: UI → API → DB → deploy → UX.
+**The operating model is [`docs/AGENT-PLAYBOOK.md`](docs/AGENT-PLAYBOOK.md) (how to pick up + hand off work) + [`docs/ENGINEERING-RULES.md`](docs/ENGINEERING-RULES.md) (what good work is).** Those are authoritative; the reminders below are the load-bearing ones.
+
+- **Architect consult before any multi-module / architectural / sequencing plan.** Commit the architect's plan as a doc for owner review BEFORE executing. [`feedback_consult_architect_for_planning`](../.claude/projects/c--Work-BookingApp/memory/feedback_consult_architect_for_planning.md).
+- **Technical questions are architect's call, not owner's** — owner directive 2026-07-06. Adopt architect recommendations directly; only product/policy questions go to the owner. [`feedback_technical_decisions_are_architect_call`](../.claude/projects/c--Work-BookingApp/memory/feedback_technical_decisions_are_architect_call.md).
+- **User pushback = more coverage, not less.** When the owner challenges a deferral or partial scope, default to FULL scope. Architect verifies feasibility/order; owner sets breadth/depth.
+- **Scope deferral is an architect consult** BEFORE the deferral — not a close-out decision.
+- **RED-then-GREEN arch tests when useful.** Land arch tests intentionally RED with a documented expected-failure count; each GREEN commit flips one or more facts.
+- **Ship complete vertical slices.** Never call a feature "done" without UI. Backend-shipped-without-UI is NOT done: UI → API → DB → deploy → UX.
+- **Stay in lane, claim on the board, keep the API suite green, self-heal the docs on finish** (playbook §2/§5/§6).
 
 ## CI + local-vs-CI gotchas
 
@@ -142,14 +116,18 @@ Load-bearing traps captured as reference memories; ignore at your own peril:
 
 ## Where the plans live
 
-- `docs/MASTER_PLAN.md` — the phase table + slice status. First stop for "where are we."
-- `docs/OPS_M_<N>_PLAN.md` — pre-slice architect brief for slice `<N>`. Read before executing.
-- `docs/OPS_M_<N>_CLOSE_OUT.md` — post-slice retrospective. What shipped + divergences + follow-ups + rollback.
-- `docs/adr/<N>-<slug>.md` — architectural decisions. ADR-0012/0014/0016 are the authorization axis; ADR-0001 is the modular monolith.
-- `docs/runbooks/*.md` — operator procedures. `social_idp_setup.md` (M.12) + `turnover_walk.md` (M.16 polish) are the recent ones.
+- **[`docs/stories/BOARD.md`](docs/stories/BOARD.md)** — story state (SoT). **First stop for "what's next."**
+- **[`docs/stories/INDEX.md`](docs/stories/INDEX.md) → `docs/stories/EPIC-*.md`** — the 85 stories (each is TDD-first, with its own DoD).
+- **[`docs/plan/EXECUTION-PLAN.md`](docs/plan/EXECUTION-PLAN.md) + [`docs/plan/AGENT-PROMPTS.md`](docs/plan/AGENT-PROMPTS.md)** — waves, lanes, file ownership, kickoff prompts.
+- **[`docs/AGENT-PLAYBOOK.md`](docs/AGENT-PLAYBOOK.md) + [`docs/ENGINEERING-RULES.md`](docs/ENGINEERING-RULES.md)** — the operating model + engineering standards.
+- `docs/adr/<N>-<slug>.md` — architectural decisions. ADR-0012/0014/0016/0017 are the authorization axis; ADR-0001 is the modular monolith.
+- `docs/runbooks/*.md` — operator procedures.
+- `docs/archive/*` — completed OPS/slice plans + close-outs + the old `MASTER_PLAN.md` (provenance only; not active).
 
 ## What NOT to do
 
+- **Don't resume the OPS.* slices or `MASTER_PLAN.md` as the plan** — they're archived. The plan is the board + epics.
+- **Don't start work without a `CLAIMED` row on [`docs/stories/BOARD.md`](docs/stories/BOARD.md), and don't edit files outside your lane.** The board is the lock; CODEOWNERS is the backstop.
 - **Don't add `IsOwner` / `IsAdmin` / `Owner,Admin` role literals anywhere.** Arch tests `OpsM15_*` + `OpsM17_*` + `SiteHeaderNav-noLegacyDtoReads` fail loud on regression. Use `HasTenantRole(tid, "tenant_admin")` for tenant-scoped writes and `IsPlatformAdmin` for cross-tenant operator surface.
 - **Don't delete the Entra `Owner` / `Admin` App Role definitions on `vrbook-api-<env>` app registration** without a further ADR amendment. Post-M.21 they're safe to delete (no code reads them), but leaving them in place is the low-risk default.
 - **Don't hand-edit EF migration `Designer.cs` / `IdentityDbContextModelSnapshot.cs`.** Regenerate via `dotnet ef migrations add`.
