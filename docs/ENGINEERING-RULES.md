@@ -24,7 +24,11 @@ Unit tests need no Docker. Integration tests use Testcontainers Postgres (`Categ
 
 ## 3. Endpoint API tests (ships with the endpoint, every time)
 
-Any story that adds or changes an HTTP endpoint MUST, as part of that story, add contract tests for it to the API suite (**VRB-300** / [`TEST-STRATEGY.md`](TEST-STRATEGY.md)), covering: **happy path · authentication · authorization (tenant isolation via `HasTenantRole` / RLS) · input validation · error contract · idempotency** where the endpoint mutates. Build on the existing `TwoTenantApiFixture` + test auth handler — do not stand up a new harness. The full suite must be green before merge (playbook §5).
+Any story that adds or changes an HTTP endpoint MUST, as part of that story:
+1. **Add a `RouteMatrix` row** (`tests/VrBook.Api.IntegrationTests/Multitenancy/RouteMatrix.cs`) for its auth + cross-tenant-isolation shape — or mark the action `[ExemptFromCrossTenantMatrix("reason")]`. The strengthened `EndpointCoverageArchTest` (VRB-300) **fails the build** if you skip this.
+2. **Add per-module contract tests** (`Contract/<Module>/*`) for the dimensions the matrix doesn't assert: **happy path · input validation (→400) · error contract (status + problem `type`) · idempotency** where it mutates.
+
+Build on the existing `TwoTenantApiFixture` + `TwoTenantTestAuthHandler` — **do not stand up a new harness** (it already exists; see [`TEST-STRATEGY.md`](TEST-STRATEGY.md)). The full suite must be green before merge (playbook §5).
 
 ## 4. Security & owner-locked policies (invariant — never re-derive, never re-ask)
 

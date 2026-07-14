@@ -24,6 +24,15 @@ The API contract suite is **integration-level** (real HTTP through the real midd
 
 New tenants/users/resources a scenario needs are seeded **inside the test** under an `RlsBypassScope`, using the real domain factories (`Property.Create`, `User.Provision`, …) with unique value-object instances per principal (EF `OwnsOne` re-stamps a shared VO — see the fixture's `NewAddress()` note). Deterministic GUIDs so failures are grep-able.
 
+### The auth/isolation matrix already exists (extend it, don't rebuild)
+
+Slice OPS.M.10 already shipped the coverage backbone — VRB-300 **completes and extends** it:
+
+- **`Multitenancy/RouteMatrix.cs`** — the **single source of truth** enumeration of endpoint × persona × tenant. Each row is a `Cell(description, verb, route, persona, targetTenant, acceptedStatuses[], bodyFactory?)`. It covers **~29 of the ~98 controller actions** today, focused on **authorization + cross-tenant isolation** (the `AcceptedStatuses` *set* proves "which statuses are acceptable for this persona at this tenant," not the business outcome). **Adding an endpoint = adding a row here.**
+- **`Multitenancy/CrossTenantEndpointMatrix.cs`** — the `[Theory]` (`[MemberData(RouteMatrix.GetAll)]`) that runs every cell: substitutes `{tenantId}`, sends as the persona, asserts status ∈ `AcceptedStatuses`.
+- **`VrBook.Architecture.Tests/EndpointCoverageArchTest.cs`** — the coverage guard. **Today** it asserts every action carries an explicit access decision (`[Authorize]`/`[AllowAnonymous]`/`[ExemptFromCrossTenantMatrix]`). Its own XML-doc notes the **second half is not yet enforced**: "every authenticated action appears in `RouteMatrix.GetAll()` OR is exempt." **VRB-300 closes that second half** — that is the real endpoint-coverage gate.
+- **`ExemptFromCrossTenantMatrixAttribute`** (`VrBook.Api.Common`) — marks an action deliberately out of the matrix, with a **required non-empty reason**.
+
 ## What every endpoint's contract tests must cover
 
 For each endpoint a story adds or changes (this is a DoD line in [`ENGINEERING-RULES.md`](ENGINEERING-RULES.md) §3):
@@ -37,7 +46,9 @@ For each endpoint a story adds or changes (this is a DoD line in [`ENGINEERING-R
 
 ## Coverage enforcement (no silent gaps)
 
-VRB-300 ships an **endpoint-coverage arch test**: it reflects over the API's controllers/route table and **fails if any endpoint has zero contract tests** referencing it (an attribute or a naming convention maps a test to its route). This turns "write the API tests" from a request into a build break — a new endpoint without tests cannot go green. New endpoints are added to the coverage allow-list only with their tests, never as a bare exemption.
+The gate is the **strengthened `EndpointCoverageArchTest`** (VRB-300): every authenticated controller action must **either appear in `RouteMatrix.GetAll()` or carry `[ExemptFromCrossTenantMatrix("reason")]`** — the build fails naming any action that is neither. This turns "cover the endpoint" from a request into a build break: a new endpoint without a matrix row (and, per ENGINEERING-RULES §3, its contract tests) cannot go green. Exemptions are for genuinely un-matrixable actions only, each with a documented reason — never a silent skip.
+
+Note the split of concerns: the **matrix + arch test** guarantee *every endpoint is authorization-covered and accounted for*; the **per-module `Contract/*` classes** add the *happy-path / validation / error-contract / idempotency* assertions the status-set matrix intentionally does not make. Both are required for an endpoint to be "covered."
 
 ## Running it
 

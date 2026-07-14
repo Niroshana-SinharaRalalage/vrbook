@@ -35,6 +35,7 @@ Every story's TDD plan names the Unit / Integration / E2E tests to write. **Writ
 - Your lane owns a fixed set of files/dirs ([`plan/EXECUTION-PLAN.md`](plan/EXECUTION-PLAN.md) + your story's `Parallelisation` field). **Touch only those.**
 - A need for a file another lane owns is **not** permission to edit it. It is either a **dependency** (wait for that lane's story to be `DONE`) or a **contract** (that lane ships the interface first, you consume it). 
 - The **load-bearing shared surfaces** (`Program.cs`/DI, `StripeGateway.cs`, the RLS core, design-system primitives, `VrBook.Contracts`) are held by exactly one lane per wave — see the ownership table in [`plan/EXECUTION-PLAN.md`](plan/EXECUTION-PLAN.md). `.github/CODEOWNERS` makes a cross-lane edit require the owner's review — that review flag is a *stop sign*, not a speed bump.
+- **Enforcement caveat (be honest with yourself):** the claim protocol and CODEOWNERS are only *enforced* once branch protection is on — otherwise they're honor-based. Before launching unattended agents, apply [`runbooks/branch-protection.md`](runbooks/branch-protection.md) (require-PR + require-code-owner-review + required status checks on `develop`/`main`). Until then, follow the protocol anyway — the collision guarantees depend on every agent respecting it.
 - If your story genuinely cannot proceed without out-of-lane changes, that is an **escalation** (§7), not a quiet edit.
 
 ## 5. Keep the API suite green (verification loop)
