@@ -98,6 +98,19 @@ Set-KvSecret -Name 'entra-web-client-id' -Value 'pending-identity-setup' `
 Set-KvSecret -Name 'entra-tenant-issuer-host' -Value 'pending-identity-setup' `
     -Description 'EntraExternalId__TenantIssuerHost: External tenant issuer host (e.g. vrbookcid.ciamlogin.com) used by IdentityProviderClassifier.'
 
+# VRB-201 (G6) — secretRef placeholders that have NO other producer. Both are
+# referenced by infra/main.bicep (Stripe__PublishableKey, Acs__SenderAddress) but
+# were previously unseeded, so a first/clean deploy failed atomically on the
+# unresolved secretRef at container revision-provision time. Seed placeholders so
+# the deploy resolves; the operator (or VRB-204 at go-live) overwrites with real
+# values via `az keyvault secret set ... --name <name>`.
+#   NOTE: acs-connection-string is intentionally NOT seeded here — infra/modules/
+#   acs.bicep writes it at deploy time (it is the documented producer).
+Set-KvSecret -Name 'stripe-publishable-key' -Value 'pending-identity-setup' `
+    -Description 'Stripe__PublishableKey (pk_...). Non-secret but Bicep-referenced; operator/VRB-204 sets the real value. Test mode for dev/staging, live for prod.'
+Set-KvSecret -Name 'acs-sender-address' -Value 'pending-identity-setup' `
+    -Description 'Acs__SenderAddress (e.g. donotreply@<managed-domain>.azurecomm.net). Bicep-referenced with no other producer; operator/VRB-204 sets the real sender (custom domain + DKIM for prod).'
+
 # Slice OPS.2.2 — Playwright E2E persona passwords. NOT bound by any Container
 # App secretRef (the nightly workflow fetches them via `az keyvault secret show`
 # at run time), so they don't gate a Bicep deploy — but seed placeholders here
@@ -127,20 +140,12 @@ if ($stripeWebhook) {
         -Description 'Stripe webhook signature verification secret. See proposal §9.7.' -Overwrite
 }
 
-$sendgrid = Read-SecretPrompt -Label 'SendGrid -- API key (or skip if going Azure Communication Services per LankaConnect)' `
-    -Hint 'SG.xxxxxxxxxxxxxxxx from https://app.sendgrid.com/settings/api_keys'
-if ($sendgrid) {
-    Set-KvSecret -Name 'sendgrid-key' -Value $sendgrid `
-        -Description 'SendGrid API key for transactional email. See proposal §13.' -Overwrite
-}
-
-# ---- Optional: AD B2C client secret (only needed for confidential-client flows) ----
-$b2cClient = Read-SecretPrompt -Label 'AD B2C -- vrbook-api client secret (only if you created one)' `
-    -Hint 'leave blank unless 20-b2c-apps.ps1 told you to set one'
-if ($b2cClient) {
-    Set-KvSecret -Name 'b2c-api-client-secret' -Value $b2cClient `
-        -Description 'AD B2C vrbook-api app registration client secret (for Graph extension writes).' -Overwrite
-}
+# VRB-201 — removed orphan prompts for `sendgrid-key` (email is Azure Communication
+# Services now, not SendGrid — ADR-0011) and `b2c-api-client-secret` (auth moved to
+# Entra External ID, ADR-0012). Neither is referenced by infra/main.bicep. Any
+# lingering copies in an existing vault should be deleted by the operator:
+#   az keyvault secret delete --vault-name <kv> --name sendgrid-key
+#   az keyvault secret delete --vault-name <kv> --name b2c-api-client-secret
 
 Write-Step "Done."
 Write-Host "Inventory:" -ForegroundColor Yellow
