@@ -396,10 +396,13 @@ public static class RouteMatrix
         // ---- Platform — SeedMembership + admin-user seed (PlatformAdmin only) ----
         yield return Anon("Anonymous_POST_platform_tenant_membership_returns_401",
             "POST", "/api/v1/admin/platform/tenants/{tenantId}/memberships");
-        yield return new Cell("OwnerA_POST_platform_tenant_membership_returns_403",
+        // Role rejection (not cross-tenant): TenantsPlatformController is
+        // [Authorize(Roles="PlatformAdmin")], so a tenant owner is refused at
+        // the role gate regardless of the target tenant.
+        yield return new Cell("OwnerA_POST_platform_tenant_membership_role_rejected_403",
             "POST", "/api/v1/admin/platform/tenants/{tenantId}/memberships",
             Persona.OwnerA, TargetTenant.A, Forbidden, JsonBody(new { entraOid = "seed-oid", role = "tenant_admin" }));
-        yield return new Cell("OwnerB_POST_platform_tenant_membership_returns_403",
+        yield return new Cell("OwnerB_POST_platform_tenant_membership_role_rejected_403",
             "POST", "/api/v1/admin/platform/tenants/{tenantId}/memberships",
             Persona.OwnerB, TargetTenant.A, Forbidden, JsonBody(new { entraOid = "seed-oid", role = "tenant_admin" }));
 

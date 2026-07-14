@@ -27,7 +27,10 @@ public sealed class CrossTenantEndpointMatrix(TwoTenantApiFixture fixture)
 {
     /// <summary>A well-formed placeholder for non-tenant/non-property route
     /// parameters — valid against a <c>:guid</c> constraint so the route binds,
-    /// while naming no real resource (the request 401/403s before it matters).</summary>
+    /// while naming no real resource (the request 401/403s before it matters).
+    /// Note: this is a Guid; a future matrixed route whose param carries a
+    /// non-guid constraint (e.g. <c>:int</c>) would fail to bind and 404 — an
+    /// intentional signal to give that row a route-appropriate placeholder.</summary>
     private const string PlaceholderId = "ffffffff-0000-0000-0000-0000000000ff";
 
     private static readonly Regex PlaceholderRouteParam = new(@"\{[^}]+\}", RegexOptions.Compiled);
