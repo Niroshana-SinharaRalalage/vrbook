@@ -9,14 +9,14 @@
 *
 
 # Public contracts — schema changes here require an architect's sign-off.
-/src/VrBook.Contracts/    @architects
-/contracts/               @architects
+/src/VrBook.Contracts/    @Niroshana-SinharaRalalage
+/contracts/               @Niroshana-SinharaRalalage
 
 # Infrastructure-as-code — same gating.
-/infra/                   @architects
+/infra/                   @Niroshana-SinharaRalalage
 
 # CI/CD pipelines themselves — guarded so a single PR cannot bypass other gates.
-/.github/                 @architects
+/.github/                 @Niroshana-SinharaRalalage
 
 # =============================================================================
 # Parallel-agent lane guard (Part B / multi-agent execution).
@@ -28,23 +28,23 @@
 # =============================================================================
 
 # DI / config wiring — Lane CONFIG (Wave 0), then per EXECUTION-PLAN Wave-1 owner table
-/src/VrBook.Api/Program.cs                          @architects
+/src/VrBook.Api/Program.cs                          @Niroshana-SinharaRalalage
 # Payments/pricing engine + Stripe — Lane PAY (Wave 1) / P3-CART sub-lane (Wave 3)
-/src/Modules/VrBook.Modules.Payment/                @architects
-/src/Modules/VrBook.Modules.Pricing/                @architects
+/src/Modules/VrBook.Modules.Payment/                @Niroshana-SinharaRalalage
+/src/Modules/VrBook.Modules.Pricing/                @Niroshana-SinharaRalalage
 # Tenant / RLS core — ONLY the Phase-3 foundation lane (Wave 3) may edit these
-/src/VrBook.Infrastructure/Persistence/TenantGucCommandInterceptor.cs           @architects
-/src/Modules/VrBook.Modules.Booking/Application/Commands/PlaceBookingHandler.cs  @architects
-/src/Modules/VrBook.Modules.Booking/Domain/Booking.cs                           @architects
+/src/VrBook.Infrastructure/Persistence/TenantGucCommandInterceptor.cs           @Niroshana-SinharaRalalage
+/src/Modules/VrBook.Modules.Booking/Application/Commands/PlaceBookingHandler.cs  @Niroshana-SinharaRalalage
+/src/Modules/VrBook.Modules.Booking/Domain/Booking.cs                           @Niroshana-SinharaRalalage
 # Design-system primitives — Lane DESIGN (Wave 0); every UI lane consumes, none edits
-/web/src/components/ui/                              @architects
-/web/tailwind.config.ts                             @architects
-/web/src/app/globals.css                            @architects
+/web/src/components/ui/                              @Niroshana-SinharaRalalage
+/web/tailwind.config.ts                             @Niroshana-SinharaRalalage
+/web/src/app/globals.css                            @Niroshana-SinharaRalalage
 # API test harness — Lane TEST (Wave 0); harness changes are cross-cutting
-/tests/                                             @architects
+/tests/                                             @Niroshana-SinharaRalalage
 
 # The operating-model docs themselves — change deliberately, with review.
-/CLAUDE.md                                          @architects
-/docs/AGENT-PLAYBOOK.md                             @architects
-/docs/ENGINEERING-RULES.md                          @architects
-/docs/stories/BOARD.md                              @architects
+/CLAUDE.md                                          @Niroshana-SinharaRalalage
+/docs/AGENT-PLAYBOOK.md                             @Niroshana-SinharaRalalage
+/docs/ENGINEERING-RULES.md                          @Niroshana-SinharaRalalage
+/docs/stories/BOARD.md                              @Niroshana-SinharaRalalage

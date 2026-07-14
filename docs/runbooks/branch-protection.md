@@ -8,15 +8,17 @@
 
 ## Recommended settings
 
-| Setting | `develop` | `main` | Effect |
-|---|---|---|---|
-| Require a pull request before merging | ✅ | ✅ | No direct pushes; every change is a PR (claim → branch → PR → merge). |
-| Require review from Code Owners | ✅ | ✅ | A PR touching a CODEOWNERS path (shared surfaces) needs the owner's review — the lane stop-sign. |
-| Required approving reviews | 1 | 1 | At least one approval. For unattended agents, this is your gate — or use a review agent. |
-| Require status checks to pass | ✅ (CI: build, unit, arch, web checks, integration) | ✅ | A red API suite / arch test blocks the merge — enforces "keep the suite green." |
-| Require branches up to date | ✅ | ✅ | Forces rebase-on-`develop` before merge (matches the playbook). |
-| Require conversation resolution | ✅ | ✅ | Review threads must be resolved. |
-| Include administrators | optional | ✅ | If off, you retain a manual override; on `main` prefer on. |
+| Setting | Applied | Effect |
+|---|---|---|
+| Require a pull request before merging | ✅ | No direct pushes; every change is a PR (claim → branch → PR → merge). **This is the core enforcement.** |
+| Require status checks to pass (`backend (.NET 8)`, `frontend (Next.js)`) | ✅ | A red build/lint/unit/arch or web check blocks the merge — enforces "keep the suite green." |
+| Require branches up to date (`strict`) | ✅ | Forces rebase-on-target before merge (matches the playbook). |
+| Require conversation resolution | ✅ | Review threads must be resolved. |
+| Require review from Code Owners | **non-blocking** | CODEOWNERS still **auto-requests** the owner on a shared-surface PR (the visible stop-sign), but does not hard-block. See the note below on *why not blocking*. |
+| Required approving reviews | 0 | In-lane PRs merge on green with no human — supports "launch agents, walk away." Tighten to 1 if you want a human gate on everything. |
+| Include administrators (`enforce_admins`) | false | **Escape hatch:** the owner can still direct-push / bypass if `ci.yml` misbehaves on its first PR run. Flip to `true` once CI is proven green on a PR. |
+
+**Why code-owner review is non-blocking (a deliberate, corrected choice):** CODEOWNERS must name an owner with **write access**. `@architects` was a placeholder **team** — and this is a **user repo, which cannot have teams**, so every CODEOWNERS line was an "Unknown owner" error that would have *deadlocked* every shared-surface PR on an unsatisfiable reviewer. Fixed by pointing CODEOWNERS at `@Niroshana-SinharaRalalage`. Even so, hard-blocking on code-owner review has two problems here: (1) GitHub forbids approving your own PR, so an owner-token agent's shared-surface PR could never self-satisfy; (2) a lane that legitimately owns a shared surface for its wave (e.g. PAY owns `StripeGateway.cs`) would be blocked on its own in-lane work. So the guard is **visibility (auto-request) + green-CI + PR-required**, not a hard reviewer lock. If you add a second maintainer identity, flip `require_code_owner_reviews` to `true` for a hard cross-surface gate.
 
 ## Apply with `gh` (run once per branch)
 
@@ -24,19 +26,21 @@ Replace `OWNER/REPO` = `Niroshana-SinharaRalalage/vrbook`. Adjust the `contexts`
 
 The nested-field form via `gh api -f` is fiddly; the reliable way is a JSON body piped to `gh api --input -`:
 
+This is the exact body applied to **both** `develop` and `main` (already live — recorded here for reproducibility / disaster recovery):
+
 ```bash
 gh api -X PUT repos/Niroshana-SinharaRalalage/vrbook/branches/develop/protection --input - <<'JSON'
 {
   "required_status_checks": { "strict": true, "contexts": ["backend (.NET 8)", "frontend (Next.js)"] },
   "enforce_admins": false,
-  "required_pull_request_reviews": { "require_code_owner_reviews": true, "required_approving_review_count": 1, "dismiss_stale_reviews": true },
+  "required_pull_request_reviews": { "require_code_owner_reviews": false, "required_approving_review_count": 0, "dismiss_stale_reviews": true },
   "required_conversation_resolution": true,
   "restrictions": null
 }
 JSON
 ```
 
-Then the same for `main` with `"enforce_admins": true`. Verify:
+Verify:
 
 ```bash
 gh api repos/Niroshana-SinharaRalalage/vrbook/branches/develop/protection \
