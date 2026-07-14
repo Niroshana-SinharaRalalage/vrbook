@@ -29,6 +29,7 @@ The proposal is the source of truth for *what* is being built. These ADRs are th
 | [0012](./0012-entra-external-id-over-b2c.md) | Entra External ID (CIAM) over Azure AD B2C | Accepted | Sole IdP for the API; single-tenant CIAM. Foundation for later admin-vs-guest split. |
 | [0013](./0013-single-tenant-staging-and-prod.md) | Single Entra tenant per environment | Accepted | One tenant per environment (staging / prod); no per-VrBook-tenant IdP tenants. |
 | [0014](./0014-app-roles-global-db-per-tenant.md) | App Roles for global roles, DB for per-tenant | Accepted | Owner/Admin → Entra App Roles; tenant_admin/member → `identity.tenant_memberships`. |
+| [0015](./0015-number-skipped.md) | _Number intentionally skipped_ | N/A (tombstone) | No decision was ever assigned to 0015; recorded so the index stays contiguous. Next ADR uses a new number, not 0015. |
 | [0016](./0016-admin-vs-social-idp-surface-split.md) | Admin sign-in surface separate; admins may not hold a social identity | Accepted | Two Entra user flows + Layer 1 REFUSE-AT-PROVISIONING + Layer 2 middleware belt. Admins are Entra-local only; guests may use 4 social IdPs. |
 
 ## How to add a new ADR

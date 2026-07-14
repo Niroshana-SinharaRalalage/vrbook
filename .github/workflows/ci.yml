@@ -1,0 +1,158 @@
+# PR gate — runs on every pull request into develop/main so branch
+# protection can require it. Unlike cd-staging-*.yml (which trigger on
+# push-to-develop and DEPLOY), this workflow only builds + tests; it never
+# touches Azure. It is what makes "keep the API suite green" an enforced
+# merge precondition rather than an honor-system rule.
+#
+# Blocking today: format/lint, Release build, unit + architecture tests,
+# web lint/typecheck/vitest/e2e-suite-guard/build.
+# Informational today (continue-on-error): the integration/API-contract
+# suite — VRB-300 flips it to blocking once it is proven green on PRs
+# (that flip is a line in VRB-300's Definition of Done). This mirrors the
+# current cd-staging-api.yml posture so enabling the gate does not jam PRs
+# on an unverified suite.
+name: ci
+
+on:
+  pull_request:
+    branches: [develop, main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: "8.0.x"
+  NODE_VERSION: "20"
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  SOLUTION: src/VrBook.sln
+
+jobs:
+  backend:
+    name: backend (.NET 8)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vrbook
+          POSTGRES_PASSWORD: vrbook
+          POSTGRES_DB: vrbook
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U vrbook"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ConnectionStrings__Postgres: "Host=localhost;Port=5432;Database=vrbook;Username=vrbook;Password=vrbook"
+      ConnectionStrings__Redis: "localhost:6379"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props', '**/global.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION }}
+
+      - name: Lint (dotnet format)
+        run: dotnet format ${{ env.SOLUTION }} --verify-no-changes --no-restore
+
+      - name: Build (Release)
+        run: dotnet build ${{ env.SOLUTION }} --no-restore --configuration Release
+
+      # Blocking: unit + architecture tests (fast, deterministic, no Docker).
+      # The CI-parity filter (Category!=Integration) — matches the standing
+      # local pre-push check; catches analyzer/arch regressions.
+      - name: Unit + architecture tests
+        run: |
+          dotnet test ${{ env.SOLUTION }} \
+            --no-build \
+            --configuration Release \
+            --filter "Category!=Integration&Category!=Pact" \
+            --logger "trx;LogFileName=unit.trx" \
+            --results-directory ./TestResults
+
+      # Informational until VRB-300 proves it green on PRs, then it flips
+      # to blocking (VRB-300 DoD). Uses the Postgres/Redis service +
+      # Testcontainers (fixture spins its own container on the runner).
+      - name: Integration / API-contract suite (informational — VRB-300 flips to blocking)
+        continue-on-error: true
+        run: |
+          dotnet test ${{ env.SOLUTION }} \
+            --no-build \
+            --configuration Release \
+            --filter "Category=Integration" \
+            --logger "trx;LogFileName=integration.trx" \
+            --results-directory ./TestResults
+
+      - name: Upload test results
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-backend-test-results
+          path: ./TestResults
+          retention-days: 7
+          if-no-files-found: ignore
+
+  frontend:
+    name: frontend (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install (npm ci against committed lock)
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint + typecheck
+        run: |
+          npm run lint
+          npm run typecheck
+
+      - name: E2E suite invariants
+        run: npm run check:e2e-suite
+
+      - name: Test (Vitest)
+        run: npm test -- --run --passWithNoTests
+
+      - name: Build
+        run: npm run build

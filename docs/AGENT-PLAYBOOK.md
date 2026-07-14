@@ -28,7 +28,7 @@ The board is the lock; the git remote arbitrates. Full protocol is in [`stories/
 
 ## 3. TDD is non-negotiable
 
-Every story's TDD plan names the Unit / Integration / E2E tests to write. **Write the failing test first**, watch it fail, write the minimal code to pass, refactor. Use `superpowers:test-driven-development`. A story is not done when the code "works" — it is done when the tests it named are green *and* the DoD checklist (§ in the story) is fully ticked. See [`ENGINEERING-RULES.md`](ENGINEERING-RULES.md) for the DoR/DoD that applies to *every* story.
+Every story's TDD plan names the Unit / Integration / E2E tests to write. **Write the failing test first**, watch it fail, write the minimal code to pass, refactor. Use `superpowers:test-driven-development`. A story is not done when the code "works" — it is done when the tests it named are green *and* the DoD checklist (§ in the story) is fully ticked. See [`ENGINEERING-RULES.md`](ENGINEERING-RULES.md) for the DoR/DoD that applies to *every* story; new stories are authored from [`stories/_STORY-TEMPLATE.md`](stories/_STORY-TEMPLATE.md), which embeds that checklist inline.
 
 ## 4. Staying in lane (no two agents edit one file)
 

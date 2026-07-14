@@ -1,6 +1,8 @@
 # Runbook — Branch protection (makes the parallel-agent guardrails real)
 
-**Why:** the story-claim protocol ([`../stories/BOARD.md`](../stories/BOARD.md)) and the lane guard ([`../../.github/CODEOWNERS`](../../.github/CODEOWNERS)) are **advisory until branch protection enforces them.** As of this writing `develop` and `main` have **no protection** — an agent can push straight to either, bypassing the claim/PR/review flow. This runbook turns the guardrails on. It's a ~5-minute operator action; VRB-301 also wires it as part of the prod pipeline, but you can (and for multi-agent runs, should) apply it now.
+**Why:** the story-claim protocol ([`../stories/BOARD.md`](../stories/BOARD.md)) and the lane guard ([`../../.github/CODEOWNERS`](../../.github/CODEOWNERS)) are **advisory until branch protection enforces them.** Out of the box `develop` and `main` have no protection — an agent can push straight to either, bypassing the claim/PR/review flow. This runbook turns the guardrails on. It's a ~5-minute operator action; VRB-301 also wires it as part of the prod pipeline.
+
+**The PR gate exists:** [`../../.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs on every `pull_request` into `develop`/`main` (build + lint + unit/arch tests + web lint/typecheck/vitest/build; integration is informational until VRB-300 flips it). Its two check contexts — **`backend (.NET 8)`** and **`frontend (Next.js)`** — are what you require below. (The `cd-staging-*.yml` workflows trigger on *push* and *deploy*; they are not PR checks.)
 
 **Trade-off to accept first:** enabling "require a PR" means **no more direct pushes to the protected branch** — including yours. All changes land via PR. For a single operator that's slightly more ceremony; for N unattended agents it's the whole point (it's what stops collisions and enforces code-owner review on shared surfaces). Decide per branch: you may want full enforcement on `main` and PR-only on `develop`, or looser on `develop` if you still push directly.
 
@@ -20,20 +22,21 @@
 
 Replace `OWNER/REPO` = `Niroshana-SinharaRalalage/vrbook`. Adjust the `contexts` array to the exact CI check names shown on a recent PR (`gh pr checks` or the Actions tab). Example for `develop`:
 
+The nested-field form via `gh api -f` is fiddly; the reliable way is a JSON body piped to `gh api --input -`:
+
 ```bash
-gh api -X PUT repos/Niroshana-SinharaRalalage/vrbook/branches/develop/protection \
-  -H "Accept: application/vnd.github+json" \
-  -f 'required_pull_request_reviews[require_code_owner_reviews]=true' \
-  -F 'required_pull_request_reviews[required_approving_review_count]=1' \
-  -f 'required_status_checks[strict]=true' \
-  -f 'required_status_checks[contexts][]=build-and-test' \
-  -f 'required_status_checks[contexts][]=playwright-smoke' \
-  -F 'enforce_admins=false' \
-  -F 'restrictions=null' \
-  -f 'required_conversation_resolution[enabled]=true'
+gh api -X PUT repos/Niroshana-SinharaRalalage/vrbook/branches/develop/protection --input - <<'JSON'
+{
+  "required_status_checks": { "strict": true, "contexts": ["backend (.NET 8)", "frontend (Next.js)"] },
+  "enforce_admins": false,
+  "required_pull_request_reviews": { "require_code_owner_reviews": true, "required_approving_review_count": 1, "dismiss_stale_reviews": true },
+  "required_conversation_resolution": true,
+  "restrictions": null
+}
+JSON
 ```
 
-Then the same for `main` with `enforce_admins=true`. Verify:
+Then the same for `main` with `"enforce_admins": true`. Verify:
 
 ```bash
 gh api repos/Niroshana-SinharaRalalage/vrbook/branches/develop/protection \
