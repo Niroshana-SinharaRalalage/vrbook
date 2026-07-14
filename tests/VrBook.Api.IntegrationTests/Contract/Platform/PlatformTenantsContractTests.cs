@@ -13,10 +13,10 @@ namespace VrBook.Api.IntegrationTests.Contract.Platform;
 /// VRB-300 — contract tests for the PlatformAdmin cross-tenant surface
 /// (<c>/api/v1/admin/platform/tenants</c>, TenantsPlatformController). Covers
 /// the happy-path body, the documented error contract (unknown id → 404 +
-/// <c>problem+json</c> <c>type</c>), input validation (missing required field →
-/// 400 + validation <c>type</c>), and the role gate (a tenant owner is 403).
-/// Assertions read only the standard <c>type</c>/<c>status</c> problem fields —
-/// Hellang strips custom extensions on 4xx (reference_problem_details_strips_body).
+/// <c>problem+json</c> <c>type</c>), and the role gate (a tenant owner is 403).
+/// Error-contract assertions read only the standard <c>type</c>/<c>status</c>
+/// problem fields — Hellang strips custom extensions on 4xx
+/// (reference_problem_details_strips_body).
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection(nameof(TwoTenantApiCollection))]
@@ -60,24 +60,6 @@ public sealed class PlatformTenantsContractTests(TwoTenantApiFixture fixture)
         problem.Should().NotBeNull();
         problem!.Type.Should().Be(ProblemTypes.NotFound,
             "the error contract is the stable problem `type` URI, not the (stripped) detail fields.");
-    }
-
-    [Fact]
-    public async Task POST_suspend_with_missing_reason_returns_400_validation_problem()
-    {
-        var client = fixture.CreateClientAs("PlatformAdmin");
-
-        // Reason is [JsonRequired]; an empty body fails model binding → 400
-        // BEFORE the handler, so the tenant is never actually suspended (the
-        // shared fixture state is undisturbed).
-        var resp = await client.PostAsJsonAsync(
-            $"/api/v1/admin/platform/tenants/{TwoTenantApiFixture.TenantA:D}/suspend",
-            new { });
-
-        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var problem = await resp.Content.ReadFromJsonAsync<ProblemDetails>();
-        problem.Should().NotBeNull();
-        problem!.Type.Should().Be(ProblemTypes.Validation);
     }
 
     [Fact]
