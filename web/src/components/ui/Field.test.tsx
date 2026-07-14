@@ -59,6 +59,17 @@ describe('<Field />', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('treats an empty-string error as no error (react-hook-form boolean validators yield "")', () => {
+    render(
+      <Field label="Email" error="">
+        <Input type="email" />
+      </Field>,
+    );
+    // An empty message must not paint a valid field as invalid nor fire an empty alert.
+    expect(screen.getByLabelText('Email')).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('never references a description id that was not rendered', () => {
     render(
       <Field label="Email" error="Bad">

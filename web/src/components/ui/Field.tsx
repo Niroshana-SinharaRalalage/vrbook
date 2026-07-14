@@ -64,14 +64,23 @@ const joinIds = (...ids: Array<string | undefined | false>): string | undefined 
 
 export const Field = ({ label, description, error, required, className, children }: FieldProps) => {
   const base = useId();
-  const controlId = `${base}-control`;
+  const generatedControlId = `${base}-control`;
   const descriptionId = `${base}-description`;
   const errorId = `${base}-error`;
-  const hasError = error !== undefined && error !== null && error !== false;
+  // Empty string is "no message" — react-hook-form's boolean validators
+  // (`required: true`) set `message` to '' on failure, so `error=""` must not
+  // paint a valid field invalid or fire an empty alert.
+  const hasError = error !== undefined && error !== null && error !== false && error !== '';
+
+  // One resolution of the control id, used for BOTH the clone and the label's
+  // htmlFor, so they can never diverge. A falsy child id falls through to the
+  // generated one (an empty-string id is not a usable htmlFor target anyway).
+  const resolvedControlId =
+    (isValidElement(children) && children.props.id) || generatedControlId;
 
   const control = isValidElement(children)
     ? cloneElement(children, {
-        id: children.props.id ?? controlId,
+        id: resolvedControlId,
         'aria-describedby': joinIds(
           children.props['aria-describedby'],
           description ? descriptionId : undefined,
@@ -81,8 +90,6 @@ export const Field = ({ label, description, error, required, className, children
         'aria-required': required ? true : children.props['aria-required'],
       })
     : children;
-
-  const resolvedControlId = (isValidElement(children) && children.props.id) || controlId;
 
   return (
     <div className={cn('space-y-2', className)}>
