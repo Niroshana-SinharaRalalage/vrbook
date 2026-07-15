@@ -44,7 +44,7 @@ Nothing in Phase B is safe until Phase A is green. Order:
 |---|---|---|---|
 | A1 | RE | **VRB-301** — `cd-prod.yml` exists; dry-run against `rg-vrbook-prod` with the approval gate proven blocking | Dry-run green; gate shows `Waiting`; no `rg-vrbook-staging` literal in the prod path |
 | A2 | RE | **VRB-304** — Postgres restore drill performed; **RTO/RPO measured** and within ≤4h / ≤1h | `docs/ops/drills/restore-drill.md` has timings within target; geo-redundant backup on prod PG |
-| A3 | RE | **VRB-303** — migration + forward-fix + idempotency drills; migration-safety checklist written | Drills green; migrator no-op on re-run; `Bootstrap:E2e:Enabled=false` confirmed for prod |
+| A3 | RE | **VRB-303** — migration + forward-fix + idempotency drills; migration-safety checklist written (authoritative: [`docs/runbooks/migration-safety.md`](../runbooks/migration-safety.md); drills: [`docs/ops/drills/migration-drill.md`](drills/migration-drill.md)) | Drills green; migrator no-op on re-run; `Bootstrap:E2e:Enabled=false` confirmed for prod |
 | A4 | RE | **VRB-302** — blue-green traffic-shift wired in `_deploy-container-app.yml`; **rollback drill exercised** (< 5 min revert proven) | `docs/ops/drills/rollback-drill.md` shows a proven revert; multi-revision mode on prod apps |
 | A5 | OC | **VRB-306** — every alert armed in Bicep + **each validated by inducing the condition in staging**; owner assigned per alert | `az monitor metrics alert list` shows P95/5xx/webhook/PG-CPU/notif-drain/migrator alerts; each fired once in a drill |
 | A6 | RE | **VRB-307** — WAF+rate-limit live on prod (Detection→Prevention); Trivy + ZAP triaged; **G5 config fail-fast landed** | No un-triaged HIGH; API refuses to boot without Entra config; secret scan green |
@@ -171,5 +171,5 @@ A trigger fires → **execute the action immediately, then notify**. Rehearsed i
 - Pipeline: `.github/workflows/cd-prod.yml` (new, VRB-301), `_deploy-container-app.yml` (blue-green, VRB-302), `cd-staging-{api,web}.yml`.
 - Infra: `infra/main.bicep` (`isProd` ladders — Front Door `:111,640`, HA `:230`, backup `:85`, replicas `:91`), `infra/modules/front-door.bicep` (WAF), PG module (backup/geo).
 - Drills: `docs/ops/drills/{restore,rollback,migration}-drill.md`.
-- Runbooks: `docs/runbooks/{acs-dkim-spf-setup,stripe-key-rotation,k6-load-test,zap-baseline,payment-webhook-failure,notification-dispatch-failures,api-5xx-spike,postgres-cpu-high}.md`; `docs/identity/runbooks/entra-prod-cutover-checklist.md` + `entra-cutover-rollback.md`.
+- Runbooks: `docs/runbooks/{migration-safety,migrator-job-failure,acs-dkim-spf-setup,stripe-key-rotation,k6-load-test,zap-baseline,payment-webhook-failure,notification-dispatch-failures,api-5xx-spike,postgres-cpu-high}.md`; `docs/identity/runbooks/entra-prod-cutover-checklist.md` + `entra-cutover-rollback.md`.
 - Gaps closed here: G23 (VRB-301), G24 (VRB-302), G25 (VRB-304), G5 (VRB-307), G37 (VRB-309), G32/G35 (VRB-311), G8 (VRB-305).

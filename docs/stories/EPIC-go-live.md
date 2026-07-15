@@ -118,6 +118,15 @@ The infra layer is **already prod-parameterized** — `infra/main.bicep` carries
 ---
 
 ### VRB-303 — Zero-downtime forward-only DB migration + tested rollback + seed data
+> **Delivery status (2026-07-15, IN-REVIEW):** the **design/docs** legs shipped —
+> [`docs/runbooks/migration-safety.md`](../runbooks/migration-safety.md) (authoritative
+> expand/contract + safety checklist), [`docs/ops/drills/migration-drill.md`](../ops/drills/migration-drill.md)
+> (migration · forward-fix · idempotency drill *procedures*), and a verify-only pass on
+> the migrator config (E2E-off-in-prod, backfill idempotency, identity-first ordering,
+> runtime failure = exit 1 + `Fatal` — HostAbortedException is design-time-only). **Deferred, not dropped:**
+> (a) **live execution** of the 3 drills (needs staging Azure access — same owner decision as VRB-306);
+> (b) the **cd-prod.yml pre-deploy migration gate** (rides the deferred prod pipeline, VRB-301/302);
+> (c) the **PITR recovery drill** (blocked-by VRB-304 — the forward-fix path is documented; PITR mechanics defer to VRB-304). Stays IN-REVIEW until the drill-access decision lands.
 - **Epic:** Go-Live · **Priority:** Must · **Estimate:** M
 - **Narrative:** As a release engineer, I want prod migrations to be forward-only, expand/contract-safe, and run without downtime, plus a proven recovery path and idempotent reference-data seeding, so that a schema change never takes prod down or corrupts tenant data.
 - **Acceptance criteria:**

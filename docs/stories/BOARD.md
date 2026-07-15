@@ -30,7 +30,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-DS  | DESIGN | Must | DONE | story/VRB-DS |
 | VRB-301 | DEVOPS | Must (P0) | DEFERRED | (prod pipeline — postponed to pre-launch, owner 2026-07-14) |
 | VRB-302 | DEVOPS | Must (P0) | DEFERRED | (blue-green rollback — postponed with VRB-301) |
-| VRB-303 | DEVOPS | Must | TODO | |
+| VRB-303 | DEVOPS | Must | IN-REVIEW | story/VRB-303 |
 | VRB-304 | DEVOPS | Must | TODO | |
 | VRB-306 | DEVOPS | Must | IN-REVIEW | story/VRB-306 |
 
