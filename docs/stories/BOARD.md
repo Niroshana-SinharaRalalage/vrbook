@@ -32,7 +32,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-302 | DEVOPS | Must (P0) | DEFERRED | (blue-green rollback — postponed with VRB-301) |
 | VRB-303 | DEVOPS | Must | TODO | |
 | VRB-304 | DEVOPS | Must | TODO | |
-| VRB-306 | DEVOPS | Must | CLAIMED | story/VRB-306 |
+| VRB-306 | DEVOPS | Must | IN-REVIEW | story/VRB-306 |
 
 ## Wave 1 — Launch features (claim after Wave 0 `DONE`)
 
