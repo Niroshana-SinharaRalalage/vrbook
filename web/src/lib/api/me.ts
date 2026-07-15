@@ -18,3 +18,12 @@ export interface CurrentUser {
 
 export const getCurrentUser = (): Promise<CurrentUser> =>
   apiFetch<CurrentUser>('/api/v1/me');
+
+// VRB-108 — editable guest profile. Mirrors UpdateProfileCommand(DisplayName, Phone).
+export interface UpdateProfileBody {
+  readonly displayName: string;
+  readonly phone: string | null;
+}
+
+export const updateProfile = (body: UpdateProfileBody): Promise<CurrentUser> =>
+  apiFetch<CurrentUser>('/api/v1/me', { method: 'PUT', body });
