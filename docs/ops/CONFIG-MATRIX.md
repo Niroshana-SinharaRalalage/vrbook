@@ -43,12 +43,12 @@
 | **Stripe** |
 | 23 | `Stripe:SecretKey` | KV `stripe-secret` | empty (payment-disabled) | test key (prompted) | **live key (go-live)** | ✅ VRB-204 |
 | 24 | `Stripe:WebhookSecret` | KV `stripe-webhook-secret` | empty | test webhook secret | live webhook secret | ✅ VRB-204 |
-| 25 | `Stripe:PublishableKey` | KV `stripe-publishable-key` | empty | **NOT seeded ⚠️** | live pub key | ⚠️ G6 first-deploy risk — VRB-201 |
+| 25 | `Stripe:PublishableKey` | KV `stripe-publishable-key` | empty | seeded placeholder (`10-store-secrets.ps1`) | live pub key | ✅ VRB-201 (seeded, closes G6; operator/VRB-204 sets real value) |
 | 26 | `Refund:ServiceFeePercent` | Bicep `Refund__ServiceFeePercent` | default | staging value | prod value | ✅ |
 | 27 | `Payment:AllowPlatformFallback` | **not in any config** (default false) | false | false | false | ⚠️ referenced, never set — VRB-209 |
 | **ACS Email** |
-| 28 | `Acs:ConnectionString` | KV `acs-connection-string` (written by `acs.bicep`) | empty | Bicep-written | Bicep-written | ⚠️ not seeded by `10-store-secrets.ps1` (G6) — VRB-201 |
-| 29 | `Acs:SenderAddress` | KV `acs-sender-address` (default `donotreply@vrbook.example.com`) | placeholder | **NOT seeded ⚠️** managed domain | **custom domain + DKIM (go-live)** | ⚠️ G6 + placeholder — VRB-201/VRB-204 |
+| 28 | `Acs:ConnectionString` | KV `acs-connection-string` (**producer: `infra/modules/acs.bicep`**) | empty | Bicep-written | Bicep-written | ✅ VRB-201 (producer documented; not seeded by script by design — parity test allowlists it) |
+| 29 | `Acs:SenderAddress` | KV `acs-sender-address` | placeholder | seeded placeholder (`10-store-secrets.ps1`) | **custom domain + DKIM (go-live)** | ✅ VRB-201 (seeded, closes G6); custom domain still VRB-204 |
 | **Frontend / web** |
 | 30 | `NEXT_PUBLIC_API_BASE_URL` | NEXT_PUBLIC (Dockerfile build-arg + Bicep) | `http://localhost:5xxx` | **hard-coded FQDN `cd-staging-web.yml:149`** | prod API FQDN | ⚠️ hard-coded staging FQDN (G8) — VRB-205 |
 | 31 | `NEXT_PUBLIC_SITE_URL` | NEXT_PUBLIC (**never set**) | `www.vrbook.example.com` fallback | fallback | fallback | ⚠️ var never wired; placeholder domain — VRB-219 |
@@ -95,10 +95,10 @@
 | 65 | Analytics / conversion tracking | **absent** (G35) | — | — | must be live pre-launch | ⚠️ new — VRB-204 |
 | 66 | Error tracking (App Insights already; client-side SDK) | partial | dev | staging | prod | ⚠️ client-side — VRB-204 |
 | **Orphan / legacy secrets (seeded, unused)** |
-| 67 | `sendgrid-key` | KV (prompted, **orphan**) | — | seeded, unused | — | ⚠️ remove — VRB-201 |
-| 68 | `b2c-api-client-secret` | KV (prompted, **orphan**) | — | seeded, unused | — | ⚠️ remove (post-B2C) — VRB-201 |
+| 67 | `sendgrid-key` | ~~KV (prompted, orphan)~~ | — | removed from seed script | — | ✅ VRB-201 (removed; email is ACS per ADR-0011 — operator deletes stale KV copy) |
+| 68 | `b2c-api-client-secret` | ~~KV (prompted, orphan)~~ | — | removed from seed script | — | ✅ VRB-201 (removed; auth is Entra per ADR-0012 — operator deletes stale KV copy) |
 | **Stale example files** |
-| 69 | `.env.example` (repo root) | file | references retired `NEXT_PUBLIC_ENTRA_AUTHORITY` | — | — | ⚠️ stale — VRB-201 |
+| 69 | `.env.example` (repo root) | file | split into `NEXT_PUBLIC_ENTRA_AUTHORITY_{ADMIN,GUEST}` | — | — | ✅ VRB-201 (retired single-authority key removed) |
 | 70 | `web/.env.local.example` | file (canonical) | up to date | — | — | ✅ |
 
 **Coverage:** 70 rows spanning all 8 sections of CONFIG-INVENTORY (appsettings, strongly-typed options, Bicep env vars, KV secrets, third-party matrix, frontend config, feature flags, hard-coded-defect list, and the per-environment sizing ladder). **22 rows flagged ⚠️** as should-move-to-config / fix — each carries the owning story ID. The four config-defect gap stories (G1→VRB-206, G2→VRB-207, G3/G4→VRB-208, G7→VRB-209) map directly onto rows 43–50 and 19/27.
