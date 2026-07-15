@@ -152,7 +152,7 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
             value={checkin}
             min={today()}
             onChange={(e) => setCheckin(e.target.value)}
-            className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+            className="mt-1 min-h-11 w-full rounded-md border border-border bg-background px-3 text-sm"
           />
         </label>
         <label className="block text-xs">
@@ -162,7 +162,7 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
             value={checkout}
             min={addDays(checkin, 1)}
             onChange={(e) => setCheckout(e.target.value)}
-            className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+            className="mt-1 min-h-11 w-full rounded-md border border-border bg-background px-3 text-sm"
           />
         </label>
       </div>
@@ -175,7 +175,7 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
           max={maxGuests}
           value={guests}
           onChange={(e) => setGuests(Math.max(1, Math.min(maxGuests, Number(e.target.value) || 1)))}
-          className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+          className="mt-1 min-h-11 w-full rounded-md border border-border bg-background px-3 text-sm"
         />
       </label>
 
@@ -219,12 +219,12 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
             </div>
           </div>
 
-          <label className="flex items-start gap-2 text-xs">
+          <label className="flex min-h-11 items-center gap-2 py-2 text-xs">
             <input
               type="checkbox"
               checked={agreed}
               onChange={(e) => setAgreed(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-border"
+              className="h-5 w-5 rounded border-border"
             />
             <span className="text-muted-foreground">I agree to the house rules.</span>
           </label>
@@ -233,7 +233,7 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
             type="button"
             onClick={() => void onBook()}
             disabled={booking || (isAuthenticated && !agreed) || conflict !== null}
-            className="w-full rounded-md bg-brand-maroon-700 px-3 py-2 text-sm font-medium text-white hover:bg-brand-maroon-800 disabled:opacity-50"
+            className="min-h-11 w-full rounded-md bg-brand-maroon-700 px-3 py-2 text-sm font-medium text-white hover:bg-brand-maroon-800 disabled:opacity-50"
           >
             {booking
               ? 'Booking…'

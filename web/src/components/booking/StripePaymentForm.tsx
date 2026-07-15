@@ -70,7 +70,7 @@ const PayButton = () => {
       <button
         type="submit"
         disabled={!stripe || !elements || submitting}
-        className="w-full rounded-md bg-brand-maroon-700 px-3 py-2 text-sm font-medium text-white hover:bg-brand-maroon-800 disabled:opacity-50"
+        className="min-h-11 w-full rounded-md bg-brand-maroon-700 px-3 py-2 text-sm font-medium text-white hover:bg-brand-maroon-800 disabled:opacity-50"
       >
         {submitting ? 'Authorising…' : 'Authorise card'}
       </button>
