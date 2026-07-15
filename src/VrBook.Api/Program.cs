@@ -1,6 +1,7 @@
 using Hellang.Middleware.ProblemDetails;
 using Microsoft.AspNetCore.Mvc;
 using Serilog;
+using VrBook.Api.Configuration;
 using VrBook.Api.Health;
 using VrBook.Api.Middleware;
 using VrBook.Application.Common;
@@ -92,6 +93,14 @@ builder.Services.AddSwaggerConfigured();
 // JwtBearer against Entra External ID per ADR-0012. Authorization policies
 // (OwnerOrAdmin, Admin) registered inside.
 builder.Services.AddVrBookAuthentication(builder.Configuration);
+
+// ---- VRB-200 (G5): fail-fast config validation ----
+// Binds every required section to a validated options class with
+// .ValidateOnStart(). A missing/malformed value in Staging/Production crashes
+// the host (failing readiness) instead of silently booting degraded — most
+// importantly it can never boot with JwtBearer unwired. Development keeps a
+// dev-loopback carve-out for EntraExternalId (warns, does not crash).
+builder.Services.AddValidatedConfiguration(builder.Configuration, builder.Environment);
 
 // ---- App + infra cores ----
 builder.Services.AddApplicationCore();

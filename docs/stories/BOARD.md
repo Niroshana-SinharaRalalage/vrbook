@@ -21,8 +21,8 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 
 | ID | Lane | Priority | Status | Branch |
 |---|---|---|---|---|
-| VRB-300 | TEST | Must | TODO | |
-| VRB-200 | CONFIG | Must (P0) | TODO | |
+| VRB-300 | TEST | Must | DONE | story/VRB-300 |
+| VRB-200 | CONFIG | Must (P0) | DONE | story/VRB-200 |
 | VRB-201 | CONFIG | Must | TODO | |
 | VRB-203 | CONFIG | Should | TODO | |
 | VRB-202 | CONFIG | Should | TODO | |
@@ -118,4 +118,4 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 
 ---
 
-**Progress rollup:** 1 / 86 DONE. Update this count in your `done:` commit.
+**Progress rollup:** 3 / 86 DONE. Update this count in your `done:` commit.
