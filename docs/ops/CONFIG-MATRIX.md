@@ -1,6 +1,6 @@
 # VrBook — Per-Environment Configuration Matrix
 
-**One table, every key.** Every configuration key, secret, feature flag, and hard-coded value from [`docs/ops/CONFIG-INVENTORY.md`](CONFIG-INVENTORY.md), with its value/source per environment and its delivery mechanism. This is the source-of-truth companion to the Configuration & Settings epic ([`docs/stories/EPIC-configuration-settings.md`](../stories/EPIC-configuration-settings.md)) — story **VRB-202** owns keeping it accurate and adding a CI drift check.
+**One table, every key.** Every configuration key, secret, feature flag, and hard-coded value from [`docs/ops/CONFIG-INVENTORY.md`](CONFIG-INVENTORY.md), with its value/source per environment and its delivery mechanism. This is the source-of-truth companion to the Configuration & Settings epic ([`docs/stories/EPIC-configuration-settings.md`](../stories/EPIC-configuration-settings.md)) — story **VRB-202** owns keeping it accurate. A CI drift check (`ConfigMatrixDriftTests`, VRB-202) now **fails the build** if any `appsettings.json` key or `infra/main.bicep` secretRef lacks a row here — so a new key/secret cannot land undocumented.
 
 **Delivery-type legend:**
 - `KV` — Key Vault secret bound as a Container App `secretRef` (`infra/main.bicep`). Value below is the KV secret name.
