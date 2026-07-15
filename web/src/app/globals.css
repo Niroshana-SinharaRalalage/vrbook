@@ -123,4 +123,40 @@
       opacity: 1;
     }
   }
+
+  /* Sheet/Drawer enter motion — slide in from the anchored edge. Enter-only
+     (no closed-state animation → Radix never stalls unmount); `motion-safe`
+     so reduced-motion users get an instant panel. */
+  @keyframes vrb-slide-in-right {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+  @keyframes vrb-slide-in-left {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+  @keyframes vrb-slide-in-top {
+    from {
+      transform: translateY(-100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+  @keyframes vrb-slide-in-bottom {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
 }

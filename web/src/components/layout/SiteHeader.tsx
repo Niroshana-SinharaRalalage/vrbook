@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { SiteHeaderAuth } from './SiteHeaderAuth';
 import { SiteHeaderNav } from './SiteHeaderNav';
 import { SiteHeaderRoleBadge } from './SiteHeaderRoleBadge';
+import { MobileNav } from './MobileNav';
 
 /**
  * Server-rendered header shell. The nav row is delegated to
@@ -25,11 +26,15 @@ export const SiteHeader = () => {
           <span className="text-brand-maroon-700 dark:text-brand-orange-500">VrBook</span>
         </Link>
 
-        <div className="flex items-center gap-4">
+        {/* Desktop cluster — hidden below md, where MobileNav takes over. */}
+        <div className="hidden items-center gap-4 md:flex">
           <SiteHeaderNav />
           <SiteHeaderRoleBadge />
           <SiteHeaderAuth />
         </div>
+
+        {/* Mobile primary nav (VRB-106) — hamburger + drawer, md:hidden. */}
+        <MobileNav />
       </div>
     </header>
   );

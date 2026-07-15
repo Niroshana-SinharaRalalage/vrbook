@@ -3,46 +3,19 @@ import Link from 'next/link';
 
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
-import { PropertyCard, type PropertyCardModel } from '@/components/property/PropertyCard';
+import { FeaturedProperties } from '@/components/home/FeaturedProperties';
+import { Skeleton, buttonVariants } from '@/components/ui';
 
-// Marketing home — Server Component. Featured properties are a placeholder; F1
-// wires this to GET /properties?sort=-rating&limit=6.
+// Marketing home — Server Component. VRB-107 wires the featured section to the
+// live search API (see components/home/FeaturedProperties).
 
 const FeaturedSkeleton = () => (
   <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
     {Array.from({ length: 6 }).map((_, i) => (
-      <div
-        key={i}
-        className="aspect-[4/3] animate-pulse rounded-xl bg-muted"
-        aria-hidden
-      />
+      <Skeleton key={i} className="aspect-[4/3] rounded-xl" />
     ))}
   </div>
 );
-
-const placeholderProperties: PropertyCardModel[] = [
-  {
-    slug: 'placeholder-coastal-villa',
-    title: 'Featured properties land here',
-    location: 'Wired by agent F1',
-    nightlyRate: 0,
-    currency: 'USD',
-    ratingAvg: null,
-    ratingCount: 0,
-    coverImageUrl: null,
-  },
-];
-
-const FeaturedProperties = async () => {
-  // F1: replace with `await apiFetch<PagedResult<PropertyCardModel>>('/properties', { ... })`.
-  return (
-    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-      {placeholderProperties.map((p) => (
-        <PropertyCard key={p.slug} property={p} />
-      ))}
-    </div>
-  );
-};
 
 const HomePage = () => {
   return (
@@ -67,15 +40,12 @@ const HomePage = () => {
               real reviews.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                href="/properties"
-                className="inline-flex h-11 items-center rounded-md bg-brand-orange-600 px-6 text-sm font-medium text-white shadow-sm transition hover:bg-brand-orange-700"
-              >
+              <Link href="/properties" className={buttonVariants({ variant: 'primary', size: 'lg' })}>
                 Browse stays
               </Link>
               <Link
                 href="/account/bookings"
-                className="inline-flex h-11 items-center rounded-md border border-border bg-background px-6 text-sm font-medium text-foreground transition hover:bg-accent"
+                className={buttonVariants({ variant: 'outline', size: 'lg' })}
               >
                 My trips
               </Link>
@@ -87,10 +57,7 @@ const HomePage = () => {
         <section className="container py-16">
           <div className="mb-8 flex items-end justify-between">
             <h2 className="text-2xl font-semibold tracking-tight">Featured stays</h2>
-            <Link
-              href="/properties"
-              className="text-sm font-medium text-brand-orange-600 hover:underline"
-            >
+            <Link href="/properties" className="text-sm font-medium text-primary hover:underline">
               See all →
             </Link>
           </div>
