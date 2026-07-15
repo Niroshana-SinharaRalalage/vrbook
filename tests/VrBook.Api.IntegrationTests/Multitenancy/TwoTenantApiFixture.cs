@@ -10,6 +10,8 @@ using Testcontainers.PostgreSql;
 using VrBook.Api.IntegrationTests.Auth;
 using VrBook.Contracts.Enums;
 using VrBook.Infrastructure.Persistence;
+using VrBook.Modules.Admin;
+using VrBook.Modules.Admin.Infrastructure.Persistence;
 using VrBook.Modules.Booking;
 using VrBook.Modules.Booking.Infrastructure.Persistence;
 using VrBook.Modules.Catalog;
@@ -135,6 +137,7 @@ public class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsyncLifetim
         migratorServices.AddMessagingDbContextForMigrator(migratorConfig);
         migratorServices.AddLoyaltyDbContextForMigrator(migratorConfig);
         migratorServices.AddNotificationsDbContextForMigrator(migratorConfig);
+        migratorServices.AddAdminDbContextForMigrator(migratorConfig); // VRB-203 — admin.feature_flags
         await using (var sp = migratorServices.BuildServiceProvider())
         {
             // OPS.M.10.2 F0''' shipped the real fix — connection string
@@ -151,6 +154,7 @@ public class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsyncLifetim
             await sp.GetRequiredService<MessagingDbContext>().Database.MigrateAsync();
             await sp.GetRequiredService<LoyaltyDbContext>().Database.MigrateAsync();
             await sp.GetRequiredService<NotificationsDbContext>().Database.MigrateAsync();
+            await sp.GetRequiredService<AdminDbContext>().Database.MigrateAsync();
         }
 
         // Trigger initial WebApplicationFactory build so we can seed via DI.
