@@ -74,7 +74,7 @@ Serilog; `ConnectionStrings:Postgres=""`; `Bootstrap:SeedPlatformAdmins=[]` (Bic
 
 **`NEXT_PUBLIC_*` / `process.env` reads:** `NEXT_PUBLIC_API_BASE_URL` (`client.ts`; set via Dockerfile build-arg + Bicep + **hard-coded FQDN in `cd-staging-web.yml:149`**), `NEXT_PUBLIC_ENTRA_AUTHORITY_{ADMIN,GUEST}` + `NEXT_PUBLIC_ENTRA_CLIENT_ID` (`msalConfig.ts`; fallback to `login.microsoftonline.com/common`), `NEXT_PUBLIC_SITE_URL` (`layout.tsx:14`; **var never set → always uses hard-coded `https://www.vrbook.example.com` fallback**), `PLAYWRIGHT_BASE_URL`, `CI`, `GITHUB_RUN_ID`, `E2E_*_PASSWORD`. **Declared-but-unread:** `NEXT_PUBLIC_MAPBOX_TOKEN`, `NEXT_PUBLIC_SIGNALR_NEGOTIATE_URL`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (in env examples/`env.d.ts` only).
 
-**Example files:** `web/.env.local.example` (canonical). `.env.example` (repo root, full-stack) is **stale** — references retired `NEXT_PUBLIC_ENTRA_AUTHORITY`.
+**Example files:** `web/.env.local.example` (canonical). `.env.example` (repo root, full-stack) — corrected by VRB-201 to the per-flow `NEXT_PUBLIC_ENTRA_AUTHORITY_{ADMIN,GUEST}` split (the retired single `NEXT_PUBLIC_ENTRA_AUTHORITY` was removed). Note: `web/README.md` still lists the retired key — a WEB-lane doc cleanup, tracked separately.
 
 ---
 

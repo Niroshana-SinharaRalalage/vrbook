@@ -50,7 +50,7 @@ public sealed class SeedSecretsParityTests
     private static HashSet<string> BicepSecretRefNames()
     {
         var text = File.ReadAllText(Path.Combine(RepoRoot(), "infra", "main.bicep"));
-        return Regex.Matches(text, @"secretRef:\s*'([^']+)'")
+        return Regex.Matches(text, @"secretRef:\s*['""]([^'""]+)['""]")
             .Select(m => m.Groups[1].Value)
             .ToHashSet(StringComparer.Ordinal);
     }
@@ -58,7 +58,7 @@ public sealed class SeedSecretsParityTests
     private static HashSet<string> SeededSecretNames()
     {
         var text = File.ReadAllText(Path.Combine(RepoRoot(), "infra", "scripts", "10-store-secrets.ps1"));
-        return Regex.Matches(text, @"Set-KvSecret\s+-Name\s+'([^']+)'")
+        return Regex.Matches(text, @"Set-KvSecret\s+-Name\s+['""]([^'""]+)['""]")
             .Select(m => m.Groups[1].Value)
             .ToHashSet(StringComparer.Ordinal);
     }

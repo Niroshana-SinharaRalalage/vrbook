@@ -98,14 +98,19 @@ Set-KvSecret -Name 'entra-web-client-id' -Value 'pending-identity-setup' `
 Set-KvSecret -Name 'entra-tenant-issuer-host' -Value 'pending-identity-setup' `
     -Description 'EntraExternalId__TenantIssuerHost: External tenant issuer host (e.g. vrbookcid.ciamlogin.com) used by IdentityProviderClassifier.'
 
-# VRB-201 (G6) — secretRef placeholders that have NO other producer. Both are
-# referenced by infra/main.bicep (Stripe__PublishableKey, Acs__SenderAddress) but
-# were previously unseeded, so a first/clean deploy failed atomically on the
-# unresolved secretRef at container revision-provision time. Seed placeholders so
-# the deploy resolves; the operator (or VRB-204 at go-live) overwrites with real
-# values via `az keyvault secret set ... --name <name>`.
+# VRB-201 (G6) — UNCONDITIONAL placeholder seeds for every Bicep secretRef that has
+# no alternate producer. A Container App secretRef binds at revision-provision time,
+# so an unseeded secret makes the whole main.bicep deploy fail atomically. These MUST
+# be seeded even in -NonInteractive mode (the prompted section below only runs when an
+# operator is present, and returns $null in CI — which is exactly the fresh-deploy case
+# that failed). The interactive prompts further down `-Overwrite` these with real
+# values; on re-run the idempotent skip preserves whatever real value is already set.
 #   NOTE: acs-connection-string is intentionally NOT seeded here — infra/modules/
 #   acs.bicep writes it at deploy time (it is the documented producer).
+Set-KvSecret -Name 'stripe-secret' -Value 'pending-identity-setup' `
+    -Description 'Stripe__SecretKey (sk_...). Placeholder so the secretRef resolves on a fresh deploy; operator overwrites via the interactive prompt below (test for dev/staging, live for prod).'
+Set-KvSecret -Name 'stripe-webhook-secret' -Value 'pending-identity-setup' `
+    -Description 'Stripe__WebhookSecret (whsec_...). Placeholder so the secretRef resolves on a fresh deploy; operator overwrites via the interactive prompt below.'
 Set-KvSecret -Name 'stripe-publishable-key' -Value 'pending-identity-setup' `
     -Description 'Stripe__PublishableKey (pk_...). Non-secret but Bicep-referenced; operator/VRB-204 sets the real value. Test mode for dev/staging, live for prod.'
 Set-KvSecret -Name 'acs-sender-address' -Value 'pending-identity-setup' `
