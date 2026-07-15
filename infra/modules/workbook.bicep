@@ -12,6 +12,12 @@ param location string
 @description('Resource ID of the Log Analytics workspace.')
 param workspaceId string
 
+@description('VRB-306 — Postgres Flexible Server resource ID (for the DB metric tile).')
+param postgresId string = ''
+
+@description('VRB-306 — API Container App resource ID (for the replica/restart metric tile).')
+param apiAppId string = ''
+
 @description('Common resource tags.')
 param tags object = {
   env: env
@@ -129,6 +135,134 @@ var workbookContent = {
         queryType: 0
         resourceType: 'microsoft.operationalinsights/workspaces'
         visualization: 'table'
+      }
+    }
+    // ---- VRB-306 tiles ----
+    {
+      type: 1
+      content: {
+        json: '## Traffic & latency (request-level, last 1h)'
+      }
+    }
+    {
+      type: 3
+      content: {
+        version: 'KqlItem/1.0'
+        query: 'AppRequests | where TimeGenerated > ago(1h) | summarize requests = count() by bin(TimeGenerated, 5m) | order by TimeGenerated asc'
+        size: 0
+        queryType: 0
+        resourceType: 'microsoft.operationalinsights/workspaces'
+        visualization: 'timechart'
+      }
+    }
+    {
+      type: 3
+      content: {
+        version: 'KqlItem/1.0'
+        query: 'AppRequests | where TimeGenerated > ago(1h) | summarize p50 = percentile(DurationMs, 50), p95 = percentile(DurationMs, 95), p99 = percentile(DurationMs, 99), total = count(), errors5xx = countif(ResultCode startswith "5"), errorRatePct = round(100.0 * countif(ResultCode startswith "5") / count(), 2)'
+        size: 0
+        queryType: 0
+        resourceType: 'microsoft.operationalinsights/workspaces'
+        visualization: 'table'
+      }
+    }
+    {
+      type: 1
+      content: {
+        json: '## Stripe webhook success % (last 24h)'
+      }
+    }
+    {
+      type: 3
+      content: {
+        version: 'KqlItem/1.0'
+        query: 'AppRequests | where TimeGenerated > ago(1d) | where Url contains "/api/v1/payments/webhooks/stripe" | summarize total = count(), succeeded = countif(ResultCode startswith "2"), successPct = round(100.0 * countif(ResultCode startswith "2") / count(), 1)'
+        size: 0
+        queryType: 0
+        resourceType: 'microsoft.operationalinsights/workspaces'
+        visualization: 'table'
+      }
+    }
+    {
+      type: 1
+      content: {
+        json: '## Notification dispatch health (sent / failed / dead-lettered, last 6h)'
+      }
+    }
+    {
+      type: 3
+      content: {
+        version: 'KqlItem/1.0'
+        query: 'ContainerAppConsoleLogs_CL | where TimeGenerated > ago(6h) | where Log_s startswith \'{"@t"\' | extend e = parse_json(Log_s) | where tostring(e[\'@mt\']) startswith "Notification dispatch complete" | extend sent = toint(e.Sent), failed = toint(e.Failed), dead = toint(e.DeadLettered) | summarize sent = sum(sent), failed = sum(failed), deadLettered = sum(dead) by bin(TimeGenerated, 15m) | order by TimeGenerated asc'
+        size: 0
+        queryType: 0
+        resourceType: 'microsoft.operationalinsights/workspaces'
+        visualization: 'timechart'
+      }
+    }
+    {
+      type: 1
+      content: {
+        json: '## Postgres — CPU % / active connections / storage % (last 1h)'
+      }
+    }
+    {
+      type: 10
+      content: {
+        version: 'MetricsItem/2.0'
+        size: 0
+        chartType: 2
+        resourceType: 'microsoft.dbforpostgresql/flexibleservers'
+        metricScope: 0
+        resourceIds: [ postgresId ]
+        timeContext: { durationMs: 3600000 }
+        metrics: [
+          {
+            namespace: 'microsoft.dbforpostgresql/flexibleservers'
+            metric: 'microsoft.dbforpostgresql/flexibleservers--cpu_percent'
+            aggregation: 4
+          }
+          {
+            namespace: 'microsoft.dbforpostgresql/flexibleservers'
+            metric: 'microsoft.dbforpostgresql/flexibleservers--active_connections'
+            aggregation: 4
+          }
+          {
+            namespace: 'microsoft.dbforpostgresql/flexibleservers'
+            metric: 'microsoft.dbforpostgresql/flexibleservers--storage_percent'
+            aggregation: 4
+          }
+        ]
+      }
+    }
+    {
+      type: 1
+      content: {
+        json: '## API Container App — replica count & restarts (last 1h)'
+      }
+    }
+    {
+      type: 10
+      content: {
+        version: 'MetricsItem/2.0'
+        size: 0
+        chartType: 2
+        resourceType: 'microsoft.app/containerapps'
+        metricScope: 0
+        resourceIds: [ apiAppId ]
+        timeContext: { durationMs: 3600000 }
+        metrics: [
+          {
+            namespace: 'microsoft.app/containerapps'
+            metric: 'microsoft.app/containerapps--Replicas'
+            aggregation: 4
+          }
+          {
+            namespace: 'microsoft.app/containerapps'
+            metric: 'microsoft.app/containerapps--RestartCount'
+            aggregation: 1
+          }
+        ]
       }
     }
   ]

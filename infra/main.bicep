@@ -48,6 +48,12 @@ param migratorImage string = 'mcr.microsoft.com/azuredocs/containerapps-hellowor
 @description('Container image for the Next.js web frontend.')
 param webImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
+@description('VRB-306 — alert recipient email (on-call). Kept a param (never hard-coded); set per env in the .bicepparam. Empty ⇒ recipients stay portal-managed.')
+param alertEmail string = ''
+
+@description('VRB-306 — named owner label stamped on each alert. The email lives on the action group; this is the human-readable owner recorded per alert.')
+param alertOwner string = 'on-call'
+
 @description('Slice OPS.M.22.6 — declarative pre-M.22 platform admin backfill list. Each entry becomes an idempotent identity.users row via VrBook.Migrator.SeedPlatformAdminsBackfill on every deploy. Empty list = no-op. Staging default carries the owner; prod cutover adds team leads before first deploy.')
 param seedPlatformAdmins array = env == 'staging'
   ? [
@@ -656,6 +662,9 @@ module workbook 'modules/workbook.bicep' = {
     location: location
     tags: tags
     workspaceId: law.outputs.id
+    // VRB-306 — resource ids for the Postgres + Container App metric tiles.
+    postgresId: pg.outputs.id
+    apiAppId: apiApp.outputs.id
   }
 }
 
@@ -665,6 +674,7 @@ module actionGroup 'modules/action-group.bicep' = {
   params: {
     env: env
     tags: tags
+    alertEmail: alertEmail
   }
 }
 
@@ -678,6 +688,12 @@ module alerts 'modules/alerts.bicep' = {
     postgresId: pg.outputs.id
     redisId: deployRedis ? redis.outputs.id : ''
     actionGroupId: actionGroup.outputs.id
+    // VRB-306 — App Insights + API URL for the synthetic availability test;
+    // named owner stamped on each alert.
+    appInsightsId: appi.outputs.id
+    // dev gets no synthetic availability test (no long-lived public API); staging + prod do.
+    apiBaseUrl: env == 'dev' ? '' : 'https://${apiApp.outputs.fqdn}'
+    alertOwner: alertOwner
   }
 }
 

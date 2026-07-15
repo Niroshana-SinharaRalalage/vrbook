@@ -24,3 +24,7 @@ param pgAdminPassword = az.getSecret(
 // setting deployRedis=true here AND Features__UseRedisHoldStore=true in API
 // app settings.
 param deployRedis = false
+
+// VRB-306 — staging alert recipient (owner on-call). Single address for now;
+// per-alert owners come later when there's a team (owner decision 2026-07-15).
+param alertEmail = 'niroshanaks@gmail.com'
