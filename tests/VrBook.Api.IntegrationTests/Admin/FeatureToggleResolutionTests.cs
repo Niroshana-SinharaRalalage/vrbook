@@ -21,6 +21,8 @@ public sealed class FeatureToggleResolutionTests
         public Task<bool?> GetOverrideAsync(string key, CancellationToken ct = default) => Task.FromResult(_override);
         public Task<IReadOnlyList<FeatureFlagOverride>> ListAsync(CancellationToken ct = default) =>
             Task.FromResult((IReadOnlyList<FeatureFlagOverride>)Array.Empty<FeatureFlagOverride>());
+        public Task SetOverrideAsync(string key, bool enabled, Guid updatedByUserId, DateTimeOffset updatedAt, CancellationToken ct = default) =>
+            Task.CompletedTask;
     }
 
     private static DbFeatureToggle Toggle(bool? overrideValue, params (string Key, string Value)[] config)

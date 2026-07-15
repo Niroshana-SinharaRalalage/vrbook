@@ -35,7 +35,7 @@ public sealed record SeedAdminUserCommand(
     string DisplayName,
     bool IsPlatformAdmin,
     IReadOnlyList<SeedAdminUserTenantMembership> TenantMemberships)
-    : IRequest<SeedAdminUserResult>, VrBook.Modules.Identity.Application.Behaviors.IAuditable
+    : IRequest<SeedAdminUserResult>, VrBook.Application.Common.IAuditable
 {
     public string AuditAction => "admin.pre-seed-user";
     public string? AuditTargetType => "User";

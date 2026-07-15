@@ -17,7 +17,7 @@ namespace VrBook.Modules.Admin.Infrastructure;
 ///
 /// <para>Results are cached in <see cref="IMemoryCache"/> for a short TTL to keep
 /// per-request lookups cheap; the admin toggle command invalidates the key on write
-/// (see <see cref="CacheKey"/>). The cache is <b>per-replica</b>: the
+/// (see <see cref="FeatureFlagKeys.CacheKey"/>). The cache is <b>per-replica</b>: the
 /// <see cref="IFeatureToggle"/> contract's Redis + Service Bus distributed cache-bust
 /// is <b>deferred, not dropped</b> (Redis is not deployed — CURRENT-STATE §10); swap
 /// the store for distributed invalidation when Redis lands.</para>
@@ -41,10 +41,6 @@ internal sealed class DbFeatureToggle : IFeatureToggle
         _cache = cache;
     }
 
-    /// <summary>The memory-cache key for a flag — shared with the write path so a
-    /// PUT can invalidate the exact entry.</summary>
-    public static string CacheKey(string key) => $"featureflag::{key}";
-
     public async Task<bool> IsEnabledAsync(
         string key,
         Guid? propertyId = null,
@@ -52,7 +48,7 @@ internal sealed class DbFeatureToggle : IFeatureToggle
         bool defaultValue = false,
         CancellationToken ct = default)
     {
-        if (_cache.TryGetValue(CacheKey(key), out bool? cached))
+        if (_cache.TryGetValue(FeatureFlagKeys.CacheKey(key), out bool? cached))
         {
             return cached ?? defaultValue;
         }
@@ -62,7 +58,7 @@ internal sealed class DbFeatureToggle : IFeatureToggle
         var resolved = await _store.GetOverrideAsync(key, ct)
                        ?? _configuration.GetValue<bool?>(key);
 
-        _cache.Set(CacheKey(key), resolved, CacheTtl);
+        _cache.Set(FeatureFlagKeys.CacheKey(key), resolved, CacheTtl);
         return resolved ?? defaultValue;
     }
 }

@@ -11,6 +11,9 @@ public interface IFeatureFlagStore
 
     /// <summary>All override rows, for the admin list endpoint.</summary>
     Task<IReadOnlyList<FeatureFlagOverride>> ListAsync(CancellationToken ct = default);
+
+    /// <summary>Upsert a flag override (idempotent on <paramref name="key"/>) and persist.</summary>
+    Task SetOverrideAsync(string key, bool enabled, Guid updatedByUserId, DateTimeOffset updatedAt, CancellationToken ct = default);
 }
 
 /// <summary>A persisted feature-flag override row (projection for the admin UI/API).</summary>

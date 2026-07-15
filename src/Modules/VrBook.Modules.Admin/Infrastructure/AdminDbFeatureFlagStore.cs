@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using VrBook.Modules.Admin.Application;
+using VrBook.Modules.Admin.Domain;
 using VrBook.Modules.Admin.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Admin.Infrastructure;
@@ -23,4 +24,19 @@ internal sealed class AdminDbFeatureFlagStore : IFeatureFlagStore
             .OrderBy(f => f.Key)
             .Select(f => new FeatureFlagOverride(f.Key, f.Enabled, f.UpdatedByUserId, f.UpdatedAt))
             .ToListAsync(ct);
+
+    public async Task SetOverrideAsync(
+        string key, bool enabled, Guid updatedByUserId, DateTimeOffset updatedAt, CancellationToken ct = default)
+    {
+        var row = await _db.FeatureFlags.FirstOrDefaultAsync(f => f.Key == key, ct);
+        if (row is null)
+        {
+            _db.FeatureFlags.Add(FeatureFlag.Create(key, enabled, updatedByUserId, updatedAt));
+        }
+        else
+        {
+            row.Set(enabled, updatedByUserId, updatedAt);
+        }
+        await _db.SaveChangesAsync(ct);
+    }
 }

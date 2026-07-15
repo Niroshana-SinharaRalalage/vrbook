@@ -31,4 +31,8 @@ public static class FeatureFlagKeys
         [LoyaltyEnabled] = true,
         [BookingUseRedisHoldStore] = false,
     };
+
+    /// <summary>The memory-cache key for a flag — shared by the resolver (read) and the
+    /// admin set-command (invalidate) so a PUT clears the exact entry.</summary>
+    public static string CacheKey(string key) => $"featureflag::{key}";
 }
