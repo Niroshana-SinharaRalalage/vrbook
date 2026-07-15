@@ -49,7 +49,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-106 | WEB-GUEST | Must | DONE | story/VRB-106 |
 | VRB-107 | WEB-GUEST | Must | DONE | story/VRB-106 |
 | VRB-108 | WEB-GUEST | Must | DONE | story/VRB-108 |
-| VRB-109 | WEB-GUEST | Must | TODO | |
+| VRB-109 | WEB-GUEST | Must | CLAIMED | story/VRB-109 |
 | VRB-110 | WEB-GUEST | Must | TODO | |
 | VRB-210 | SETTINGS | Must | TODO | |
 | VRB-211 | SETTINGS | Must | TODO | |
