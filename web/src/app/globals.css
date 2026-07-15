@@ -40,6 +40,19 @@
     --destructive: 0 84% 45%;
     --destructive-foreground: 60 9% 98%;
 
+    /*
+     * Booking-status vocabulary (VrBook domain, not decoration): a confirmed
+     * stay reads success, a pending one reads warning, a rejected/cancelled
+     * one reads destructive. Tuned so `text-success`/`text-warning` clear WCAG
+     * 2.2 AA (>=4.5:1) as foreground *on the soft Badge surface itself*
+     * (`bg-{token}/10`, a same-hue tint over the stone `--background`, which is
+     * lower-contrast than the pure canvas) — ~5.6:1 / ~6.1:1 respectively.
+     */
+    --success: 142 75% 24%;
+    --success-foreground: 60 9% 98%;
+    --warning: 30 90% 27%;
+    --warning-foreground: 60 9% 98%;
+
     --ring: 20 90% 48%;
 
     --radius: 0.625rem;
@@ -73,6 +86,13 @@
     --destructive: 0 70% 55%;
     --destructive-foreground: 60 9% 98%;
 
+    /* Lightened so `text-success`/`text-warning` clear AA on the near-black
+       dark `--background`; `-foreground` flips dark for solid fills. */
+    --success: 142 58% 52%;
+    --success-foreground: 20 14% 8%;
+    --warning: 38 92% 60%;
+    --warning-foreground: 20 14% 8%;
+
     --ring: 22 92% 52%;
   }
 
@@ -86,5 +106,21 @@
 
   body {
     @apply min-h-dvh bg-background text-foreground antialiased;
+  }
+}
+
+@layer utilities {
+  /* Dialog enter motion. Fade only (no transform) so it can't fight the
+     Content's centering translate; applied under `motion-safe` so
+     `prefers-reduced-motion` users get an instant, still dialog. Enter-only
+     — no `data-[state=closed]` animation, so Radix never waits on
+     `animationend` to unmount. */
+  @keyframes vrb-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 }

@@ -27,7 +27,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-203 | CONFIG | Should | TODO | |
 | VRB-202 | CONFIG | Should | TODO | |
 | VRB-205 | CONFIG | Should | TODO | |
-| VRB-DS  | DESIGN | Must | TODO | (design-system primitives — see AGENT-PROMPTS Lane DESIGN) |
+| VRB-DS  | DESIGN | Must | DONE | story/VRB-DS |
 | VRB-301 | DEVOPS | Must (P0) | TODO | |
 | VRB-302 | DEVOPS | Must (P0) | TODO | |
 | VRB-303 | DEVOPS | Must | TODO | |
@@ -118,4 +118,4 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 
 ---
 
-**Progress rollup:** 2 / 86 DONE. Update this count in your `done:` commit.
+**Progress rollup:** 3 / 86 DONE. Update this count in your `done:` commit.
