@@ -46,7 +46,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-111 | PAY | Should | TODO | |
 | VRB-112 | PAY | Should | TODO | |
 | VRB-101 | CATALOG | Must | TODO | |
-| VRB-106 | WEB-GUEST | Must | TODO | |
+| VRB-106 | WEB-GUEST | Must | CLAIMED | story/VRB-106 |
 | VRB-107 | WEB-GUEST | Must | TODO | |
 | VRB-108 | WEB-GUEST | Must | TODO | |
 | VRB-109 | WEB-GUEST | Must | TODO | |
