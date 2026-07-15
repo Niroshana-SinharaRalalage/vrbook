@@ -37,10 +37,10 @@ public sealed class OpsM13_ProvisioningEmailFirstShapeTests
     [Fact]
     public void ProvisionOrLinkUserCommand_is_auditable()
     {
-        var iAuditable = typeof(ProvisionOrLinkUserCommand).Assembly
-            .GetType("VrBook.Modules.Identity.Application.Behaviors.IAuditable");
-        iAuditable.Should().NotBeNull();
-        typeof(ProvisionOrLinkUserCommand).Should().BeAssignableTo(iAuditable!,
+        // VRB-203 — IAuditable was promoted from the Identity module to the shared
+        // VrBook.Application assembly so any module's command can be auditable.
+        var iAuditable = typeof(VrBook.Application.Common.IAuditable);
+        typeof(ProvisionOrLinkUserCommand).Should().BeAssignableTo(iAuditable,
             because: "Every write command emits an audit_log row via the audit pipeline behavior.");
     }
 

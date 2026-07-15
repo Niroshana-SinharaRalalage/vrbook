@@ -1,8 +1,8 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
-using VrBook.Modules.Identity.Application.Behaviors;
 using VrBook.Modules.Identity.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Identity.Application.Tenants.Commands;

@@ -1,7 +1,7 @@
 using FluentValidation;
 using MediatR;
+using VrBook.Application.Common;
 using VrBook.Contracts.Dtos;
-using VrBook.Modules.Identity.Application.Behaviors;
 
 namespace VrBook.Modules.Identity.Application.Users.Commands;
 

@@ -1,5 +1,5 @@
 using MediatR;
-using VrBook.Modules.Identity.Application.Behaviors;
+using VrBook.Application.Common;
 
 namespace VrBook.Modules.Identity.Application.Users.Commands;
 

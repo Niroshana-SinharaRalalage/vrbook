@@ -1,9 +1,14 @@
-namespace VrBook.Modules.Identity.Application.Behaviors;
+namespace VrBook.Application.Common;
 
 /// <summary>
 /// Marker for MediatR requests that should be written to the audit log on success.
-/// Commands implementing this are recorded by <see cref="AuditLogBehavior{TRequest,TResponse}"/>.
-/// PII is JSON-serialised but redaction policy (proposal §14.5) is applied at write time.
+/// Commands implementing this are recorded by the Identity <c>AuditLogBehavior</c>
+/// (registered as a global pipeline behavior). PII is JSON-serialised but the redaction
+/// policy (proposal §14.5) is applied at write time.
+///
+/// <para>VRB-203 — promoted from the Identity module to the shared <c>VrBook.Application</c>
+/// assembly so any module's command can be auditable without coupling to Identity
+/// (the modular-monolith boundary forbids module→module references).</para>
 /// </summary>
 public interface IAuditable
 {

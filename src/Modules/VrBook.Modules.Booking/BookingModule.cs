@@ -27,9 +27,13 @@ public sealed class BookingModule : IModuleRegistration
         // provision the classic Redis required by RedisHoldStore. Postgres has the
         // same correctness guarantees (serializable txn + SELECT FOR UPDATE on
         // booking.booking_holds). To re-enable Redis later, set
-        // "Features__UseRedisHoldStore": true after provisioning Azure Managed
+        // "Features__Booking.UseRedisHoldStore": true after provisioning Azure Managed
         // Redis (or running Microsoft.Cache/redisEnterprise in production).
-        var useRedisHoldStore = configuration.GetValue("Features:UseRedisHoldStore", false);
+        // VRB-203 — renamed from Features:UseRedisHoldStore to the
+        // Features:<Area>.<Capability> convention. This is a startup-time DI selection
+        // (not a live toggle): the hold store is chosen at composition, so a runtime
+        // override has no effect until restart.
+        var useRedisHoldStore = configuration.GetValue("Features:Booking.UseRedisHoldStore", false);
         if (useRedisHoldStore)
         {
             services.AddScoped<VrBook.Contracts.Interfaces.IHoldStore,
