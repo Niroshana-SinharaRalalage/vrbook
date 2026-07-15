@@ -48,7 +48,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-101 | CATALOG | Must | TODO | |
 | VRB-106 | WEB-GUEST | Must | DONE | story/VRB-106 |
 | VRB-107 | WEB-GUEST | Must | DONE | story/VRB-106 |
-| VRB-108 | WEB-GUEST | Must | CLAIMED | story/VRB-108 |
+| VRB-108 | WEB-GUEST | Must | DONE | story/VRB-108 |
 | VRB-109 | WEB-GUEST | Must | TODO | |
 | VRB-110 | WEB-GUEST | Must | TODO | |
 | VRB-210 | SETTINGS | Must | TODO | |
@@ -118,6 +118,6 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 
 ---
 
-**Progress rollup:** 7 / 86 DONE. Update this count in your `done:` commit.
+**Progress rollup:** 8 / 86 DONE. Update this count in your `done:` commit.
 
 > **DEFERRED (owner decision 2026-07-14):** VRB-301 (cd-prod.yml) + VRB-302 (blue-green rollback) — build & validate on staging first, design prod infra/deploy later. Do not claim these until re-activated.
