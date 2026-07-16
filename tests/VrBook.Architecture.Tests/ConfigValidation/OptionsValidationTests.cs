@@ -56,7 +56,34 @@ public sealed class OptionsValidationTests
         ["Acs:ConnectionString"] = "endpoint=https://acs.example.com/;accesskey=xyz",
         ["Acs:SenderAddress"] = "donotreply@vrbook.example.com",
         ["Blob:AccountUrl"] = "https://stvrbookstaging.blob.core.windows.net",
+        ["Cors:AllowedOrigins:0"] = "https://web.example.com",
     };
+
+    [Fact]
+    public void EmptyCorsOrigins_FailsValidation_InStaging()
+    {
+        var config = FullyValidConfig();
+        config.Remove("Cors:AllowedOrigins:0");
+        var sp = Build(config, Environments.Staging);
+
+        var act = () => _ = sp.GetRequiredService<IOptions<CorsOptions>>().Value;
+
+        act.Should().Throw<OptionsValidationException>()
+            .Which.Message.Should().Contain("Cors:AllowedOrigins");
+    }
+
+    [Fact]
+    public void CorsOriginWithTrailingSlash_FailsValidation()
+    {
+        var config = FullyValidConfig();
+        config["Cors:AllowedOrigins:0"] = "https://web.example.com/";
+        var sp = Build(config, Environments.Staging);
+
+        var act = () => _ = sp.GetRequiredService<IOptions<CorsOptions>>().Value;
+
+        act.Should().Throw<OptionsValidationException>()
+            .Which.Message.Should().Contain("Cors:AllowedOrigins");
+    }
 
     [Fact]
     public void MissingEntraClientId_FailsValidation()

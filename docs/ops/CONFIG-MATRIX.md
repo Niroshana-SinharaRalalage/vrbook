@@ -50,7 +50,7 @@
 | 28 | `Acs:ConnectionString` | KV `acs-connection-string` (**producer: `infra/modules/acs.bicep`**) | empty | Bicep-written | Bicep-written | ✅ VRB-201 (producer documented; not seeded by script by design — parity test allowlists it) |
 | 29 | `Acs:SenderAddress` | KV `acs-sender-address` | placeholder | seeded placeholder (`10-store-secrets.ps1`) | **custom domain + DKIM (go-live)** | ✅ VRB-201 (seeded, closes G6); custom domain still VRB-204 |
 | **Frontend / web** |
-| 30 | `NEXT_PUBLIC_API_BASE_URL` | NEXT_PUBLIC (Dockerfile build-arg + Bicep) | `http://localhost:5xxx` | **hard-coded FQDN `cd-staging-web.yml:149`** | prod API FQDN | ⚠️ hard-coded staging FQDN (G8) — VRB-205 |
+| 30 | `NEXT_PUBLIC_API_BASE_URL` | NEXT_PUBLIC (Dockerfile build-arg + Bicep) | `http://localhost:5xxx` | Bicep output `apiBaseUrl` (shape in VRB-205 handoff → DEVOPS) | prod API FQDN | 🔶 shape handed to DEVOPS (G8) — `docs/ops/VRB-205-config-handoff.md` |
 | 31 | `NEXT_PUBLIC_SITE_URL` | NEXT_PUBLIC (**never set**) | `www.vrbook.example.com` fallback | fallback | fallback | ⚠️ var never wired; placeholder domain — VRB-219 |
 | 32 | `NODE_ENV` | NEXT_PUBLIC/Bicep | `development` | `production` | `production` | ✅ |
 | 33 | `PORT` / `HOSTNAME` | Bicep | 3000 / localhost | 3000 / `0.0.0.0` | 3000 / `0.0.0.0` | ✅ |
@@ -59,7 +59,7 @@
 | 36 | `NEXT_PUBLIC_SIGNALR_NEGOTIATE_URL` | env.d.ts only (**unread**) | — | — | — | 🔶 declared, not consumed |
 | 37 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | env.d.ts only (**unread**) | — | — | — | ⚠️ needed when Stripe Elements ships — VRB-217 |
 | **CORS / Swagger / hosting** |
-| 38 | `Cors:AllowedOrigins` | Bicep `Cors__AllowedOrigins__{0,1}` (dev: appsettings) | `[http://localhost:3000]` | staging web origin | prod web origin(s) | ✅ VRB-205 |
+| 38 | `Cors:AllowedOrigins` | Bicep `Cors__AllowedOrigins__{0,1}` (dev: appsettings); **validated `CorsOptions`+ValidateOnStart** | `[http://localhost:3000]` | staging web origin | prod web origin(s) | ✅ VRB-205 (fail-fast validated in Staging/Prod) |
 | 39 | `Swagger:EnableInProduction` | Bicep (dev: appsettings) | `true` | `false` | `false` | ✅ |
 | 40 | `App:WebBaseUrl` | Bicep (dev-only plain) | `http://localhost:3000` | web FQDN | web FQDN | ✅ |
 | 41 | `Frontend:BaseUrl` | appsettings (default) | `http://localhost:3000` placeholder | (env-injected) | (env-injected) | ⚠️ placeholder — VRB-219 |
@@ -87,7 +87,7 @@
 | 58 | Postgres SKU | Bicep | B2s Burstable | B1ms Burstable | D4ds_v5 GP HA | ✅ |
 | 59 | API replicas min/max | Bicep | 0/3 | 0/3 | 1/10 | ✅ |
 | 60 | Front Door + WAF | Bicep | off | off | **on** | ✅ VRB-205 |
-| 61 | Postgres firewall IPs | **hard-coded** `main.bicep` (`174.104.204.213`, `135.18.171.52`) | n/a | literals | literals | ⚠️ move to param — VRB-205 |
+| 61 | Postgres firewall IPs | `param allowedClientIps` (shape in VRB-205 handoff → DEVOPS) | n/a | param | param | 🔶 shape handed to DEVOPS — `docs/ops/VRB-205-config-handoff.md` |
 | **Third-party (go-live)** |
 | 62 | Stripe mode | KV | test | test | **live (go-live)** | ✅ VRB-204 |
 | 63 | ACS sender domain / DKIM/SPF/DMARC | `acs.bicep` + KV | managed `*.azurecomm.net` | managed | **custom domain + DKIM (go-live)** | ✅ VRB-204 |
