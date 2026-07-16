@@ -72,7 +72,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | ID | Lane | Priority | Status | Branch |
 |---|---|---|---|---|
 | VRB-305 | DEVOPS | Must | TODO | |
-| VRB-307 | DEVOPS | Must | TODO | |
+| VRB-307 | DEVOPS | Must | CLAIMED | story/VRB-307 |
 | VRB-308 | DEVOPS | Must | TODO | |
 | VRB-309 | DEVOPS | Must | TODO | |
 | VRB-312 | DEVOPS | Must | TODO | |
