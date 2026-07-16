@@ -22,6 +22,7 @@ export type ButtonVariant =
   | 'outline'
   | 'ghost'
   | 'destructive'
+  | 'success'
   | 'link';
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
 
@@ -38,6 +39,7 @@ const variantClasses: Record<ButtonVariant, string> = {
   outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
   ghost: 'hover:bg-accent hover:text-accent-foreground',
   destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+  success: 'bg-success text-success-foreground hover:bg-success/90',
   link: 'text-primary underline-offset-4 hover:underline',
 };
 

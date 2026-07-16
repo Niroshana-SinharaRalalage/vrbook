@@ -2,8 +2,11 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { axe, toHaveNoViolations } from 'jest-axe';
 
 import { ApiProblemError } from '@/lib/api/client';
+
+expect.extend(toHaveNoViolations);
 
 const useMeMock = vi.fn();
 const authMock = { isAuthenticated: true, signIn: vi.fn() };
@@ -118,5 +121,11 @@ describe('<ProfileForm />', () => {
   it('shows the loyalty tier as a badge', async () => {
     renderForm();
     expect(await screen.findByText('Gold')).toBeInTheDocument();
+  });
+
+  it('has no axe violations (VRB-110)', async () => {
+    const { container } = renderForm();
+    await screen.findByLabelText(/display name/i);
+    expect(await axe(container)).toHaveNoViolations();
   });
 });
