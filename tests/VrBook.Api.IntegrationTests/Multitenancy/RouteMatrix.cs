@@ -194,6 +194,26 @@ public static class RouteMatrix
             "GET", "/api/v1/admin/platform/tenants",
             Persona.Anonymous, TargetTenant.None, Unauthorized);
 
+        // ====================================================================
+        // VRB-203 — /api/v1/admin/toggles (TogglesController, feature flags)
+        // [Authorize(Roles="PlatformAdmin")] — global platform flags, no tenant
+        // dimension. These rows assert the who-may-reach contract; the happy-path
+        // PUT round-trip + 400 validation live in Contract/Admin/TogglesContractTests.
+        // (The PUT accepted-persona row is intentionally omitted: with the matrix's
+        // placeholder {key} the handler 400s on the non-convention key, so the
+        // happy path is asserted with a real key in the Contract class instead.)
+        // ====================================================================
+        yield return new Cell("PlatformAdmin_GET_toggles_returns_200",
+            "GET", "/api/v1/admin/toggles", Persona.PlatformAdmin, TargetTenant.None, Ok);
+        yield return OwnerRejected("OwnerA_GET_toggles_returns_403",
+            "GET", "/api/v1/admin/toggles", Persona.OwnerA);
+        yield return Anon("Anonymous_GET_toggles_returns_401",
+            "GET", "/api/v1/admin/toggles");
+        yield return OwnerRejected("OwnerA_PUT_toggle_returns_403",
+            "PUT", "/api/v1/admin/toggles/{key}", Persona.OwnerA);
+        yield return Anon("Anonymous_PUT_toggle_returns_401",
+            "PUT", "/api/v1/admin/toggles/{key}");
+
         foreach (var tenant in new[] { TargetTenant.A, TargetTenant.B })
         {
             yield return new Cell(
