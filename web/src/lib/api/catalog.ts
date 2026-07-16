@@ -253,3 +253,34 @@ export const updateProperty = (id: string, body: UpdatePropertyBody): Promise<Pr
     method: 'PUT',
     body,
   });
+
+// VRB-101 — property image management. Upload is multipart/form-data; apiFetch
+// leaves Content-Type unset for FormData so the browser sets the boundary.
+export const uploadPropertyImage = (
+  propertyId: string,
+  file: File,
+  caption?: string,
+): Promise<PropertyImage> => {
+  const form = new FormData();
+  form.append('file', file);
+  if (caption) form.append('caption', caption);
+  return apiFetch<PropertyImage>(
+    `/api/v1/properties/${encodeURIComponent(propertyId)}/images`,
+    { method: 'POST', body: form },
+  );
+};
+
+export const reorderPropertyImages = (
+  propertyId: string,
+  orderedImageIds: readonly string[],
+): Promise<readonly PropertyImage[]> =>
+  apiFetch<readonly PropertyImage[]>(
+    `/api/v1/properties/${encodeURIComponent(propertyId)}/images/order`,
+    { method: 'PUT', body: { orderedImageIds } },
+  );
+
+export const deletePropertyImage = (propertyId: string, imageId: string): Promise<void> =>
+  apiFetch<void>(
+    `/api/v1/properties/${encodeURIComponent(propertyId)}/images/${encodeURIComponent(imageId)}`,
+    { method: 'DELETE' },
+  );

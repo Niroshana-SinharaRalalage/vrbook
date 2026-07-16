@@ -223,6 +223,12 @@ public sealed class Property : AggregateRoot
                 $"has charges_enabled (currently {tenantChargesEnabled}) AND payouts_enabled " +
                 $"(currently {tenantPayoutsEnabled}).");
         }
+        if (_images.Count == 0)
+        {
+            throw new BusinessRuleViolationException(
+                "property.requires_image",
+                "Add at least one photo before publishing this listing.");
+        }
         IsActive = true;
     }
 
@@ -246,13 +252,66 @@ public sealed class Property : AggregateRoot
         Raise(new PropertyDeactivated(Id, reason));
     }
 
-    public PropertyImage AddImage(string blobPath, string? caption)
+    public PropertyImage AddImage(string blobPath, string? caption) =>
+        AddImage(Guid.NewGuid(), blobPath, caption);
+
+    /// <summary>
+    /// VRB-101 — id-carrying overload so the blob filename
+    /// (<c>{tenantId}/{propertyId}/{imageId}.ext</c>) and the row id stay
+    /// identical/traceable; the handler generates the id, uploads under it,
+    /// then records the row.
+    /// </summary>
+    public PropertyImage AddImage(Guid imageId, string blobPath, string? caption)
     {
         var nextSort = _images.Count == 0 ? 0 : _images.Max(i => i.SortOrder) + 1;
         var isFirst = _images.Count == 0;
-        var img = new PropertyImage(TenantId, Id, blobPath, caption, nextSort, isFirst);
+        var img = new PropertyImage(imageId, TenantId, Id, blobPath, caption, nextSort, isFirst);
         _images.Add(img);
         Raise(new PropertyImageAdded(Id, img.Id, blobPath, TenantId));
         return img;
+    }
+
+    /// <summary>
+    /// VRB-101 — removes an image and returns its blob path so the caller can
+    /// delete the blob AFTER the row delete commits (no orphaned blob on a
+    /// failed SaveChanges). If the removed image was primary, the lowest
+    /// remaining <c>SortOrder</c> is promoted so the gallery always has a cover.
+    /// </summary>
+    public string RemoveImage(Guid imageId)
+    {
+        var img = _images.SingleOrDefault(i => i.Id == imageId)
+            ?? throw new NotFoundException("PropertyImage", imageId);
+        var wasPrimary = img.IsPrimary;
+        var blobPath = img.BlobPath;
+        _images.Remove(img);
+
+        if (wasPrimary && _images.Count > 0)
+        {
+            var next = _images.OrderBy(i => i.SortOrder).First();
+            next.Promote(next.SortOrder, isPrimary: true);
+        }
+        Raise(new PropertyImageRemoved(Id, imageId, TenantId));
+        return blobPath;
+    }
+
+    /// <summary>
+    /// VRB-101 — reorders the gallery. <paramref name="orderedIds"/> must be a
+    /// permutation of the current image ids; <c>SortOrder</c> becomes the index
+    /// and index 0 becomes the primary/cover photo.
+    /// </summary>
+    public void ReorderImages(IReadOnlyList<Guid> orderedIds)
+    {
+        var current = _images.Select(i => i.Id).ToHashSet();
+        if (orderedIds.Count != current.Count || !orderedIds.All(current.Contains))
+        {
+            throw new BusinessRuleViolationException(
+                "property.image_reorder_mismatch",
+                "The reorder request must list exactly the property's current image ids.");
+        }
+        for (var index = 0; index < orderedIds.Count; index++)
+        {
+            var img = _images.Single(i => i.Id == orderedIds[index]);
+            img.Promote(index, isPrimary: index == 0);
+        }
     }
 }

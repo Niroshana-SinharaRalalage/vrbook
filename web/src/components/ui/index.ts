@@ -58,3 +58,9 @@ export { Skeleton } from './Skeleton';
 
 export { ConfirmActionModal } from './ConfirmActionModal';
 export type { ConfirmActionModalProps } from './ConfirmActionModal';
+
+export { Dropzone } from './Dropzone';
+export type { DropzoneProps } from './Dropzone';
+
+export { ImageTile } from './ImageTile';
+export type { ImageTileProps } from './ImageTile';

@@ -66,6 +66,7 @@ public static class ConfigValidationExtensions
         AddValidated<RefundOptions, RefundOptionsValidator>(services, configuration, RefundOptions.SectionName, validated);
         AddValidated<AcsOptions, AcsOptionsValidator>(services, configuration, AcsOptions.SectionName, validated);
         AddValidated<BlobOptions, BlobOptionsValidator>(services, configuration, BlobOptions.SectionName, validated);
+        AddValidated<CatalogImageOptions, CatalogImageOptionsValidator>(services, configuration, CatalogImageOptions.SectionName, validated);
 
         services.AddSingleton<IHostedService>(sp => new ConfigValidationReporter(
             sp,

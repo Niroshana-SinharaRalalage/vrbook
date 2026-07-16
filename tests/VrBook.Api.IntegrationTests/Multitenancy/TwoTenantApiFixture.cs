@@ -6,9 +6,11 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Testcontainers.PostgreSql;
 using VrBook.Api.IntegrationTests.Auth;
 using VrBook.Contracts.Enums;
+using VrBook.Contracts.Interfaces;
 using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Admin;
 using VrBook.Modules.Admin.Infrastructure.Persistence;
@@ -339,8 +341,15 @@ public class TwoTenantApiFixture : WebApplicationFactory<Program>, IAsyncLifetim
                 .AddScheme<TestAuthOptions, TestAuthHandler>(
                     JwtBearerDefaults.AuthenticationScheme,
                     opts => opts.Personas = TwoTenantTestAuthHandler.Personas);
+
+            // VRB-101 — swap the blob backend for the in-memory fake (no Azurite).
+            services.RemoveAll<IBlobStorage>();
+            services.AddSingleton<IBlobStorage>(Blobs);
         });
     }
+
+    /// <summary>VRB-101 — shared in-memory blob backend; assert against it in tests.</summary>
+    public InMemoryBlobStorage Blobs { get; } = new();
 
     /// <summary>
     /// Create a fresh <see cref="HttpClient"/> stamped with the persona's
