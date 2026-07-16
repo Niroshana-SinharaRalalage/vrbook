@@ -107,3 +107,17 @@ internal sealed class BlobOptionsValidator : IValidateOptions<BlobOptions>
         return ValidateOptionsResult.Success;
     }
 }
+
+/// <summary>VRB-101 — image-upload policy must allow at least one MIME type.</summary>
+internal sealed class CatalogImageOptionsValidator : IValidateOptions<CatalogImageOptions>
+{
+    public ValidateOptionsResult Validate(string? name, CatalogImageOptions options)
+    {
+        if (options.AllowedContentTypes is null || options.AllowedContentTypes.Length == 0)
+        {
+            return ValidateOptionsResult.Fail(
+                "Catalog:Images:AllowedContentTypes must list at least one MIME type.");
+        }
+        return ValidateOptionsResult.Success;
+    }
+}

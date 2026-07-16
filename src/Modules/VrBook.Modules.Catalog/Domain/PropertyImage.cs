@@ -25,14 +25,14 @@ public sealed class PropertyImage : Entity
 
     private PropertyImage() { } // EF
 
-    internal PropertyImage(Guid tenantId, Guid propertyId, string blobPath, string? caption, int sortOrder, bool isPrimary)
+    internal PropertyImage(Guid id, Guid tenantId, Guid propertyId, string blobPath, string? caption, int sortOrder, bool isPrimary)
     {
         if (tenantId == Guid.Empty)
         {
             throw new ArgumentException("TenantId required.", nameof(tenantId));
         }
         ArgumentException.ThrowIfNullOrWhiteSpace(blobPath);
-        Id = Guid.NewGuid();
+        Id = id == Guid.Empty ? Guid.NewGuid() : id;
         TenantId = tenantId;
         PropertyId = propertyId;
         BlobPath = blobPath.Trim();

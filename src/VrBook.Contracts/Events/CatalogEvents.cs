@@ -19,6 +19,13 @@ public sealed record PropertyImageAdded(
     string BlobPath,
     Guid TenantId) : DomainEvent;
 
+// VRB-101 — same-module consumer (blob cleanup is handled inline in the delete
+// handler after SaveChanges); event exists for audit/outbox symmetry.
+public sealed record PropertyImageRemoved(
+    Guid PropertyId,
+    Guid ImageId,
+    Guid TenantId) : DomainEvent;
+
 public sealed record PropertyDeactivated(Guid PropertyId, string Reason) : DomainEvent;
 
 /// <summary>Published by Reviews module — Catalog updates <c>rating_avg</c> + <c>rating_count</c>.</summary>

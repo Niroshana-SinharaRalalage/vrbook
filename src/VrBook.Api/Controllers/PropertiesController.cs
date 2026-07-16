@@ -69,23 +69,55 @@ public sealed class PropertiesController(IMediator mediator, ICurrentUser curren
         return Ok(dto);
     }
 
-    // ---- Image management is deferred to A2.1 (multipart + Blob signer). ----
+    // ---- VRB-101 — image management (upload / reorder / delete). ----
     [HttpPost("{id:guid}/images")]
     [Authorize]
     [Consumes("multipart/form-data")]
+    [SwaggerOperation(Summary = "Upload a listing photo (JPEG/PNG/WebP ≤ 10 MB).")]
     [ProducesResponseType(typeof(PropertyImageDto), StatusCodes.Status201Created)]
-    public IActionResult UploadImage(Guid id, IFormFile file) =>
-        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Image upload lands in A2.1." });
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<PropertyImageDto>> UploadImage(
+        Guid id, IFormFile file, [FromForm] string? caption, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return UnprocessableEntity(new { detail = "A non-empty image file is required." });
+        }
+        await using var stream = file.OpenReadStream();
+        var dto = await mediator.Send(
+            new UploadPropertyImageCommand(
+                id, CallerTenantId(), stream, file.ContentType, file.Length, file.FileName, caption),
+            cancellationToken);
+        return StatusCode(StatusCodes.Status201Created, dto);
+    }
 
     [HttpPut("{id:guid}/images/order")]
     [Authorize]
-    public IActionResult ReorderImages(Guid id, [FromBody] ReorderImagesRequest request) =>
-        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Image ordering lands in A2.1." });
+    [SwaggerOperation(Summary = "Reorder a listing's photos; the first becomes the cover.")]
+    [ProducesResponseType(typeof(IReadOnlyList<PropertyImageDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<IReadOnlyList<PropertyImageDto>>> ReorderImages(
+        Guid id, [FromBody] ReorderImagesRequest request, CancellationToken cancellationToken)
+    {
+        var images = await mediator.Send(
+            new ReorderPropertyImagesCommand(id, CallerTenantId(), request.OrderedImageIds), cancellationToken);
+        return Ok(images);
+    }
 
     [HttpDelete("{id:guid}/images/{imageId:guid}")]
     [Authorize]
-    public IActionResult DeleteImage(Guid id, Guid imageId) =>
-        StatusCode(StatusCodes.Status501NotImplemented, new { detail = "Image deletion lands in A2.1." });
+    [SwaggerOperation(Summary = "Delete a listing photo; promotes a remaining photo to cover if needed.")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteImage(Guid id, Guid imageId, CancellationToken cancellationToken)
+    {
+        await mediator.Send(new DeletePropertyImageCommand(id, CallerTenantId(), imageId), cancellationToken);
+        return NoContent();
+    }
 }
 
 [Route("api/v1/amenities")]

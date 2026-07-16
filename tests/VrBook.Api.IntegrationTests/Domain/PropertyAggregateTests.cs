@@ -255,8 +255,19 @@ public sealed class PropertyAggregateTests
     public void Activate_gated_succeeds_when_tenant_is_payment_ready()
     {
         var p = Create();
+        p.AddImage("blob/1.jpg", null); // VRB-101 — activation now requires ≥1 photo
         p.Activate(tenantStatus: "Active", tenantChargesEnabled: true, tenantPayoutsEnabled: true);
         p.IsActive.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Activate_gated_throws_when_property_has_no_images()
+    {
+        var p = Create();
+        var act = () => p.Activate(tenantStatus: "Active", tenantChargesEnabled: true, tenantPayoutsEnabled: true);
+        act.Should().Throw<BusinessRuleViolationException>()
+            .Where(e => e.Rule == "property.requires_image");
+        p.IsActive.Should().BeFalse();
     }
 
     [Theory]
@@ -312,6 +323,105 @@ public sealed class PropertyAggregateTests
         second.IsPrimary.Should().BeFalse();
         second.SortOrder.Should().Be(1);
         third.SortOrder.Should().Be(2);
+    }
+
+    [Fact]
+    public void AddImage_trims_caption()
+    {
+        var p = Create();
+        var img = p.AddImage("p", "  Ocean view  ");
+        img.Caption.Should().Be("Ocean view");
+    }
+
+    [Fact]
+    public void AddImage_with_explicit_id_uses_that_id()
+    {
+        var p = Create();
+        var id = Guid.NewGuid();
+        var img = p.AddImage(id, "tenant/prop/img.jpg", null);
+        img.Id.Should().Be(id);
+    }
+
+    [Fact]
+    public void RemoveImage_returns_blob_path_and_raises_event()
+    {
+        var p = Create();
+        var first = p.AddImage("blob/a.jpg", null);
+        p.AddImage("blob/b.jpg", null);
+        p.DequeueEvents();
+
+        var removedPath = p.RemoveImage(first.Id);
+
+        removedPath.Should().Be("blob/a.jpg");
+        p.Images.Should().HaveCount(1);
+        p.DequeueEvents().Should().ContainSingle().Which.Should().BeOfType<PropertyImageRemoved>();
+    }
+
+    [Fact]
+    public void RemoveImage_promotes_next_survivor_when_primary_removed()
+    {
+        var p = Create();
+        var primary = p.AddImage("blob/a.jpg", null); // sort 0, primary
+        var second = p.AddImage("blob/b.jpg", null);   // sort 1
+        p.AddImage("blob/c.jpg", null);                // sort 2
+
+        p.RemoveImage(primary.Id);
+
+        p.Images.Single(i => i.Id == second.Id).IsPrimary.Should().BeTrue();
+        p.Images.Count(i => i.IsPrimary).Should().Be(1);
+    }
+
+    [Fact]
+    public void RemoveImage_of_non_primary_keeps_the_primary()
+    {
+        var p = Create();
+        var primary = p.AddImage("blob/a.jpg", null);
+        var second = p.AddImage("blob/b.jpg", null);
+
+        p.RemoveImage(second.Id);
+
+        p.Images.Single().Id.Should().Be(primary.Id);
+        p.Images.Single().IsPrimary.Should().BeTrue();
+    }
+
+    [Fact]
+    public void RemoveImage_unknown_id_throws_not_found()
+    {
+        var p = Create();
+        p.AddImage("blob/a.jpg", null);
+        var act = () => p.RemoveImage(Guid.NewGuid());
+        act.Should().Throw<NotFoundException>();
+    }
+
+    [Fact]
+    public void ReorderImages_persists_order_and_makes_first_primary()
+    {
+        var p = Create();
+        var a = p.AddImage("blob/a.jpg", null); // primary
+        var b = p.AddImage("blob/b.jpg", null);
+        var c = p.AddImage("blob/c.jpg", null);
+
+        p.ReorderImages([c.Id, a.Id, b.Id]);
+
+        var byId = p.Images.ToDictionary(i => i.Id);
+        byId[c.Id].SortOrder.Should().Be(0);
+        byId[c.Id].IsPrimary.Should().BeTrue();
+        byId[a.Id].SortOrder.Should().Be(1);
+        byId[a.Id].IsPrimary.Should().BeFalse();
+        byId[b.Id].SortOrder.Should().Be(2);
+        byId[b.Id].IsPrimary.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ReorderImages_with_mismatched_id_set_throws()
+    {
+        var p = Create();
+        var a = p.AddImage("blob/a.jpg", null);
+        p.AddImage("blob/b.jpg", null);
+
+        var act = () => p.ReorderImages([a.Id]); // missing the second id
+        act.Should().Throw<BusinessRuleViolationException>()
+            .Where(e => e.Rule == "property.image_reorder_mismatch");
     }
 
     // ---- Address value object ----

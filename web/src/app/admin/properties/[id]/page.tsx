@@ -16,6 +16,7 @@ import {
 import { ApiProblemError } from '@/lib/api/client';
 import { useAuthedQuery } from '@/hooks/useAuthedQuery';
 import { SignInGate } from '@/components/auth/SignInGate';
+import { PropertyPhotoManager } from '@/components/property/PropertyPhotoManager';
 
 interface FormState {
   title: string;
@@ -306,6 +307,10 @@ const AdminPropertyEditPage = () => {
               className={inputCls}
             />
           </Field>
+        </Section>
+
+        <Section title="Photos">
+          <PropertyPhotoManager propertyId={id} initialImages={detail.images} />
         </Section>
 
         <Section title="Capacity">

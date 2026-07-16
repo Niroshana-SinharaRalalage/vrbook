@@ -1,3 +1,5 @@
+using Azure.Identity;
+using Azure.Storage.Blobs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -6,6 +8,7 @@ using VrBook.Contracts.Interfaces;
 using VrBook.Infrastructure.Common;
 using VrBook.Infrastructure.Realtime;
 using VrBook.Infrastructure.Redis;
+using VrBook.Infrastructure.Storage;
 using VrBook.Infrastructure.Stubs;
 
 namespace VrBook.Infrastructure;
@@ -48,6 +51,32 @@ public static class DependencyInjection
         else
         {
             services.AddSingleton<IRealtimeNotifier, NullRealtimeNotifier>();
+        }
+
+        // VRB-101 — Blob storage (property images + message attachments). Managed
+        // identity in staging/prod (Blob:AccountUrl); connection string for local
+        // Azurite. When neither is set the service is unregistered (bare dev has
+        // no blob backend); integration tests register an in-memory fake in the
+        // fixture. IBlobStorage previously had NO implementation.
+        var blobAccountUrl = configuration["Blob:AccountUrl"];
+        var blobConnectionString = configuration.GetConnectionString("Blob")
+            ?? configuration["Blob:ConnectionString"];
+        if (!string.IsNullOrWhiteSpace(blobAccountUrl))
+        {
+            services.AddSingleton(_ => new BlobServiceClient(new Uri(blobAccountUrl), new DefaultAzureCredential()));
+            services.AddSingleton<IBlobStorage, AzureBlobStorage>();
+        }
+        else if (!string.IsNullOrWhiteSpace(blobConnectionString))
+        {
+            services.AddSingleton(_ => new BlobServiceClient(blobConnectionString));
+            services.AddSingleton<IBlobStorage, AzureBlobStorage>();
+        }
+        else
+        {
+            // No backend configured: register a fallback so DI build-time
+            // validation passes (image handlers always depend on IBlobStorage);
+            // it throws only if an upload is actually attempted.
+            services.AddSingleton<IBlobStorage, UnconfiguredBlobStorage>();
         }
 
         // A0 stubs — modules replace these as they ship (A5, A6, A8, A9).
