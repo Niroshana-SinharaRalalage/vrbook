@@ -151,6 +151,14 @@ The infra layer is **already prod-parameterized** — `infra/main.bicep` carries
 ---
 
 ### VRB-304 — Backup / restore / DR — RPO ≤1h, RTO ≤4h (tested restore drill)
+> **Delivery status (2026-07-16, IN-REVIEW):** the **authorable** legs shipped —
+> [`docs/ops/drills/restore-drill.md`](../ops/drills/restore-drill.md) (PITR restore
+> *procedure* + RTO/RPO measurement method + verification queries + documented geo-restore
+> DR), and the **Bicep**: `geoRedundantBackup = isProd ? 'Enabled' : 'Disabled'` now wired
+> in `main.bicep` (prod gets geo-redundant backup on the VRB-301 prod deploy). **Deferred, not
+> dropped:** the **live restore drill execution** (RTO/RPO *measured*) needs **owner Azure-write**
+> (create/repoint/delete a restored server) — same docs-now/live-later split as VRB-303. Flips
+> DONE when the owner runs the drill and the measured RTO ≤4h / RPO ≤1h are recorded.
 - **Epic:** Go-Live · **Priority:** Must · **Estimate:** M
 - **Narrative:** As the platform owner, I want Postgres point-in-time backups **and a restore that has actually been performed end-to-end**, so that a data-loss incident is recoverable within RPO ≤1h and RTO ≤4h instead of a hope.
 - **Acceptance criteria:**
