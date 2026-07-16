@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
+import type { Metadata } from 'next';
 
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
@@ -8,6 +9,9 @@ import { Skeleton, buttonVariants } from '@/components/ui';
 
 // Marketing home — Server Component. VRB-107 wires the featured section to the
 // live search API (see components/home/FeaturedProperties).
+
+// VRB-109 — canonical for the home page (resolves against layout metadataBase).
+export const metadata: Metadata = { alternates: { canonical: '/' } };
 
 const FeaturedSkeleton = () => (
   <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">

@@ -10,6 +10,7 @@ import { PriceQuoteWidget } from '@/components/property/PriceQuoteWidget';
 import { PropertyReviewsList } from '@/components/property/PropertyReviewsList';
 import { ApiProblemError } from '@/lib/api/client';
 import { getPropertyBySlug, type PropertyDetail } from '@/lib/api/catalog';
+import { buildPropertyJsonLd, buildPropertyMetadata } from '@/lib/seo/propertyMetadata';
 
 interface PropertyDetailProps {
   readonly params: { slug: string };
@@ -31,17 +32,10 @@ const safeFetch = async (slug: string): Promise<PropertyDetail | null> => {
 export const generateMetadata = async ({ params }: PropertyDetailProps): Promise<Metadata> => {
   const data = await safeFetch(params.slug);
   if (!data) {
-    return { title: 'Property not found' };
+    return { title: 'Property not found', robots: { index: false } };
   }
-  return {
-    title: data.title,
-    description: data.description.slice(0, 160),
-    openGraph: {
-      title: data.title,
-      description: data.description.slice(0, 200),
-      type: 'website',
-    },
-  };
+  // VRB-109 — canonical + OG/Twitter image live in the shared SEO builder.
+  return buildPropertyMetadata(data);
 };
 
 const DetailSkeleton = () => (
@@ -65,34 +59,8 @@ const PropertyDetailView = async ({ slug }: { slug: string }) => {
     notFound();
   }
 
-  const structuredData = {
-    '@context': 'https://schema.org',
-    '@type': 'LodgingBusiness',
-    name: data.title,
-    description: data.description,
-    address: {
-      '@type': 'PostalAddress',
-      streetAddress: data.address.street,
-      addressLocality: data.address.city,
-      addressRegion: data.address.state,
-      postalCode: data.address.postalCode,
-      addressCountry: data.address.countryCode,
-    },
-    geo: {
-      '@type': 'GeoCoordinates',
-      latitude: data.address.latitude,
-      longitude: data.address.longitude,
-    },
-    ...(data.averageRating !== null && data.ratingCount > 0
-      ? {
-          aggregateRating: {
-            '@type': 'AggregateRating',
-            ratingValue: data.averageRating,
-            reviewCount: data.ratingCount,
-          },
-        }
-      : {}),
-  };
+  // VRB-109 — JSON-LD (now with absolute url + image) via the shared SEO builder.
+  const structuredData = buildPropertyJsonLd(data);
 
   const galleryImages = data.images.map((i) => ({
     url: i.url,
