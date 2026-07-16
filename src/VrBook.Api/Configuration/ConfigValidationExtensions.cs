@@ -46,6 +46,22 @@ public static class ConfigValidationExtensions
             validated.Add((typeof(EntraExternalIdOptions), EntraExternalIdOptions.SectionName));
         }
 
+        // CORS — required in Staging/Production (an API allowing no origins can't serve
+        // its SPA); Development uses the appsettings localhost default (same carve-out).
+        var cors = services
+            .AddOptions<CorsOptions>()
+            .Bind(configuration.GetSection(CorsOptions.SectionName));
+        if (environment.IsDevelopment())
+        {
+            skipped.Add(CorsOptions.SectionName);
+        }
+        else
+        {
+            cors.ValidateDataAnnotations().ValidateOnStart();
+            services.AddSingleton<IValidateOptions<CorsOptions>, CorsOptionsValidator>();
+            validated.Add((typeof(CorsOptions), CorsOptions.SectionName));
+        }
+
         AddValidated<StripeOptions, StripeOptionsValidator>(services, configuration, StripeOptions.SectionName, validated);
         AddValidated<RefundOptions, RefundOptionsValidator>(services, configuration, RefundOptions.SectionName, validated);
         AddValidated<AcsOptions, AcsOptionsValidator>(services, configuration, AcsOptions.SectionName, validated);

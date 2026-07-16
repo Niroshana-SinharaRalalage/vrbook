@@ -50,8 +50,12 @@ builder.Host.UseSerilog((ctx, sp, lc) => lc
 // ---- ASP.NET Core core services ----
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddProblemDetailsConfigured();
+// VRB-205 — CORS origins come from the validated CorsOptions shape (fail-fast in
+// Staging/Production via AddValidatedConfiguration below); the consumed shape is the
+// validated shape.
 builder.Services.AddCors(opts => opts.AddDefaultPolicy(p => p
-    .WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>())
+    .WithOrigins(builder.Configuration.GetSection(CorsOptions.SectionName).Get<CorsOptions>()?.AllowedOrigins
+                 ?? Array.Empty<string>())
     .AllowAnyHeader()
     .AllowAnyMethod()
     .AllowCredentials()));
