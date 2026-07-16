@@ -249,14 +249,25 @@ Critical objective: **unblock PAY (VRB-102) soonest** → the Contracts boundary
 
 ---
 
-## 6. Open questions
+## 6. Owner decisions (RESOLVED 2026-07-16) + remaining questions
 
-### PRODUCT / POLICY (owner's call)
-1. **Prod tier numbers.** Defaults 7d / 2d / 50% / 48h are the Q24 proposal; VRB-102 marks prod as "owner-confirmed". Confirm exact prod values before seeding `admin.cancellation_tiers`.
-2. **Refundable-upgrade pricing model.** Q24 says "guest pays extra" but not flat-amount vs %-of-subtotal, nor host-set-freely vs platform-bounded. Drives `upgrade_price_*` columns + validation.
-3. **Fee visibility to hosts (Q4).** Do tenant-admins see the platform fee value, or only their net?
-4. **Per-state tax roster (Q25).** Which US states are marketplace-facilitator-enabled at launch? Seeds `admin.tax_posture.per_state_json`. (Engine impl is PAY VRB-103.)
-5. **Model availability.** Both cancellation models offered to every tenant, or platform-restrictable to Tiered-only?
+### PRODUCT / POLICY — OWNER-ANSWERED
+1. **Tier numbers → FULLY CONFIGURABLE.** Owner: *"No hard-and-fast rule — this should be configurable and the parameters changeable at any time."* → Confirms the DB-backed, platform-admin-editable `admin.cancellation_tiers` design. **7/2/50/48 is the SEED default only** (not a locked value); the PUT endpoint + versioned rows are the point. No further owner input needed to build.
+2. **Refundable-upgrade pricing → FLAT, HOST-SET, PLATFORM-CAPPED.** Store `upgrade_price_amount` + currency per property (host-set); add a **platform-level cap** `admin.cancellation_tiers.upgrade_cap_pct` (or a sibling platform-config row) expressed as **% of booking subtotal**; validation rejects a host flat amount that exceeds `cap_pct × subtotal` at Place time (and warns in the settings UI using a representative subtotal). Cap is itself platform-admin-editable (VRB-216).
+3. **Fee visibility → SHOW FEE % + NET.** `Property/PayoutSettingsDto` exposes both the platform fee % and the host's net; the settings/payout UI renders "Platform fee: N% — your net: $X". No hidden-fee mode.
+4. **Model availability → BOTH MODELS, ALL TENANTS.** No per-tenant gating; **drop the per-tenant allow-flag** — every host freely picks Tiered or RefundableUpgrade. Simplifies VRB-215 (no gating column/check).
+
+### REMAINING (non-blocking; sensible default applied)
+5. **Per-state tax roster (Q25).** Not asked of the owner — the tax ENGINE is PAY VRB-103, and VRB-216 only owns the posture read-model. **Default applied:** seed `admin.tax_posture` with `facilitator_active = true` + **empty** `per_state_json` (operator fills the enabled-state roster at go-live). Revisit with the owner when VRB-103/go-live tax config lands.
+
+### TECHNICAL (architect-decided, recorded for TL visibility)
+- No new Settings context; settings owned per-domain (§1).
+- Global tiers DB-backed in Admin; config keys are seed/fallback; the Contracts interface is the stable PAY boundary (§3a).
+- Per-tenant fee override folded into `TenantStripeContextLookup` — PAY fee read unchanged (§3b).
+- Policy snapshot copied onto the booking line at Place; tiers version-stamped for provenance (§1a/§1c).
+- Legacy `CancellationPolicyCode {Flexible,Moderate,Strict}` → `CancellationModel {Tiered,RefundableUpgrade}`, enforced by a RED-then-GREEN arch test (§1b/§5).
+- Audit reuses `identity.audit_log` + `AuditLogBehavior`; additions = redaction hook + `GetSettingsChangesQuery` (§1d).
+- **Owner-driven adjustments (2026-07-16):** upgrade price = host-set flat **+ platform % cap** (new `upgrade_cap_pct` platform config + Place-time validation); **no per-tenant model gating**; fee shown to hosts (DTO exposes fee % + net).
 
 ### TECHNICAL (architect-decided, recorded for TL visibility)
 - No new Settings context; settings owned per-domain (§1).
