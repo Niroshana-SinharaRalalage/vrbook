@@ -77,7 +77,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-309 | DEVOPS | Must | TODO | |
 | VRB-312 | DEVOPS | Must | TODO | |
 | VRB-313 | DEVOPS | Must | TODO | |
-| VRB-311 | COMPLIANCE | Must | TODO | |
+| VRB-311 | COMPLIANCE | Must | CLAIMED | story/VRB-311 |
 | VRB-310 | COMPLIANCE | Must | TODO | |
 
 ## Wave 3 — Phase 3 (post-launch; strictly sequenced)
