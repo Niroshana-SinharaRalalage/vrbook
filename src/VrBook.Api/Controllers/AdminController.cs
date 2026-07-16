@@ -2,7 +2,6 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
-using VrBook.Api.Common;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
 using VrBook.Modules.Admin.Application.FeatureFlags.Commands;
@@ -39,14 +38,12 @@ public sealed class AdminUsersController(IMediator mediator) : ControllerBase
 public sealed class TogglesController(IMediator mediator) : ControllerBase
 {
     [HttpGet]
-    [ExemptFromCrossTenantMatrix("Global platform feature flags — PlatformAdmin-gated, no per-tenant dimension. Auth shape covered by TogglesContractTests.")]
     [SwaggerOperation(Summary = "List feature flags with their effective values (PlatformAdmin only).")]
     [ProducesResponseType(typeof(IReadOnlyList<FeatureToggleDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<FeatureToggleDto>>> List(CancellationToken ct) =>
         Ok(await mediator.Send(new ListFeatureFlagsQuery(), ct));
 
     [HttpPut("{key}")]
-    [ExemptFromCrossTenantMatrix("Global platform feature flags — PlatformAdmin-gated, no per-tenant dimension. Auth shape covered by TogglesContractTests.")]
     [SwaggerOperation(Summary = "Set a global feature-flag override (PlatformAdmin only).")]
     [ProducesResponseType(typeof(FeatureToggleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
