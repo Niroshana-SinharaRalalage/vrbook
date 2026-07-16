@@ -57,6 +57,14 @@ public sealed class BookingModule : IModuleRegistration
         services.AddScoped<VrBook.Contracts.Interfaces.IBookingEmailLookup,
                            VrBook.Modules.Booking.Infrastructure.Persistence.BookingEmailLookup>();
 
+        // VRB-208 (G3) — checkout-hold TTL is now config-driven + fail-fast validated
+        // (was a hard-coded 15-min const in CreateHoldHandler; the Booking:HoldDurationMinutes
+        // key was dead). Registered in the module so both the API and the booking workers bind it.
+        services.AddOptions<BookingHoldOptions>()
+            .Bind(configuration.GetSection(BookingHoldOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<BookingHoldOptions>, BookingHoldOptionsValidator>();
+
         services.AddModuleAssembly(typeof(BookingModule).Assembly);
         return services;
     }
