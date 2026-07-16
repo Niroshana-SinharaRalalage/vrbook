@@ -71,6 +71,13 @@ public static class DependencyInjection
             services.AddSingleton(_ => new BlobServiceClient(blobConnectionString));
             services.AddSingleton<IBlobStorage, AzureBlobStorage>();
         }
+        else
+        {
+            // No backend configured: register a fallback so DI build-time
+            // validation passes (image handlers always depend on IBlobStorage);
+            // it throws only if an upload is actually attempted.
+            services.AddSingleton<IBlobStorage, UnconfiguredBlobStorage>();
+        }
 
         // A0 stubs — modules replace these as they ship (A5, A6, A8, A9).
         services.AddSingleton<ITaxCalculator, StubTaxCalculator>();
