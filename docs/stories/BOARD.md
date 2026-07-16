@@ -72,7 +72,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | ID | Lane | Priority | Status | Branch |
 |---|---|---|---|---|
 | VRB-305 | DEVOPS | Must | TODO | |
-| VRB-307 | DEVOPS | Must | IN-REVIEW | story/VRB-307 |
+| VRB-307 | DEVOPS | Must | DONE | story/VRB-307 |
 | VRB-308 | DEVOPS | Must | TODO | |
 | VRB-309 | DEVOPS | Must | TODO | |
 | VRB-312 | DEVOPS | Must | TODO | |
@@ -118,6 +118,6 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 
 ---
 
-**Progress rollup:** 17 / 86 DONE. Update this count in your `done:` commit.
+**Progress rollup:** 18 / 86 DONE. Update this count in your `done:` commit.
 
 > **DEFERRED (owner decision 2026-07-14):** VRB-301 (cd-prod.yml) + VRB-302 (blue-green rollback) — build & validate on staging first, design prod infra/deploy later. Do not claim these until re-activated.
