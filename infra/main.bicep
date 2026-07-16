@@ -239,6 +239,10 @@ module pg 'modules/postgres-flexible.bicep' = {
     skuTier: pgTier
     storageSizeGB: pgStorageGB
     backupRetentionDays: pgBackupRetention
+    // VRB-304 — geo-redundant backup for prod DR (paired-region geo-restore).
+    // Enabled at server-create only; prod gets it on the VRB-301 prod deploy.
+    // staging/dev stay Disabled (no cross-region cost; existing servers unchanged).
+    geoRedundantBackup: isProd ? 'Enabled' : 'Disabled'
     haEnabled: isProd
     administratorLogin: pgAdminLogin
     administratorLoginPassword: pgAdminPassword
