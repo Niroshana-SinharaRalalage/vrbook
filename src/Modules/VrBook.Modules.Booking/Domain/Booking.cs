@@ -88,7 +88,8 @@ public sealed class Booking : AggregateRoot
         decimal total,
         IEnumerable<(string kind, string label, int qty, decimal unit, decimal lineTotal)> lineItems,
         IEnumerable<(string fullName, bool isPrimary)> guests,
-        string? specialRequests)
+        string? specialRequests,
+        TimeSpan tentativeSla)
     {
         if (tenantId == Guid.Empty)
         {
@@ -116,7 +117,7 @@ public sealed class Booking : AggregateRoot
             Fees = fees,
             Taxes = taxes,
             Total = total,
-            TentativeUntil = DateTimeOffset.UtcNow.AddHours(24),
+            TentativeUntil = DateTimeOffset.UtcNow.Add(tentativeSla), // VRB-207 (G2) — config-driven (48h locked), was hard-coded AddHours(24)
             SpecialRequests = string.IsNullOrWhiteSpace(specialRequests) ? null : specialRequests.Trim(),
         };
         foreach (var (kind, label, qty, unit, lineTotal) in lineItems)

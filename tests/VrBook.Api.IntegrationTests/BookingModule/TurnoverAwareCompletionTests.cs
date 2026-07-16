@@ -72,7 +72,7 @@ public sealed class TurnoverAwareCompletionTests(TwoTenantApiFixture fixture)
             total: 400m,
             lineItems: [],
             guests: [("Turnover Guest", true)],
-            specialRequests: null);
+            specialRequests: null, tentativeSla: TimeSpan.FromHours(48));
         booking.Confirm();
         booking.CheckIn();
         booking.CheckOut(propertyTurnoverHours: 24);
