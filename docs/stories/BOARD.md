@@ -26,7 +26,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-201 | CONFIG | Must | DONE | story/VRB-201 |
 | VRB-203 | CONFIG | Should | DONE | story/VRB-203 |
 | VRB-202 | CONFIG | Should | DONE | story/VRB-202 |
-| VRB-205 | CONFIG | Should | CLAIMED | story/VRB-205 |
+| VRB-205 | CONFIG | Should | DONE | story/VRB-205 |
 | VRB-DS  | DESIGN | Must | DONE | story/VRB-DS |
 | VRB-301 | DEVOPS | Must (P0) | DEFERRED | (prod pipeline — postponed to pre-launch, owner 2026-07-14) |
 | VRB-302 | DEVOPS | Must (P0) | DEFERRED | (blue-green rollback — postponed with VRB-301) |
@@ -118,6 +118,6 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 
 ---
 
-**Progress rollup:** 9 / 86 DONE. Update this count in your `done:` commit.
+**Progress rollup:** 10 / 86 DONE. Update this count in your `done:` commit.
 
 > **DEFERRED (owner decision 2026-07-14):** VRB-301 (cd-prod.yml) + VRB-302 (blue-green rollback) — build & validate on staging first, design prod infra/deploy later. Do not claim these until re-activated.
