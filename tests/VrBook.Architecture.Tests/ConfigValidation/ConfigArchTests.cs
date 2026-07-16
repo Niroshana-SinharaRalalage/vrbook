@@ -27,6 +27,7 @@ public sealed class ConfigArchTests
     private static readonly Type[] RequiredValidatedOptions =
     {
         typeof(EntraExternalIdOptions),
+        typeof(CorsOptions),        // VRB-205
         typeof(StripeOptions),
         typeof(RefundOptions),
         typeof(AcsOptions),
