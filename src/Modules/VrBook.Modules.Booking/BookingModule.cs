@@ -65,6 +65,14 @@ public sealed class BookingModule : IModuleRegistration
             .ValidateOnStart();
         services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<BookingHoldOptions>, BookingHoldOptionsValidator>();
 
+        // VRB-207 (G2/Q1) — Tentative-booking SLA is now config-driven (48h locked) +
+        // fail-fast validated; was a hard-coded AddHours(24) in Booking.Place. Registered
+        // in the module so the API and the expiry worker share one bound value.
+        services.AddOptions<BookingSlaOptions>()
+            .Bind(configuration.GetSection(BookingSlaOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<BookingSlaOptions>, BookingSlaOptionsValidator>();
+
         services.AddModuleAssembly(typeof(BookingModule).Assembly);
         return services;
     }

@@ -63,7 +63,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-219 | SETTINGS | Should | TODO | |
 | VRB-220 | SETTINGS | Must | TODO | |
 | VRB-206 | SETTINGS | P1 | DONE | story/VRB-206 |
-| VRB-207 | SETTINGS | P1 | TODO | |
+| VRB-207 | SETTINGS | P1 | DONE | story/VRB-207 |
 | VRB-208 | SETTINGS | P2 | DONE | story/VRB-208 |
 | VRB-209 | SETTINGS | P2 | TODO | |
 
@@ -118,6 +118,6 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 
 ---
 
-**Progress rollup:** 16 / 86 DONE. Update this count in your `done:` commit.
+**Progress rollup:** 17 / 86 DONE. Update this count in your `done:` commit.
 
 > **DEFERRED (owner decision 2026-07-14):** VRB-301 (cd-prod.yml) + VRB-302 (blue-green rollback) — build & validate on staging first, design prod infra/deploy later. Do not claim these until re-activated.

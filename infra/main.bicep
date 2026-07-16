@@ -383,7 +383,7 @@ var apiEnvVars = [
   { name: 'Blob__PropertyImagesContainer', value: 'property-images' }
   { name: 'Blob__MessageAttachmentsContainer', value: 'message-attachments' }
   { name: 'Feed__OutboundTokenPepper', secretRef: 'feed-pepper' }
-  { name: 'Booking__TentativeSlaHours', value: '24' }
+  { name: 'Booking__TentativeSlaHours', value: '48' } // VRB-207 (G2/Q1) — owner-locked 48h hold window
   { name: 'Booking__HoldDurationMinutes', value: '15' }
   // Platform-wide service fee retained on refunds for captured bookings (0..100).
   // Set to 0 to issue full refunds. Per-property fees land in A5.1.
@@ -494,7 +494,8 @@ module syncJob 'modules/container-app-job.bicep' = {
 }
 
 // ---------- Booking SLA expiry sweep (scheduled job, */10 * * * *) ----------
-// Slice 0.4: scans Tentative bookings whose 6h window has elapsed. Auto-confirms
+// Slice 0.4: scans Tentative bookings whose SLA window (Booking:TentativeSlaHours,
+// 48h — VRB-207) has elapsed, i.e. TentativeUntil <= now. Auto-confirms
 // when no iCal conflict; auto-cancels (and cancels the Stripe auth-hold) when one
 // exists. Default --mode=expiry on the worker, so no args block needed.
 // See docs/REPLAN.md slice 0.4.

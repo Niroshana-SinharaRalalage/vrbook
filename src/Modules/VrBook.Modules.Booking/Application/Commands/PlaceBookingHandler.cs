@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using VrBook.Contracts.Common;
 using VrBook.Contracts.Dtos;
@@ -28,6 +29,7 @@ internal sealed class PlaceBookingHandler(
     IHoldStore holds,
     IPropertyOwnerLookup propertyOwners,
     BookingDbContext db,
+    IOptions<BookingSlaOptions> slaOptions,
     Microsoft.Extensions.Logging.ILogger<PlaceBookingHandler> logger) : IRequestHandler<PlaceBookingCommand, BookingDto>
 {
     public async Task<BookingDto> Handle(PlaceBookingCommand request, CancellationToken cancellationToken)
@@ -120,7 +122,8 @@ internal sealed class PlaceBookingHandler(
             lineItems: lineItems,
             guests: (r.Guests ?? Array.Empty<BookingGuestDto>())
                 .Select(g => (g.FullName, g.IsPrimary)),
-            specialRequests: r.SpecialRequests);
+            specialRequests: r.SpecialRequests,
+            tentativeSla: slaOptions.Value.TentativeSla); // VRB-207 (G2) — 48h locked, config-driven
 
         // Slice 0.2: serializable transaction + SELECT FOR UPDATE row lock + hold
         // consumption all in one atomic step. Closes the race per proposal §7.3.
