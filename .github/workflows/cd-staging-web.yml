@@ -137,6 +137,16 @@ jobs:
           echo "authority_guest=${AUTHORITY_GUEST}" >> "$GITHUB_OUTPUT"
           echo "client_id=${CLIENT_ID}" >> "$GITHUB_OUTPUT"
 
+      # VRB-205 item 3 (closes G8) — resolve the API base URL from the LIVE
+      # Container App instead of a baked FQDN, so it survives any CAE rebuild.
+      # Bare origin (no /api/v1) — the web client appends the versioned path.
+      - name: Resolve API base URL from the live Container App
+        id: api
+        run: |
+          API_FQDN=$(az containerapp show -n ca-vrbook-api-staging -g rg-vrbook-staging --query "properties.configuration.ingress.fqdn" -o tsv)
+          if [ -z "$API_FQDN" ]; then echo "::error::could not resolve ca-vrbook-api-staging FQDN"; exit 1; fi
+          echo "base_url=https://${API_FQDN}" >> "$GITHUB_OUTPUT"
+
       - name: Build image
         uses: docker/build-push-action@v6
         with:
@@ -146,7 +156,7 @@ jobs:
           push: false
           load: true
           build-args: |
-            NEXT_PUBLIC_API_BASE_URL=https://ca-vrbook-api-staging.icydesert-abf3fa4e.eastus2.azurecontainerapps.io
+            NEXT_PUBLIC_API_BASE_URL=${{ steps.api.outputs.base_url }}
             NEXT_PUBLIC_ENTRA_AUTHORITY_ADMIN=${{ steps.entra.outputs.authority_admin }}
             NEXT_PUBLIC_ENTRA_AUTHORITY_GUEST=${{ steps.entra.outputs.authority_guest }}
             NEXT_PUBLIC_ENTRA_CLIENT_ID=${{ steps.entra.outputs.client_id }}

@@ -195,31 +195,37 @@ module acr 'modules/acr.bicep' = {
 //     suffix is permanent (cosmetic only).
 //   * Prod: VNet-injected + Disabled per parameter defaults. Never touched by
 //     INFRA.1. Prod-specific privacy posture will be revisited at prod cutover.
-var pgIsStagingPublic = env == 'staging'
-var pgStagingFirewallRules = [
-  // Owner IP from LankaConnect staging allowlist.
-  {
-    name: 'Owner-Home-Office'
-    startIp: '174.104.204.213'
-    endIp: '174.104.204.213'
-  }
-  // Portal convention: 0.0.0.0-0.0.0.0 = allow all in-region Azure-internal
-  // traffic. NOT the internet.
-  {
-    name: 'AllowAzureServices'
-    startIp: '0.0.0.0'
-    endIp: '0.0.0.0'
-  }
-  // OPS.INFRA.1 A8 remediation: CAE outbound IP needs an explicit rule; the
-  // AllowAzureServices umbrella did NOT cover Container Apps → Postgres Flex
-  // outbound. Discovered empirically at cutover; without it new API revisions
-  // failed activation on health-probe timeout.
-  {
-    name: 'CAE-Outbound'
-    startIp: '135.18.171.52'
-    endIp: '135.18.171.52'
-  }
+// VRB-205 item 4 — client IPs allowed through the Postgres firewall, as a param
+// (no literals in the template). Defaults carry the current staging allowlist:
+//   174.104.204.213 = owner home/office
+//   135.18.171.52   = CAE outbound — Container Apps env → Postgres Flex. The
+//     AllowAzureServices umbrella did NOT cover this (OPS.INFRA.1 A8); without
+//     the explicit rule new API revisions fail activation on health-probe timeout.
+// Override per-env in *.bicepparam; only applied when the server is public (staging).
+@description('Client IPs allowed through the Postgres firewall (owner office + CAE outbound). Override per-env in *.bicepparam.')
+param allowedClientIps array = [
+  '174.104.204.213'
+  '135.18.171.52'
 ]
+
+var pgIsStagingPublic = env == 'staging'
+// One firewall rule per client IP + the AllowAzureServices umbrella
+// (0.0.0.0-0.0.0.0 = in-region Azure-internal traffic, NOT the internet — portal
+// convention).
+var pgStagingFirewallRules = concat(
+  map(allowedClientIps, ip => {
+    name: 'AllowClientIp-${replace(ip, '.', '-')}'
+    startIp: ip
+    endIp: ip
+  }),
+  [
+    {
+      name: 'AllowAzureServices'
+      startIp: '0.0.0.0'
+      endIp: '0.0.0.0'
+    }
+  ]
+)
 
 module pg 'modules/postgres-flexible.bicep' = {
   name: 'pg'
@@ -377,9 +383,7 @@ var apiEnvVars = [
   { name: 'Blob__PropertyImagesContainer', value: 'property-images' }
   { name: 'Blob__MessageAttachmentsContainer', value: 'message-attachments' }
   { name: 'Feed__OutboundTokenPepper', secretRef: 'feed-pepper' }
-  { name: 'Sync__DefaultPollIntervalMin', value: '30' }
-  { name: 'Sync__StaleAlertHours', value: '2' }
-  { name: 'Booking__TentativeSlaHours', value: '24' }
+  { name: 'Booking__TentativeSlaHours', value: '48' } // VRB-207 (G2/Q1) — owner-locked 48h hold window
   { name: 'Booking__HoldDurationMinutes', value: '15' }
   // Platform-wide service fee retained on refunds for captured bookings (0..100).
   // Set to 0 to issue full refunds. Per-property fees land in A5.1.
@@ -490,7 +494,8 @@ module syncJob 'modules/container-app-job.bicep' = {
 }
 
 // ---------- Booking SLA expiry sweep (scheduled job, */10 * * * *) ----------
-// Slice 0.4: scans Tentative bookings whose 6h window has elapsed. Auto-confirms
+// Slice 0.4: scans Tentative bookings whose SLA window (Booking:TentativeSlaHours,
+// 48h — VRB-207) has elapsed, i.e. TentativeUntil <= now. Auto-confirms
 // when no iCal conflict; auto-cancels (and cancels the Stripe auth-hold) when one
 // exists. Default --mode=expiry on the worker, so no args block needed.
 // See docs/REPLAN.md slice 0.4.
@@ -699,6 +704,11 @@ module alerts 'modules/alerts.bicep' = {
 
 // ---------- Outputs ----------
 output apiFqdn string = apiApp.outputs.fqdn
+// VRB-205 item 3 (closes G8) — the web build reads this instead of a baked FQDN.
+// NOTE: bare origin, NO /api/v1 suffix — web/src/lib/api/client.ts strips a
+// trailing slash and the per-call paths already include /api/v1 (a suffix here
+// would double the path). The handoff doc's `/api/v1` shape is corrected here.
+output apiBaseUrl string = 'https://${apiApp.outputs.fqdn}'
 output webFqdn string = webApp.outputs.fqdn
 output frontDoorHostName string = frontDoorEnabled ? fd.outputs.endpointHostName : ''
 output keyVaultUri string = kv.outputs.vaultUri

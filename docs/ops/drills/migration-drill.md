@@ -104,6 +104,6 @@ fixture is idempotent. Any delta is a non-idempotent backfill and a bug.
 
 | Date | Env | Drill | Result | Notes |
 |------|-----|-------|--------|-------|
-| _pending_ | staging | 1 · migration | — | deferred: awaiting staging Azure access |
-| _pending_ | staging | 2 · forward-fix | — | deferred: awaiting staging Azure access |
-| _pending_ | staging | 3 · idempotency | — | deferred: awaiting staging Azure access |
+| 2026-07-16 | staging | 1 · migration (zero-downtime) | ✅ observed | `cd-staging-api` run **29466376892** (SHA 722a9ba): `migrate (Postgres)` → `deploy api` → `smoke (api)` all **success**, in that order — the migrator ran to completion **before** the API revision promoted (old revision served throughout = zero-downtime by construction) and post-deploy smoke passed. Direct GitHub Actions evidence, no Azure access needed. |
+| _n/a_ | staging | 2 · forward-fix | documented-deferred | Needs a **write** action (deploy a deliberately-failing migration); procedure above is authoritative, live run deferred per TL. |
+| _n/a_ | staging | 3 · idempotency | verified-by-design | Confirmed in code (read-only): `SeedPlatformAdminsBackfill` upserts-by-email + no-ops on existing; `SeedE2EBackfill` gated off in prod; both run post-migration. Live twice-run deferred (needs `job start`, a write). |
