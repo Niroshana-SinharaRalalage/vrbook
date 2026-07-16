@@ -1,0 +1,32 @@
+# VRB-307 — gitleaks config for the BLOCKING secret-scan CI gate.
+# Extends the default ruleset (useDefault=true), then allowlists by-design
+# placeholders + test fixtures. Repo policy: NO live secrets in source — real
+# values live only in Key Vault; source carries shape-only placeholders.
+# Keep the allowlist tight: exempt known-safe patterns/paths, never broad
+# swaths that could hide a real leak.
+title = "VrBook gitleaks"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "VrBook by-design placeholders + test fixtures (no live secrets)"
+
+# Paths that are placeholders / fixtures / documentation by definition.
+paths = [
+  '''.*\.env\.example$''',                    # shape-only env templates
+  '''.*appsettings\.Development\.json$''',    # local dev defaults, not prod
+  '''.*\.(test|spec)\.[jt]sx?$''',            # web unit/spec fixtures
+  '''tests/.*''',                             # backend test fixtures (fake tokens/creds)
+  '''infra/environments/.*\.bicepparam$''',   # KV getSecret refs = ids, not values
+  '''docs/.*''',                              # runbooks carry redacted/example values
+]
+
+# Specific known-safe strings that appear in source.
+regexes = [
+  '''pending-identity-setup''',               # Key Vault placeholder value
+  '''Password=vrbook(;|"|'|\s|$)''',          # Testcontainers/CI local Postgres pw
+  '''POSTGRES_PASSWORD:\s*vrbook''',          # CI service-container pw
+  '''Bearer\s+test''',                        # TestAuthHandler fake bearer
+  '''mcr\.microsoft\.com/azuredocs/containerapps-helloworld''', # Bicep image placeholder
+]

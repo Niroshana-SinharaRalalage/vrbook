@@ -21,6 +21,14 @@ public sealed class LoyaltyModule : IModuleRegistration
         // TenantGucCommandInterceptor + IRlsBypassDbContextFactory together.
         services.AddTenantScopedDbContext<LoyaltyDbContext>(configuration, LoyaltyDbContext.SchemaName);
 
+        // VRB-206 (G1) — tier thresholds are now config-driven + fail-fast validated.
+        // Registered in the module (not the API composition root) so the completion
+        // worker, which also runs OnBookingCompletedHandler, gets the bound options too.
+        services.AddOptions<LoyaltyOptions>()
+            .Bind(configuration.GetSection(LoyaltyOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<LoyaltyOptions>, LoyaltyOptionsValidator>();
+
         // A8.1: replace the A0 stub from VrBook.Infrastructure with the real resolver
         // backed by loyalty.accounts. The pricing module's ComputeQuoteHandler picks
         // up whichever ILoyaltyDiscountResolver is registered.

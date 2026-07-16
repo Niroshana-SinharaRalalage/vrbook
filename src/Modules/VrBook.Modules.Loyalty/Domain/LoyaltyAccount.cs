@@ -44,11 +44,11 @@ public sealed class LoyaltyAccount : AggregateRoot
     /// <c>loyalty.tier_promotion</c> email (Slice 5). Idempotency is delegated
     /// to the caller (which uses an outbox/event-id replay check).
     /// </summary>
-    public void RecordCompletedStay()
+    public void RecordCompletedStay(LoyaltyThresholds thresholds)
     {
         var beforeTier = Tier;
         CompletedStayCount++;
-        Tier = TierDefinition.Resolve(CompletedStayCount);
+        Tier = TierDefinition.Resolve(CompletedStayCount, thresholds);
         LastEvaluatedAt = DateTimeOffset.UtcNow;
 
         if (Tier != beforeTier)
@@ -58,24 +58,23 @@ public sealed class LoyaltyAccount : AggregateRoot
     }
 }
 
-/// <summary>Static tier-resolution table. Phase 1 has hard-coded thresholds; if we
-/// ever need to make them editable we replace this with a DbSet&lt;TierDefinition&gt;.</summary>
+/// <summary>Tier-resolution table. VRB-206 (G1) — the stay-count thresholds are now
+/// config-driven (passed in as <see cref="LoyaltyThresholds"/> from
+/// <c>LoyaltyOptions</c>) instead of hard-coded consts; discount percentages remain
+/// fixed (Q2 — loyalty gives no guest benefit at launch, so only tier tracking).</summary>
 public static class TierDefinition
 {
-    private const int SilverThreshold = 3;
-    private const int GoldThreshold = 6;
-
     public const decimal BronzeDiscountPct = 0m;
     public const decimal SilverDiscountPct = 5m;
     public const decimal GoldDiscountPct = 10m;
 
-    public static LoyaltyTier Resolve(int completedStays)
+    public static LoyaltyTier Resolve(int completedStays, LoyaltyThresholds thresholds)
     {
-        if (completedStays >= GoldThreshold)
+        if (completedStays >= thresholds.Gold)
         {
             return LoyaltyTier.Gold;
         }
-        if (completedStays >= SilverThreshold)
+        if (completedStays >= thresholds.Silver)
         {
             return LoyaltyTier.Silver;
         }
@@ -89,15 +88,15 @@ public static class TierDefinition
         _ => BronzeDiscountPct,
     };
 
-    public static (LoyaltyTier? NextTier, int? StaysUntilNext) NextTier(int completedStays)
+    public static (LoyaltyTier? NextTier, int? StaysUntilNext) NextTier(int completedStays, LoyaltyThresholds thresholds)
     {
-        if (completedStays < SilverThreshold)
+        if (completedStays < thresholds.Silver)
         {
-            return (LoyaltyTier.Silver, SilverThreshold - completedStays);
+            return (LoyaltyTier.Silver, thresholds.Silver - completedStays);
         }
-        if (completedStays < GoldThreshold)
+        if (completedStays < thresholds.Gold)
         {
-            return (LoyaltyTier.Gold, GoldThreshold - completedStays);
+            return (LoyaltyTier.Gold, thresholds.Gold - completedStays);
         }
         return (null, null);
     }

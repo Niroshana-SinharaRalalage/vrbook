@@ -649,12 +649,26 @@ module webApp 'modules/container-app.bicep' = {
 }
 
 // ---------- Front Door (prod + staging only) ----------
+// VRB-307 — WAF posture surfaced at the top level so the prod Detection→Prevention
+// flip + rate-limit tuning are a *.bicepparam override, not a code edit.
+@description('WAF enforcement mode: Detection (log-only, safe launch default) or Prevention. Flip to Prevention at prod cutover after a clean window.')
+@allowed([
+  'Detection'
+  'Prevention'
+])
+param wafMode string = 'Detection'
+
+@description('WAF rate-limit threshold: max requests per client IP per minute.')
+param rateLimitThreshold int = 100
+
 module fd 'modules/front-door.bicep' = if (frontDoorEnabled) {
   name: 'fd'
   params: {
     env: env
     tags: tags
     originHostName: apiApp.outputs.fqdn
+    wafMode: wafMode
+    rateLimitThreshold: rateLimitThreshold
   }
 }
 

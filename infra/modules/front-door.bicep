@@ -152,6 +152,19 @@ resource listingsRule 'Microsoft.Cdn/profiles/ruleSets/rules@2024-09-01' = {
   }
 }
 
+// VRB-307 — WAF runs in Detection first (log-only) to avoid false-positive
+// blocks, then flips to Prevention after a clean observation window at prod
+// cutover (that flip + the 429 synthetic proof are the VRB-301/prod-arm step).
+@description('WAF enforcement mode. Detection = log only (safe launch default); Prevention = block. Flip to Prevention at prod cutover after a clean window.')
+@allowed([
+  'Detection'
+  'Prevention'
+])
+param wafMode string = 'Detection'
+
+@description('VRB-307 — rate-limit threshold: max requests per client IP per minute before the RateLimitRule trips (logged in Detection, blocked in Prevention).')
+param rateLimitThreshold int = 100
+
 resource wafPolicy 'Microsoft.Network/FrontDoorWebApplicationFirewallPolicies@2024-02-01' = {
   name: wafPolicyName
   location: 'global'
@@ -162,8 +175,34 @@ resource wafPolicy 'Microsoft.Network/FrontDoorWebApplicationFirewallPolicies@20
   properties: {
     policySettings: {
       enabledState: 'Enabled'
-      mode: 'Prevention'
+      mode: wafMode
       requestBodyCheck: 'Enabled'
+    }
+    // VRB-307 — per-client-IP rate limit across the whole public surface
+    // (Front Door groups the count by client IP automatically). A later pass
+    // may add a tighter limit scoped to /api/v1/*auth/login paths (brute-force).
+    customRules: {
+      rules: [
+        {
+          name: 'RateLimitPerClientIp'
+          priority: 100
+          enabledState: 'Enabled'
+          ruleType: 'RateLimitRule'
+          rateLimitDurationInMinutes: 1
+          rateLimitThreshold: rateLimitThreshold
+          matchConditions: [
+            {
+              matchVariable: 'RequestUri'
+              operator: 'Contains'
+              negateCondition: false
+              matchValue: [
+                '/'
+              ]
+            }
+          ]
+          action: 'Block'
+        }
+      ]
     }
     managedRules: {
       managedRuleSets: [

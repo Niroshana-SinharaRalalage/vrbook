@@ -69,9 +69,9 @@
 | 44 | `Booking:HoldDurationMinutes` | appsettings + Bicep → `BookingHoldOptions` (Bind + `ValidateOnStart`) → `CreateHoldHandler` TTL | 15 | 15 | 15 | ✅ VRB-208 (**wired** — was dead; validated ≥ 1) |
 | ~~45~~ | ~~`Sync:DefaultPollIntervalMinutes`~~ | **REMOVED (VRB-208)** — dead (poll cadence is per-feed DB, CONFIG-INVENTORY §7); Bicep `Sync__DefaultPollIntervalMin` name-mismatch deleted too | — | — | — | ✅ **G3/G4** closed (removed) |
 | ~~46~~ | ~~`Sync:StaleAlertHours`~~ | **REMOVED (VRB-208)** — dead (no consumer); VRB-214 may re-introduce a *wired* stale-feed alert threshold | — | — | — | ✅ **G3** closed (removed) |
-| 47 | `Loyalty:BronzeThreshold` | appsettings + Bicep `main.bicep:381-383` (**DEAD**; hard-coded `LoyaltyAccount.cs:65-66`) | 1 (dead) | 1 (dead) | 1 (dead) | ⚠️ **G1** — VRB-206 |
-| 48 | `Loyalty:SilverThreshold` | appsettings + Bicep (**DEAD** — const `3`) | 3 (dead) | 3 (dead) | 3 (dead) | ⚠️ **G1** — VRB-206 |
-| 49 | `Loyalty:GoldThreshold` | appsettings + Bicep (**DEAD** — const `6`) | 6 (dead) | 6 (dead) | 6 (dead) | ⚠️ **G1** — VRB-206 |
+| 47 | `Loyalty:BronzeThreshold` | appsettings + Bicep `main.bicep:387` → `LoyaltyOptions` (Bind + `ValidateOnStart`) → `TierDefinition` | 1 | 1 | 1 | ✅ VRB-206 (**LIVE** — was dead) |
+| 48 | `Loyalty:SilverThreshold` | appsettings + Bicep → `LoyaltyOptions` | 3 | 3 | 3 | ✅ VRB-206 (**LIVE** — was dead) |
+| 49 | `Loyalty:GoldThreshold` | appsettings + Bicep → `LoyaltyOptions` | 6 | 6 | 6 | ✅ VRB-206 (**LIVE** — was dead; validated `1 ≤ B < S < G`) |
 | 50 | `Features:Loyalty.Enabled` (was `Loyalty:Enabled`) | feature-flag (DB override → config → default true); resolved live via `IFeatureToggle` | true | true | true | ✅ VRB-203 (renamed + live-togglable via `/admin/toggles`) |
 | **Feature flags** |
 | 51 | `Features:Booking.UseRedisHoldStore` (was `Features:UseRedisHoldStore`) | config read at `BookingModule` (startup DI hold-store selection) | false | false | false | ✅ VRB-203 (renamed to convention; startup-time, not a live toggle) |

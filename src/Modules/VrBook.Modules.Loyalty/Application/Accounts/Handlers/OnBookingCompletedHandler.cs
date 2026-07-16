@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using VrBook.Contracts.Events;
 using VrBook.Modules.Loyalty.Domain;
 using VrBook.Modules.Loyalty.Infrastructure.Persistence;
@@ -14,6 +15,7 @@ namespace VrBook.Modules.Loyalty.Application.Accounts.Handlers;
 /// </summary>
 internal sealed class OnBookingCompletedHandler(
     LoyaltyDbContext db,
+    IOptions<LoyaltyOptions> loyaltyOptions,
     ILogger<OnBookingCompletedHandler> logger) : INotificationHandler<BookingCompleted>
 {
     public async Task Handle(BookingCompleted notification, CancellationToken cancellationToken)
@@ -29,7 +31,7 @@ internal sealed class OnBookingCompletedHandler(
         // RecordCompletedStay raises TierPromoted internally when the new stay
         // crosses a tier threshold; the outbox interceptor flushes it to MediatR
         // on SaveChanges so Notifications enqueues the promotion email.
-        account.RecordCompletedStay();
+        account.RecordCompletedStay(loyaltyOptions.Value.ToThresholds());
         await db.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
