@@ -62,7 +62,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-218 | SETTINGS | Should | TODO | |
 | VRB-219 | SETTINGS | Should | TODO | |
 | VRB-220 | SETTINGS | Must | TODO | |
-| VRB-206 | SETTINGS | P1 | TODO | |
+| VRB-206 | SETTINGS | P1 | CLAIMED | story/VRB-206 |
 | VRB-207 | SETTINGS | P1 | TODO | |
 | VRB-208 | SETTINGS | P2 | DONE | story/VRB-208 |
 | VRB-209 | SETTINGS | P2 | TODO | |
