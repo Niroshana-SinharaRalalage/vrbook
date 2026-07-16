@@ -156,3 +156,52 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # VRB-307 — secret scan (BLOCKING). A committed secret must stop the PR.
+  # Placeholder/test-fixture false positives are allowlisted in .gitleaks.toml.
+  secret-scan:
+    name: secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so the scan sees every commit on the PR
+      - name: gitleaks (blocking)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
+
+  # VRB-307 — active dependency scan (INFORMATIONAL first; flip to blocking
+  # after a clean triage, mirroring the integration-suite posture above).
+  # Complements the passive Dependabot update PRs (.github/dependabot.yml).
+  dependency-scan:
+    name: dependency scan (informational)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION }}
+      - name: dotnet vulnerable packages (informational)
+        continue-on-error: true
+        run: |
+          dotnet list ${{ env.SOLUTION }} package --vulnerable --include-transitive 2>&1 | tee dotnet-vuln.txt
+          if grep -qiE "(Critical|High)$" dotnet-vuln.txt; then
+            echo "::warning title=Vulnerable NuGet packages::HIGH/CRITICAL advisories found — triage before flipping this job to blocking"
+          fi
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: npm audit (informational)
+        continue-on-error: true
+        working-directory: web
+        run: npm audit --audit-level=high
