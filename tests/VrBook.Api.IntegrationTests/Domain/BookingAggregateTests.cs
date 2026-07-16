@@ -35,7 +35,7 @@ public sealed class BookingAggregateTests
             total: 443.20m,
             lineItems: [],
             guests: [("Test Guest", true)],
-            specialRequests: null);
+            specialRequests: null, tentativeSla: TimeSpan.FromHours(48));
 
     private static DomainBooking PlaceConfirmed()
     {
@@ -64,8 +64,8 @@ public sealed class BookingAggregateTests
         booking.Status.Should().Be(BookingStatus.Tentative);
         booking.Reference.Should().StartWith("VRB-");
         booking.TentativeUntil.Should().NotBeNull();
-        booking.TentativeUntil!.Value.Should().BeOnOrAfter(before.AddHours(24).AddSeconds(-1));
-        booking.TentativeUntil!.Value.Should().BeOnOrBefore(DateTimeOffset.UtcNow.AddHours(24).AddSeconds(1));
+        booking.TentativeUntil!.Value.Should().BeOnOrAfter(before.AddHours(48).AddSeconds(-1));
+        booking.TentativeUntil!.Value.Should().BeOnOrBefore(DateTimeOffset.UtcNow.AddHours(48).AddSeconds(1));
         booking.Currency.Should().Be("USD");
         booking.Source.Should().Be(BookingSource.Direct);
 
@@ -79,7 +79,7 @@ public sealed class BookingAggregateTests
         var booking = DomainBooking.Place(new Guid("00000000-0000-0000-0000-000000000001"),
             propertyId: Guid.NewGuid(), propertyTitle: "X", guestUserId: Guid.NewGuid(),
             guestDisplayName: "G", stay: AnyStay(), guestCount: 1, currency: "usd",
-            subtotal: 0, fees: 0, taxes: 0, total: 0, lineItems: [], guests: [], specialRequests: null);
+            subtotal: 0, fees: 0, taxes: 0, total: 0, lineItems: [], guests: [], specialRequests: null, tentativeSla: TimeSpan.FromHours(48));
 
         booking.Currency.Should().Be("USD");
     }
@@ -90,7 +90,7 @@ public sealed class BookingAggregateTests
         var act = () => DomainBooking.Place(new Guid("00000000-0000-0000-0000-000000000001"),
             propertyId: Guid.NewGuid(), propertyTitle: "", guestUserId: Guid.NewGuid(),
             guestDisplayName: "G", stay: AnyStay(), guestCount: 1, currency: "USD",
-            subtotal: 0, fees: 0, taxes: 0, total: 0, lineItems: [], guests: [], specialRequests: null);
+            subtotal: 0, fees: 0, taxes: 0, total: 0, lineItems: [], guests: [], specialRequests: null, tentativeSla: TimeSpan.FromHours(48));
 
         act.Should().Throw<ArgumentException>();
     }
@@ -101,7 +101,7 @@ public sealed class BookingAggregateTests
         var act = () => DomainBooking.Place(new Guid("00000000-0000-0000-0000-000000000001"),
             propertyId: Guid.NewGuid(), propertyTitle: "X", guestUserId: Guid.NewGuid(),
             guestDisplayName: "G", stay: AnyStay(), guestCount: 0, currency: "USD",
-            subtotal: 0, fees: 0, taxes: 0, total: 0, lineItems: [], guests: [], specialRequests: null);
+            subtotal: 0, fees: 0, taxes: 0, total: 0, lineItems: [], guests: [], specialRequests: null, tentativeSla: TimeSpan.FromHours(48));
 
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
@@ -114,7 +114,7 @@ public sealed class BookingAggregateTests
             guestDisplayName: "G", stay: AnyStay(), guestCount: 2, currency: "USD",
             subtotal: 0, fees: 0, taxes: 0, total: 0, lineItems: [],
             guests: new (string, bool)[] { ("Alice", true), ("", false), ("   ", false), ("Bob", false) },
-            specialRequests: null);
+            specialRequests: null, tentativeSla: TimeSpan.FromHours(48));
 
         booking.Guests.Should().HaveCount(2);
         booking.Guests.Select(g => g.FullName).Should().BeEquivalentTo("Alice", "Bob");

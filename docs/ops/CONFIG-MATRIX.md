@@ -65,7 +65,7 @@
 | 41 | `Frontend:BaseUrl` | appsettings (default) | `http://localhost:3000` placeholder | (env-injected) | (env-injected) | ⚠️ placeholder — VRB-219 |
 | 42 | `AllowedHosts` | appsettings | `*` | `*` | `*` | 🔶 (behind WAF prod) |
 | **Booking / Sync / Loyalty config-defects** |
-| 43 | `Booking:TentativeSlaHours` | appsettings + Bicep (**DEAD**; hard-coded 24h `Booking.cs:119`; locked value **48h**) | 24h effective | 24h effective | 24h effective | ⚠️ **G2** — VRB-207 |
+| 43 | `Booking:TentativeSlaHours` | appsettings + Bicep → `BookingSlaOptions` (Bind + `ValidateOnStart`) → `Booking.Place` TTL | 48 | 48 | 48 | ✅ VRB-207 (**wired** — was dead; owner-locked 48h, validated ≥ 1) |
 | 44 | `Booking:HoldDurationMinutes` | appsettings + Bicep → `BookingHoldOptions` (Bind + `ValidateOnStart`) → `CreateHoldHandler` TTL | 15 | 15 | 15 | ✅ VRB-208 (**wired** — was dead; validated ≥ 1) |
 | ~~45~~ | ~~`Sync:DefaultPollIntervalMinutes`~~ | **REMOVED (VRB-208)** — dead (poll cadence is per-feed DB, CONFIG-INVENTORY §7); Bicep `Sync__DefaultPollIntervalMin` name-mismatch deleted too | — | — | — | ✅ **G3/G4** closed (removed) |
 | ~~46~~ | ~~`Sync:StaleAlertHours`~~ | **REMOVED (VRB-208)** — dead (no consumer); VRB-214 may re-introduce a *wired* stale-feed alert threshold | — | — | — | ✅ **G3** closed (removed) |
