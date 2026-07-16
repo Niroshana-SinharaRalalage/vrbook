@@ -65,7 +65,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-206 | SETTINGS | P1 | DONE | story/VRB-206 |
 | VRB-207 | SETTINGS | P1 | DONE | story/VRB-207 |
 | VRB-208 | SETTINGS | P2 | DONE | story/VRB-208 |
-| VRB-209 | SETTINGS | P2 | TODO | |
+| VRB-209 | SETTINGS | P2 | CLAIMED | story/VRB-209 |
 
 ## Wave 2 — Launch-week (operator-gated)
 
