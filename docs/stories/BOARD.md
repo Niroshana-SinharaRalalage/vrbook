@@ -31,7 +31,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-301 | DEVOPS | Must (P0) | DEFERRED | (prod pipeline — postponed to pre-launch, owner 2026-07-14) |
 | VRB-302 | DEVOPS | Must (P0) | DEFERRED | (blue-green rollback — postponed with VRB-301) |
 | VRB-303 | DEVOPS | Must | DONE | story/VRB-303 |
-| VRB-304 | DEVOPS | Must | TODO | |
+| VRB-304 | DEVOPS | Must | CLAIMED | story/VRB-304 |
 | VRB-306 | DEVOPS | Must | DONE | story/VRB-306 |
 
 ## Wave 1 — Launch features (claim after Wave 0 `DONE`)
