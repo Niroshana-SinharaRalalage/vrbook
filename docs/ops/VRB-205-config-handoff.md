@@ -9,7 +9,7 @@ CONFIG lane delivers the in-lane parts; the DEVOPS/infra pieces are handed to Ag
 
 ## Handed to DEVOPS / infra (Agent 1) — exact shapes
 
-### Item 3 — `NEXT_PUBLIC_API_BASE_URL` from a Bicep output, not the hard-coded FQDN (`cd-staging-web.yml:149`, closes G8)
+### Item 3 — ✅ DONE (story/VRB-205-infra) — `NEXT_PUBLIC_API_BASE_URL` from a Bicep output, not the hard-coded FQDN (`cd-staging-web.yml:149`, closes G8)
 - **main.bicep** — add an output off the API container app:
   ```bicep
   output apiBaseUrl string = 'https://${apiApp.properties.configuration.ingress.fqdn}/api/v1'
@@ -17,7 +17,7 @@ CONFIG lane delivers the in-lane parts; the DEVOPS/infra pieces are handed to Ag
   (use whatever the API Container App resource symbol is; `.properties.configuration.ingress.fqdn` is the stable FQDN.)
 - **cd-staging-web.yml** — replace the literal `ca-vrbook-api-staging.<...>.azurecontainerapps.io` at ~line 149 with the deployment output (e.g. read `az deployment group show ... --query properties.outputs.apiBaseUrl.value`, or pass it as the `NEXT_PUBLIC_API_BASE_URL` build-arg). No more baked FQDN → survives any CAE rebuild.
 
-### Item 4 — Postgres firewall IPs → Bicep param (not literals in `main.bicep`)
+### Item 4 — ✅ DONE (story/VRB-205-infra) — Postgres firewall IPs → Bicep param (not literals in `main.bicep`)
 - **main.bicep** — replace the `174.104.204.213` / `135.18.171.52` literals with:
   ```bicep
   @description('Client IPs allowed through the Postgres firewall (owner office + CAE outbound).')

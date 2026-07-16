@@ -195,31 +195,37 @@ module acr 'modules/acr.bicep' = {
 //     suffix is permanent (cosmetic only).
 //   * Prod: VNet-injected + Disabled per parameter defaults. Never touched by
 //     INFRA.1. Prod-specific privacy posture will be revisited at prod cutover.
-var pgIsStagingPublic = env == 'staging'
-var pgStagingFirewallRules = [
-  // Owner IP from LankaConnect staging allowlist.
-  {
-    name: 'Owner-Home-Office'
-    startIp: '174.104.204.213'
-    endIp: '174.104.204.213'
-  }
-  // Portal convention: 0.0.0.0-0.0.0.0 = allow all in-region Azure-internal
-  // traffic. NOT the internet.
-  {
-    name: 'AllowAzureServices'
-    startIp: '0.0.0.0'
-    endIp: '0.0.0.0'
-  }
-  // OPS.INFRA.1 A8 remediation: CAE outbound IP needs an explicit rule; the
-  // AllowAzureServices umbrella did NOT cover Container Apps → Postgres Flex
-  // outbound. Discovered empirically at cutover; without it new API revisions
-  // failed activation on health-probe timeout.
-  {
-    name: 'CAE-Outbound'
-    startIp: '135.18.171.52'
-    endIp: '135.18.171.52'
-  }
+// VRB-205 item 4 — client IPs allowed through the Postgres firewall, as a param
+// (no literals in the template). Defaults carry the current staging allowlist:
+//   174.104.204.213 = owner home/office
+//   135.18.171.52   = CAE outbound — Container Apps env → Postgres Flex. The
+//     AllowAzureServices umbrella did NOT cover this (OPS.INFRA.1 A8); without
+//     the explicit rule new API revisions fail activation on health-probe timeout.
+// Override per-env in *.bicepparam; only applied when the server is public (staging).
+@description('Client IPs allowed through the Postgres firewall (owner office + CAE outbound). Override per-env in *.bicepparam.')
+param allowedClientIps array = [
+  '174.104.204.213'
+  '135.18.171.52'
 ]
+
+var pgIsStagingPublic = env == 'staging'
+// One firewall rule per client IP + the AllowAzureServices umbrella
+// (0.0.0.0-0.0.0.0 = in-region Azure-internal traffic, NOT the internet — portal
+// convention).
+var pgStagingFirewallRules = concat(
+  map(allowedClientIps, ip => {
+    name: 'AllowClientIp-${replace(ip, '.', '-')}'
+    startIp: ip
+    endIp: ip
+  }),
+  [
+    {
+      name: 'AllowAzureServices'
+      startIp: '0.0.0.0'
+      endIp: '0.0.0.0'
+    }
+  ]
+)
 
 module pg 'modules/postgres-flexible.bicep' = {
   name: 'pg'
@@ -697,6 +703,11 @@ module alerts 'modules/alerts.bicep' = {
 
 // ---------- Outputs ----------
 output apiFqdn string = apiApp.outputs.fqdn
+// VRB-205 item 3 (closes G8) — the web build reads this instead of a baked FQDN.
+// NOTE: bare origin, NO /api/v1 suffix — web/src/lib/api/client.ts strips a
+// trailing slash and the per-call paths already include /api/v1 (a suffix here
+// would double the path). The handoff doc's `/api/v1` shape is corrected here.
+output apiBaseUrl string = 'https://${apiApp.outputs.fqdn}'
 output webFqdn string = webApp.outputs.fqdn
 output frontDoorHostName string = frontDoorEnabled ? fd.outputs.endpointHostName : ''
 output keyVaultUri string = kv.outputs.vaultUri
