@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Options;
 using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
@@ -14,11 +15,12 @@ public sealed record CreateHoldCommand(
 
 public sealed record ReleaseHoldCommand(Guid HoldId) : IRequest;
 
-internal sealed class CreateHoldHandler(IHoldStore holds, ICurrentUser currentUser)
+internal sealed class CreateHoldHandler(
+    IHoldStore holds, ICurrentUser currentUser, IOptions<BookingHoldOptions> holdOptions)
     : IRequestHandler<CreateHoldCommand, HoldDto>
 {
-    private static readonly TimeSpan HoldTtl = TimeSpan.FromMinutes(15);
-
+    // VRB-208 (G3) — TTL is now config-driven (Booking:HoldDurationMinutes), was a
+    // hard-coded 15-min const; default preserves the old value.
     public Task<HoldDto> Handle(CreateHoldCommand cmd, CancellationToken cancellationToken) =>
         holds.CreateAsync(
             cmd.PropertyId,
@@ -26,7 +28,7 @@ internal sealed class CreateHoldHandler(IHoldStore holds, ICurrentUser currentUs
             cmd.Checkout,
             cmd.Guests,
             sessionId: currentUser.UserId, // best-effort session attribution; refine when web session is real
-            ttl: HoldTtl,
+            ttl: holdOptions.Value.HoldTtl,
             ct: cancellationToken);
 }
 

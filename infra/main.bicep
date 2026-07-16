@@ -377,8 +377,6 @@ var apiEnvVars = [
   { name: 'Blob__PropertyImagesContainer', value: 'property-images' }
   { name: 'Blob__MessageAttachmentsContainer', value: 'message-attachments' }
   { name: 'Feed__OutboundTokenPepper', secretRef: 'feed-pepper' }
-  { name: 'Sync__DefaultPollIntervalMin', value: '30' }
-  { name: 'Sync__StaleAlertHours', value: '2' }
   { name: 'Booking__TentativeSlaHours', value: '24' }
   { name: 'Booking__HoldDurationMinutes', value: '15' }
   // Platform-wide service fee retained on refunds for captured bookings (0..100).

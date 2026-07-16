@@ -66,9 +66,9 @@
 | 42 | `AllowedHosts` | appsettings | `*` | `*` | `*` | 🔶 (behind WAF prod) |
 | **Booking / Sync / Loyalty config-defects** |
 | 43 | `Booking:TentativeSlaHours` | appsettings + Bicep (**DEAD**; hard-coded 24h `Booking.cs:119`; locked value **48h**) | 24h effective | 24h effective | 24h effective | ⚠️ **G2** — VRB-207 |
-| 44 | `Booking:HoldDurationMinutes` | appsettings + Bicep (**no consumer**) | 15 (dead) | 15 (dead) | 15 (dead) | ⚠️ **G3** — VRB-208 |
-| 45 | `Sync:DefaultPollIntervalMinutes` | appsettings (Bicep sends `Sync__DefaultPollIntervalMin` — **name mismatch**, no consumer) | 30 (dead) | 30 (dead) | 30 (dead) | ⚠️ **G3/G4** — VRB-208 |
-| 46 | `Sync:StaleAlertHours` | appsettings + Bicep (**no consumer**) | 2 (dead) | 2 (dead) | 2 (dead) | ⚠️ **G3** — VRB-208 |
+| 44 | `Booking:HoldDurationMinutes` | appsettings + Bicep → `BookingHoldOptions` (Bind + `ValidateOnStart`) → `CreateHoldHandler` TTL | 15 | 15 | 15 | ✅ VRB-208 (**wired** — was dead; validated ≥ 1) |
+| ~~45~~ | ~~`Sync:DefaultPollIntervalMinutes`~~ | **REMOVED (VRB-208)** — dead (poll cadence is per-feed DB, CONFIG-INVENTORY §7); Bicep `Sync__DefaultPollIntervalMin` name-mismatch deleted too | — | — | — | ✅ **G3/G4** closed (removed) |
+| ~~46~~ | ~~`Sync:StaleAlertHours`~~ | **REMOVED (VRB-208)** — dead (no consumer); VRB-214 may re-introduce a *wired* stale-feed alert threshold | — | — | — | ✅ **G3** closed (removed) |
 | 47 | `Loyalty:BronzeThreshold` | appsettings + Bicep `main.bicep:381-383` (**DEAD**; hard-coded `LoyaltyAccount.cs:65-66`) | 1 (dead) | 1 (dead) | 1 (dead) | ⚠️ **G1** — VRB-206 |
 | 48 | `Loyalty:SilverThreshold` | appsettings + Bicep (**DEAD** — const `3`) | 3 (dead) | 3 (dead) | 3 (dead) | ⚠️ **G1** — VRB-206 |
 | 49 | `Loyalty:GoldThreshold` | appsettings + Bicep (**DEAD** — const `6`) | 6 (dead) | 6 (dead) | 6 (dead) | ⚠️ **G1** — VRB-206 |
