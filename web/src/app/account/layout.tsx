@@ -1,8 +1,13 @@
 import Link from 'next/link';
 import { type ReactNode } from 'react';
+import type { Metadata } from 'next';
 
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
+
+// VRB-109 — the account area is private: keep it out of the index (belt-and-
+// suspenders with the robots.ts `/account` disallow).
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 // Slice OPS.M.10.2 F11.7.5.4 — `/account/loyalty` was reachable only by
 // typing the URL until F11.7.5.4 added it to this nav. Loyalty is a
