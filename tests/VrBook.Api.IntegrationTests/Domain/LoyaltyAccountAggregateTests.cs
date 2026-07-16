@@ -20,7 +20,7 @@ public sealed class LoyaltyAccountAggregateTests
     {
         var a = LoyaltyAccount.OpenForUser(AnyUser);
 
-        a.RecordCompletedStay();
+        a.RecordCompletedStay(LoyaltyThresholds.Default);
 
         a.CompletedStayCount.Should().Be(1);
         a.Tier.Should().Be(LoyaltyTier.Bronze);
@@ -32,11 +32,11 @@ public sealed class LoyaltyAccountAggregateTests
     public void Third_completed_stay_promotes_Bronze_to_Silver()
     {
         var a = LoyaltyAccount.OpenForUser(AnyUser);
-        a.RecordCompletedStay(); // 1, Bronze
-        a.RecordCompletedStay(); // 2, Bronze
+        a.RecordCompletedStay(LoyaltyThresholds.Default); // 1, Bronze
+        a.RecordCompletedStay(LoyaltyThresholds.Default); // 2, Bronze
         a.DequeueEvents(); // drain any prior events
 
-        a.RecordCompletedStay(); // 3, Silver
+        a.RecordCompletedStay(LoyaltyThresholds.Default); // 3, Silver
 
         a.CompletedStayCount.Should().Be(3);
         a.Tier.Should().Be(LoyaltyTier.Silver);
@@ -55,11 +55,11 @@ public sealed class LoyaltyAccountAggregateTests
         var a = LoyaltyAccount.OpenForUser(AnyUser);
         for (var i = 1; i <= 5; i++)
         {
-            a.RecordCompletedStay();
+            a.RecordCompletedStay(LoyaltyThresholds.Default);
         }
         a.DequeueEvents();
 
-        a.RecordCompletedStay(); // 6, Gold
+        a.RecordCompletedStay(LoyaltyThresholds.Default); // 6, Gold
 
         a.Tier.Should().Be(LoyaltyTier.Gold);
         var promoted = a.DequeueEvents().OfType<TierPromoted>().Single();
@@ -72,13 +72,13 @@ public sealed class LoyaltyAccountAggregateTests
     public void Stays_within_same_tier_do_not_promote()
     {
         var a = LoyaltyAccount.OpenForUser(AnyUser);
-        a.RecordCompletedStay(); // 1 Bronze
-        a.RecordCompletedStay(); // 2 Bronze
-        a.RecordCompletedStay(); // 3 Silver  <-- this raises one event
+        a.RecordCompletedStay(LoyaltyThresholds.Default); // 1 Bronze
+        a.RecordCompletedStay(LoyaltyThresholds.Default); // 2 Bronze
+        a.RecordCompletedStay(LoyaltyThresholds.Default); // 3 Silver  <-- this raises one event
         a.DequeueEvents();
 
-        a.RecordCompletedStay(); // 4 Silver
-        a.RecordCompletedStay(); // 5 Silver
+        a.RecordCompletedStay(LoyaltyThresholds.Default); // 4 Silver
+        a.RecordCompletedStay(LoyaltyThresholds.Default); // 5 Silver
 
         a.Tier.Should().Be(LoyaltyTier.Silver);
         a.CompletedStayCount.Should().Be(5);
@@ -91,13 +91,13 @@ public sealed class LoyaltyAccountAggregateTests
         var a = LoyaltyAccount.OpenForUser(AnyUser);
         for (var i = 1; i <= 6; i++)
         {
-            a.RecordCompletedStay();
+            a.RecordCompletedStay(LoyaltyThresholds.Default);
         }
         a.DequeueEvents();
 
         for (var i = 7; i <= 10; i++)
         {
-            a.RecordCompletedStay();
+            a.RecordCompletedStay(LoyaltyThresholds.Default);
             a.DequeueEvents().Should().BeEmpty($"stay #{i} stays at Gold");
         }
         a.Tier.Should().Be(LoyaltyTier.Gold);
