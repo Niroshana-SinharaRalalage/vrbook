@@ -35,7 +35,7 @@
 | 16 | `EntraExternalId:TenantId` | KV `entra-tenant-id` | empty | `entra-tenant-id` | prod tenant GUID | ⚠️ VRB-200 |
 | 17 | `EntraExternalId:ClientId` | KV `entra-api-client-id` | empty | `entra-api-client-id` | prod app-reg id | ⚠️ VRB-200 |
 | 18 | `EntraExternalId:TenantIssuerHost` | KV `entra-tenant-issuer-host` | empty | `entra-tenant-issuer-host` | prod issuer host | ✅ |
-| 19 | `EntraExternalId:AdminFlowName` | **not provided anywhere** | — | — | — | ⚠️ read at `UserProvisioningMiddleware.cs:143`, never set (G7) — VRB-209 |
+| 19 | `EntraExternalId:AdminFlowName` | appsettings + Bicep-plain → `EntraExternalIdOptions` (read via `IOptions` at `UserProvisioningMiddleware`) | `` (inert) | `pending-ops-m22-admin-flow` (inert placeholder) | `` → operator sets real flow (**Production fail-fast**) | ✅ VRB-209 (**provided**; prod-only required until OPS.M.22) |
 | **Auth / Entra (web)** |
 | 20 | `NEXT_PUBLIC_ENTRA_AUTHORITY_ADMIN` | NEXT_PUBLIC ← KV `entra-web-authority-admin` | `login.microsoftonline.com/common` fallback | secretRef | prod admin authority | ✅ |
 | 21 | `NEXT_PUBLIC_ENTRA_AUTHORITY_GUEST` | NEXT_PUBLIC ← KV `entra-web-authority-guest` | fallback | secretRef | prod guest authority | ✅ |
@@ -45,7 +45,7 @@
 | 24 | `Stripe:WebhookSecret` | KV `stripe-webhook-secret` | empty | test webhook secret | live webhook secret | ✅ VRB-204 |
 | 25 | `Stripe:PublishableKey` | KV `stripe-publishable-key` | empty | seeded placeholder (`10-store-secrets.ps1`) | live pub key | ✅ VRB-201 (seeded, closes G6; operator/VRB-204 sets real value) |
 | 26 | `Refund:ServiceFeePercent` | Bicep `Refund__ServiceFeePercent` | default | staging value | prod value | ✅ |
-| 27 | `Payment:AllowPlatformFallback` | **not in any config** (default false) | false | false | false | ⚠️ referenced, never set — VRB-209 |
+| 27 | `Payment:AllowPlatformFallback` | appsettings + Bicep-plain (`Payment__AllowPlatformFallback`) | false | false | false | ✅ VRB-209 (**explicit per env** — was referenced, never set) |
 | **ACS Email** |
 | 28 | `Acs:ConnectionString` | KV `acs-connection-string` (**producer: `infra/modules/acs.bicep`**) | empty | Bicep-written | Bicep-written | ✅ VRB-201 (producer documented; not seeded by script by design — parity test allowlists it) |
 | 29 | `Acs:SenderAddress` | KV `acs-sender-address` | placeholder | seeded placeholder (`10-store-secrets.ps1`) | **custom domain + DKIM (go-live)** | ✅ VRB-201 (seeded, closes G6); custom domain still VRB-204 |
