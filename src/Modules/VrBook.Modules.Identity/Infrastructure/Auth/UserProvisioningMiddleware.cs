@@ -4,10 +4,12 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using VrBook.Domain.Common;
 using VrBook.Modules.Identity.Application.Users.Commands;
 using VrBook.Modules.Identity.Domain;
 using VrBook.Modules.Identity.Infrastructure.Persistence;
+using VrBook.Modules.Identity.Options;
 
 namespace VrBook.Modules.Identity.Infrastructure.Auth;
 
@@ -44,7 +46,7 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<Use
     private static readonly PathString MePath = new("/api/v1/me");
     private static readonly PathString MeTenantsPath = new("/api/v1/me/tenants");
 
-    public async Task InvokeAsync(HttpContext ctx, IMediator mediator, IdentityDbContext db, IConfiguration configuration)
+    public async Task InvokeAsync(HttpContext ctx, IMediator mediator, IdentityDbContext db, IConfiguration configuration, IOptions<EntraExternalIdOptions> entraOptions)
     {
         if (ctx.User?.Identity?.IsAuthenticated == true)
         {
@@ -140,7 +142,9 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next, ILogger<Use
                     // path — self-serve guest signup is unaffected. Owner-
                     // locked in plan §5-Q1: admins pre-seeded, guests
                     // self-serve.
-                    var adminFlowName = configuration["EntraExternalId:AdminFlowName"];
+                    // VRB-209 (G7) — read from the bound + validated options (was a raw
+                    // configuration[...] read of an unprovided key).
+                    var adminFlowName = entraOptions.Value.AdminFlowName;
                     var tokenFlow = ctx.User.FindFirstValue(HttpCurrentUser.EntraFlowTfpClaim)
                                     ?? ctx.User.FindFirstValue(HttpCurrentUser.EntraFlowAcrClaim);
                     var isAdminFlow = !string.IsNullOrWhiteSpace(adminFlowName)

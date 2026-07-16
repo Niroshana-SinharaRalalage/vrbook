@@ -137,6 +137,40 @@ public sealed class OptionsValidationTests
             .Should().NotThrow();
     }
 
+    // VRB-209 (gap G7) — AdminFlowName is fail-fast required in Production only; Staging
+    // is exempt until OPS.M.22 ships the real Entra admin flow (the gate stays inert there).
+    [Fact]
+    public void Production_MissingAdminFlowName_FailsValidation()
+    {
+        var config = FullyValidConfig(); // no EntraExternalId:AdminFlowName
+        var sp = Build(config, Environments.Production);
+
+        var act = () => _ = sp.GetRequiredService<IOptions<EntraExternalIdOptions>>().Value;
+
+        act.Should().Throw<OptionsValidationException>()
+            .Which.Message.Should().Contain("EntraExternalId:AdminFlowName");
+    }
+
+    [Fact]
+    public void Staging_MissingAdminFlowName_Passes()
+    {
+        var sp = Build(FullyValidConfig(), Environments.Staging);
+
+        sp.Invoking(p => p.GetRequiredService<IOptions<EntraExternalIdOptions>>().Value.AdminFlowName)
+            .Should().NotThrow(because: "Staging is exempt from the AdminFlowName requirement (OPS.M.22 pending).");
+    }
+
+    [Fact]
+    public void Production_WithAdminFlowName_Passes()
+    {
+        var config = FullyValidConfig();
+        config["EntraExternalId:AdminFlowName"] = "AdminSignUpSignIn";
+        var sp = Build(config, Environments.Production);
+
+        sp.Invoking(p => p.GetRequiredService<IOptions<EntraExternalIdOptions>>().Value.AdminFlowName)
+            .Should().NotThrow();
+    }
+
     [Fact]
     public async Task AllRequiredPresent_Reporter_LogsConfigValidationPassed()
     {
