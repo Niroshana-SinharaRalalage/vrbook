@@ -26,14 +26,14 @@ import { Button, Card, Dialog, Input, Field, Badge, Skeleton } from '@/component
 
 | Primitive | Notes |
 |---|---|
-| `Button` / `buttonVariants` | Variants `primary`\|`secondary`\|`outline`\|`ghost`\|`destructive`\|`link`; sizes `sm`\|`md`\|`lg`\|`icon`. Defaults `type="button"`. `loading` disables + shows a spinner + sets `aria-busy`. `buttonVariants()` styles a non-button (e.g. an `<a>`). |
+| `Button` / `buttonVariants` | Variants `primary`\|`secondary`\|`outline`\|`ghost`\|`destructive`\|`success`\|`link`; sizes `sm`\|`md`\|`lg`\|`icon`. Defaults `type="button"`. `loading` disables + shows a spinner + sets `aria-busy`. `buttonVariants()` styles a non-button (e.g. an `<a>`). |
 | `Card` + parts | `Card` / `CardHeader` / `CardTitle` (h3) / `CardDescription` / `CardContent` / `CardFooter`. |
 | `Dialog` + parts | Radix-backed modal: focus-trap, Escape + outside-click close, return-focus, scroll-lock. **Always include a `DialogTitle`** (it's the accessible name). For a purely visual modal, keep the title but hide it: `<DialogTitle className="sr-only">…</DialogTitle>`. |
 | `Input` | Text field. Set `aria-invalid="true"` (Field does this) to flip border/ring destructive. |
 | `Field` / `Label` | `Field` wires label↔control, `aria-describedby` (description + error, only the ones rendered), `aria-invalid`, `aria-required`; errors get `role="alert"`. Plays with react-hook-form. `Label` is the standalone styled label. |
 | `Badge` | Soft status pill. Variants `default`\|`secondary`\|`outline`\|`success`\|`warning`\|`destructive`. `tabular-nums`. |
 | `Skeleton` | Loading placeholder; `aria-hidden`, pulses under `motion-safe` only. It's decorative — pair it with a page-level `role="status"`/`aria-live="polite"` region so screen-reader users are told content is loading (the Skeleton itself stays silent). |
-| `ConfirmActionModal` | Pre-existing inline confirm modal used by live operator flows. **Follow-up:** migrate it onto `Dialog` + `Button` (to inherit focus-trap / return-focus and drop its hardcoded colours) — deferred from VRB-DS because it changes the behaviour of in-use admin pages and warrants its own UI verification. |
+| `ConfirmActionModal` | Inline confirm modal for operator flows, with an in-modal error banner. **VRB-110:** now built on `Dialog` + `Button`, so it inherits focus-trap / Escape + outside-click (both suppressed while `busy`) / return-focus. Controlled via `open`; `onCancel`/`onConfirm` drive it. `confirmVariant` maps `destructive`\|`success`\|`default`(→secondary). |
 
 ## Rules for consumers
 

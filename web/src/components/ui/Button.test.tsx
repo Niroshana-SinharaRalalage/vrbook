@@ -37,6 +37,11 @@ describe('<Button />', () => {
     expect(screen.getByRole('button').className).toContain('bg-destructive');
   });
 
+  it('applies the success variant (confirm/approve actions)', () => {
+    render(<Button variant="success">Approve</Button>);
+    expect(screen.getByRole('button').className).toContain('bg-success');
+  });
+
   it('carries the shared focus-visible ring signature', () => {
     render(<Button>Go</Button>);
     expect(screen.getByRole('button').className).toContain('focus-visible:ring');

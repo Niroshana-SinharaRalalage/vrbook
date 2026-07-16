@@ -19,7 +19,16 @@ import { MobileNav } from './MobileNav';
  */
 export const SiteHeader = () => {
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <>
+      {/* VRB-110 — keyboard skip link: first focusable, visually hidden until
+          focused, jumps past the nav to the page's <main id="main-content">. */}
+      <a
+        href="#main-content"
+        className="sr-only rounded-md bg-background px-4 py-2 text-sm font-medium text-foreground shadow focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-[60] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+      >
+        Skip to content
+      </a>
+      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
         <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
           <span className="inline-block h-6 w-6 rounded bg-brand-orange-600" aria-hidden />
@@ -37,5 +46,6 @@ export const SiteHeader = () => {
         <MobileNav />
       </div>
     </header>
+    </>
   );
 };

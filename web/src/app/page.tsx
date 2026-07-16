@@ -26,7 +26,7 @@ const HomePage = () => {
     <>
       <SiteHeader />
 
-      <main>
+      <main id="main-content">
         {/* Hero */}
         <section className="bg-gradient-to-br from-brand-orange-50 via-background to-background dark:from-brand-maroon-800 dark:via-background">
           <div className="container py-20 md:py-28">

@@ -28,7 +28,7 @@ const AccountLayout = ({ children }: AccountLayoutProps) => {
   return (
     <>
       <SiteHeader />
-      <main className="container py-10">
+      <main id="main-content" className="container py-10">
         <div className="grid grid-cols-1 gap-8 md:grid-cols-[200px_1fr]">
           <aside>
             <nav aria-label="Account" className="space-y-1">

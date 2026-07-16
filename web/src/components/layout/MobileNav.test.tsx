@@ -1,6 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { axe, toHaveNoViolations } from 'jest-axe';
+
+expect.extend(toHaveNoViolations);
 
 // Radix (via ui/Sheet) touches pointer-capture / scrollIntoView, absent in jsdom.
 beforeAll(() => {
@@ -132,5 +135,14 @@ describe('<MobileNav />', () => {
     const { user } = await open();
     await user.click(screen.getByRole('link', { name: 'Stays' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('open drawer has no axe violations (VRB-110)', async () => {
+    useMeMock.mockReturnValue(meWith(true));
+    useMyTenantsMock.mockReturnValue(noTenants());
+    const { MobileNav } = await import('./MobileNav');
+    render(<MobileNav />);
+    await open();
+    expect(await axe(screen.getByRole('dialog'))).toHaveNoViolations();
   });
 });
