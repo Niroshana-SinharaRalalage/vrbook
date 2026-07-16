@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
 using VrBook.Api.IntegrationTests.Auth;
+using VrBook.Modules.Admin.Infrastructure.Persistence;
 using VrBook.Modules.Identity.Infrastructure.Persistence;
 
 namespace VrBook.Api.IntegrationTests;
@@ -53,6 +54,9 @@ public sealed class IdentityApiFixture : WebApplicationFactory<Program>, IAsyncL
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
         await db.Database.MigrateAsync();
+        // VRB-203 — the API host registers AdminDbContext (admin.feature_flags); migrate it
+        // so any IFeatureToggle read hitting the DB has its table present.
+        await scope.ServiceProvider.GetRequiredService<AdminDbContext>().Database.MigrateAsync();
     }
 
     public new async Task DisposeAsync()

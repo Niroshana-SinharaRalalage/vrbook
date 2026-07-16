@@ -3,6 +3,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
 using VrBook.Modules.Identity.Domain;
 using VrBook.Modules.Identity.Infrastructure.Persistence;

@@ -72,11 +72,11 @@
 | 47 | `Loyalty:BronzeThreshold` | appsettings + Bicep `main.bicep:381-383` (**DEAD**; hard-coded `LoyaltyAccount.cs:65-66`) | 1 (dead) | 1 (dead) | 1 (dead) | ⚠️ **G1** — VRB-206 |
 | 48 | `Loyalty:SilverThreshold` | appsettings + Bicep (**DEAD** — const `3`) | 3 (dead) | 3 (dead) | 3 (dead) | ⚠️ **G1** — VRB-206 |
 | 49 | `Loyalty:GoldThreshold` | appsettings + Bicep (**DEAD** — const `6`) | 6 (dead) | 6 (dead) | 6 (dead) | ⚠️ **G1** — VRB-206 |
-| 50 | `Loyalty:Enabled` | untyped read (default true, **not in any config**) | true | true | true | ⚠️ real flag, not surfaced — VRB-203/VRB-206 |
+| 50 | `Features:Loyalty.Enabled` (was `Loyalty:Enabled`) | feature-flag (DB override → config → default true); resolved live via `IFeatureToggle` | true | true | true | ✅ VRB-203 (renamed + live-togglable via `/admin/toggles`) |
 | **Feature flags** |
-| 51 | `Features:UseRedisHoldStore` | untyped read (default false, **not injected anywhere**) | false | false | false | ⚠️ real toggle, no consumer — VRB-203 |
-| 52 | `IFeatureToggle` runtime | `StubFeatureToggle` (**always default no-op**) | stub | stub | stub | ⚠️ **G13** — VRB-203 |
-| 53 | `GET/PUT /admin/toggles` | `TogglesController` / `AdminController` → **501** | 501 | 501 | 501 | ⚠️ **G13** — VRB-203 |
+| 51 | `Features:Booking.UseRedisHoldStore` (was `Features:UseRedisHoldStore`) | config read at `BookingModule` (startup DI hold-store selection) | false | false | false | ✅ VRB-203 (renamed to convention; startup-time, not a live toggle) |
+| 52 | `IFeatureToggle` runtime | `DbFeatureToggle` (DB override → config → default; 30s IMemoryCache per-replica) | real | real | real | ✅ VRB-203 (replaces `StubFeatureToggle`, closes G13; Redis distributed bust deferred) |
+| 53 | `GET/PUT /admin/toggles` | `TogglesController` → MediatR (`[Authorize(Roles="PlatformAdmin")]`) | live | live | live | ✅ VRB-203 (real, PlatformAdmin-only; was 501) |
 | **iCal rate-limit policy** |
 | 54 | `ChannelPoll` host suffixes / token / window / burst | `ChannelPollOptions.cs:23-30` **hard-coded** (bound, no appsettings) | hard-coded | hard-coded | hard-coded | ⚠️ move to config — VRB-214 |
 | **Bootstrap / seed** |

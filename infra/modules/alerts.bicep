@@ -495,23 +495,41 @@ resource searchAvailabilityTest 'Microsoft.Insights/webtests@2022-06-15' = if (!
   }
 }
 
-resource alertAvailability 'Microsoft.Insights/metricAlerts@2018-03-01' = if (!empty(apiBaseUrl) && !empty(appInsightsId)) {
+// VRB-306 follow-up (cold-start tune) — the first cut was a
+// WebtestLocationAvailabilityCriteria metric alert (failedLocationCount:1,
+// Sev1) that fired + emailed on-call when the STAGING API scaled to zero and a
+// probe hit a cold start (single blip → warmed → resolved = false positive).
+// Replaced with a sustained-failure KQL rule over AppAvailabilityResults: a
+// single failed period is filtered; only consecutive fully-failed periods fire.
+// - staging (may scale to zero): require 2 consecutive fully-failed 5m periods
+//   (~10m sustained) + Sev2 → a cold-start blip can't page.
+// - prod (runs warm, minReplicas>=1 — a real outage is immediate): 1 period + Sev1.
+resource alertAvailability 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = if (!empty(apiBaseUrl) && !empty(appInsightsId)) {
   name: 'alert-vrbook-${env}-availability-search'
-  location: 'global'
+  location: location
   tags: union(tags, ownerTag, { runbook: 'api-5xx-spike' })
   properties: {
-    description: 'Synthetic search availability failing from >=1 location — the API/search path is unreachable. Owner: ${alertOwner}. Runbook: docs/runbooks/api-5xx-spike.md. Sev1.'
-    severity: 1
+    displayName: 'Synthetic search availability failing (${env == 'prod' ? '5m' : '10m sustained'})'
+    description: 'The search availability test failed every probe across ${env == 'prod' ? '1 period' : '2 consecutive periods'}. On ${env == 'prod' ? 'prod the API runs warm (minReplicas>=1) so this is a real outage' : 'staging the API may scale to zero — a single cold-start blip is filtered; only a sustained failure fires'}. Owner: ${alertOwner}. Runbook: docs/runbooks/api-5xx-spike.md.'
+    severity: env == 'prod' ? 1 : 2
     enabled: true
-    scopes: [ searchAvailabilityTest.id, appInsightsId ]
     evaluationFrequency: 'PT5M'
     windowSize: 'PT5M'
+    scopes: [ workspaceId ]
     criteria: {
-      'odata.type': 'Microsoft.Azure.Monitor.WebtestLocationAvailabilityCriteria'
-      webTestId: searchAvailabilityTest.id
-      componentId: appInsightsId
-      failedLocationCount: 1
+      allOf: [
+        {
+          query: 'AppAvailabilityResults | where Name == "API search availability — ${env}" | summarize failed = countif(Success == false), total = count() by bin(TimeGenerated, 5m) | where total > 0 and failed == total'
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: env == 'prod' ? 1 : 2
+            minFailingPeriodsToAlert: env == 'prod' ? 1 : 2
+          }
+        }
+      ]
     }
-    actions: [ { actionGroupId: actionGroupId } ]
+    actions: { actionGroups: [ actionGroupId ] }
   }
 }

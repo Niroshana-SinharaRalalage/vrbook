@@ -28,7 +28,7 @@ Prioritized register of everything incomplete, stubbed, or defective, from the P
 | G10 | **P1** | Property **image upload/order/delete** endpoints → 501 (listings can't get photos via API) | `PropertiesController.cs` (A2.1) |
 | G11 | P2 | Booking admin **queue** + **manual booking** → 501 | `BookingsController.cs` (A4.1) |
 | G12 | P2 | Message **attachments** → 501 | `ThreadsController.cs` (A7.5) |
-| G13 | P2 | **Feature-flag runtime** is a no-op stub; `TogglesController`/`AlertsController` → 501 | `StubFeatureToggle.cs`, `AdminController.cs` |
+| G13 | ✅ **RESOLVED (VRB-203)** (feature flags) | ~~Feature-flag runtime is a no-op stub; `TogglesController` → 501~~ Fixed: `DbFeatureToggle` (DB override → config → default, 30s IMemoryCache) replaces `StubFeatureToggle`; `admin.feature_flags` table + `GET/PUT /admin/toggles` (PlatformAdmin) live; `Features:<Area>.<Capability>` naming convention; `Loyalty:Enabled`→`Features:Loyalty.Enabled` (live-togglable) + `Features:UseRedisHoldStore`→`Features:Booking.UseRedisHoldStore`. **`AlertsController` → 501 still open** (separate slice). | `src/Modules/VrBook.Modules.Admin/**`, `AdminController.cs` (toggles) |
 | G14 | P2 | **Admin module** is a no-op bounded context (TODO) | `AdminModule.cs:17-25` |
 | G15 | P2 | Infra stubs: `StubTaxCalculator`, `StubBookingAvailabilityReader`, `StubExternalChannelConflictChecker` (partly overridden), `NullRealtimeNotifier` fallback | `src/VrBook.Infrastructure/Stubs/` |
 | G16 | P2 | Stripe **dispute** (`charge.dispute.created`) only logs — no dispute domain event/workflow | `HandleStripeWebhookCommand.cs` |

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using VrBook.Migrator;
+using VrBook.Modules.Admin;
 using VrBook.Modules.Booking;
 using VrBook.Modules.Catalog;
 using VrBook.Modules.Identity;
@@ -52,6 +53,7 @@ try
     builder.Services.AddMessagingDbContextForMigrator(builder.Configuration);
     builder.Services.AddLoyaltyDbContextForMigrator(builder.Configuration);
     builder.Services.AddNotificationsDbContextForMigrator(builder.Configuration);
+    builder.Services.AddAdminDbContextForMigrator(builder.Configuration); // VRB-203 — admin.feature_flags
 
     // Slice OPS.M.22.6 — Bicep-declarative platform admin backfill.
     // Registers as scoped so it can be resolved once the host is built.

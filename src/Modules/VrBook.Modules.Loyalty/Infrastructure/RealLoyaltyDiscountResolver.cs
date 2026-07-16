@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using VrBook.Contracts.Enums;
 using VrBook.Contracts.Interfaces;
 using VrBook.Modules.Loyalty.Domain;
@@ -12,17 +11,21 @@ namespace VrBook.Modules.Loyalty.Infrastructure;
 /// <see cref="LoyaltyAccount"/> (returns Bronze 0% if none) and applies the
 /// percent discount from <see cref="TierDefinition.DiscountFor"/>.
 ///
-/// Respects the global <c>Loyalty:Enabled</c> config flag (proposal §11.3
-/// toggle A8.1.7). When false, all users see 0% — useful for incident response
-/// or staged rollouts.
+/// Respects the global <c>Features:Loyalty.Enabled</c> feature flag (VRB-203 — renamed
+/// from the legacy <c>Loyalty:Enabled</c> and now resolved through <see cref="IFeatureToggle"/>
+/// so a platform admin can toggle it live via <c>/admin/toggles</c> without a redeploy).
+/// When false, all users see 0% — useful for incident response or staged rollouts.
 /// </summary>
 internal sealed class RealLoyaltyDiscountResolver(
     LoyaltyDbContext db,
-    IConfiguration configuration) : ILoyaltyDiscountResolver
+    IFeatureToggle featureToggle) : ILoyaltyDiscountResolver
 {
     public async Task<LoyaltyDiscount> ResolveAsync(Guid? userId, CancellationToken ct = default)
     {
-        var enabled = configuration.GetValue("Loyalty:Enabled", true);
+        // Key literal (not the Admin FeatureFlagKeys constant) to avoid a Loyalty→Admin
+        // module reference; the two must stay in sync (Features:Loyalty.Enabled).
+        var enabled = await featureToggle.IsEnabledAsync(
+            "Features:Loyalty.Enabled", defaultValue: true, ct: ct);
         if (!userId.HasValue)
         {
             return new LoyaltyDiscount(LoyaltyTier.Bronze, 0m, enabled);

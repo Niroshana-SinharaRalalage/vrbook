@@ -78,12 +78,16 @@ Serilog; `ConnectionStrings:Postgres=""`; `Bootstrap:SeedPlatformAdmins=[]` (Bic
 
 ---
 
-## 6. Feature flags — **no real runtime**
+## 6. Feature flags — real runtime (VRB-203)
 
-1. `IFeatureToggle` — only impl is **`StubFeatureToggle`** (always returns default). Real Redis-backed resolver deferred.
-2. `TogglesController` `GET/PUT /admin/toggles` — both **501**.
-3. `Features:UseRedisHoldStore` — **real** config toggle (default false), but not injected anywhere → always Postgres holds.
-4. `Loyalty:Enabled` — **real** global flag (default true), not in any config.
+**Naming convention:** `Features:<Area>.<Capability>` — the `Features:` config section, then a dotted `Area.Capability` pair (e.g. `Features:Booking.InstantBook`). Declared with a safe default in `FeatureFlagKeys` (`src/Modules/VrBook.Modules.Admin/Application/FeatureFlagKeys.cs`).
+
+**Resolution order** (`DbFeatureToggle : IFeatureToggle`, VRB-203, replaces the old `StubFeatureToggle`): DB override in `admin.feature_flags` → config value under the flag key → caller's safe default. Cached in `IMemoryCache` for 30s **per-replica** (the `IFeatureToggle` contract's Redis + Service Bus distributed cache-bust is **deferred, not dropped** — Redis is not deployed; swap when it lands). A PUT invalidates the cache key.
+
+1. `GET /api/v1/admin/toggles` + `PUT /api/v1/admin/toggles/{key}` — real, **PlatformAdmin-only** (tenant admins 403). Global flags only for now (`scope="global"`; non-global → 400). List merges known config-backed defaults with DB overrides.
+2. `Features:Booking.UseRedisHoldStore` (renamed from `Features:UseRedisHoldStore`) — default false; **startup-time** DI selection of the hold store (not a live toggle — takes effect on restart). `BookingModule.cs`.
+3. `Features:Loyalty.Enabled` (renamed from `Loyalty:Enabled`) — default true; resolved **live** via `IFeatureToggle` in `RealLoyaltyDiscountResolver`, so a platform admin can toggle loyalty without a redeploy.
+4. **`AlertsController` `GET/POST /admin/alerts`** — still **501** (separate slice; not feature flags).
 
 ---
 
