@@ -39,10 +39,20 @@ public sealed class SettingsContractsTests
             ("Cancellation:Tiers:FirstTierDays", "14"),
             ("Cancellation:Tiers:SecondTierDays", "7"),
             ("Cancellation:Tiers:MiddleTierRefundPct", "40"),
-            ("Cancellation:Tiers:FinalCutoffHours", "72"))).GetActiveAsync().Result;
+            ("Cancellation:Tiers:FinalCutoffHours", "72"),
+            ("Cancellation:Tiers:UpgradePricePct", "10"))).GetActiveAsync().Result;
 
-        (tiers.FirstTierDays, tiers.SecondTierDays, tiers.MiddleTierRefundPct, tiers.FinalCutoffHours)
-            .Should().Be((14, 7, 40, 72));
+        (tiers.FirstTierDays, tiers.SecondTierDays, tiers.MiddleTierRefundPct, tiers.FinalCutoffHours, tiers.UpgradePricePct)
+            .Should().Be((14, 7, 40, 72, 10));
+    }
+
+    [Fact]
+    public void TierProvider_UpgradePricePct_DefaultsTo8()
+    {
+        var tiers = new ConfigCancellationTierProvider(Config()).GetActiveAsync().Result;
+
+        tiers.UpgradePricePct.Should().Be(8);
+        GlobalCancellationTiers.Default.UpgradePricePct.Should().Be(8);
     }
 
     [Fact]

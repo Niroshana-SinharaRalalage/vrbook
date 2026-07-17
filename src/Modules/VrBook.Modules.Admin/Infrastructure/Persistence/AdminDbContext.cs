@@ -22,10 +22,60 @@ public sealed class AdminDbContext(
 
     public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
 
+    // VRB-216 — product-settings tables (platform-global, no RLS).
+    public DbSet<CancellationTiers> CancellationTiers => Set<CancellationTiers>();
+    public DbSet<PlatformFeeOverride> PlatformFeeOverrides => Set<PlatformFeeOverride>();
+    public DbSet<TaxPostureRow> TaxPosture => Set<TaxPostureRow>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AdminDbContext).Assembly);
+    }
+}
+
+internal sealed class CancellationTiersConfiguration : IEntityTypeConfiguration<CancellationTiers>
+{
+    public void Configure(EntityTypeBuilder<CancellationTiers> builder)
+    {
+        builder.ToTable("cancellation_tiers", AdminDbContext.SchemaName);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).HasColumnName("id");
+        builder.Property(x => x.Version).HasColumnName("version").IsRequired();
+        builder.Property(x => x.FirstTierDays).HasColumnName("first_tier_days").IsRequired();
+        builder.Property(x => x.SecondTierDays).HasColumnName("second_tier_days").IsRequired();
+        builder.Property(x => x.MiddleTierRefundPct).HasColumnName("middle_tier_pct").IsRequired();
+        builder.Property(x => x.FinalCutoffHours).HasColumnName("final_cutoff_hours").IsRequired();
+        builder.Property(x => x.UpgradePricePct).HasColumnName("upgrade_price_pct").IsRequired();
+        builder.Property(x => x.UpdatedByUserId).HasColumnName("updated_by_user_id").IsRequired();
+        builder.Property(x => x.UpdatedAt).HasColumnName("updated_at").IsRequired();
+    }
+}
+
+internal sealed class PlatformFeeOverrideConfiguration : IEntityTypeConfiguration<PlatformFeeOverride>
+{
+    public void Configure(EntityTypeBuilder<PlatformFeeOverride> builder)
+    {
+        builder.ToTable("platform_fee_overrides", AdminDbContext.SchemaName);
+        builder.HasKey(x => x.TenantId);
+        builder.Property(x => x.TenantId).HasColumnName("tenant_id");
+        builder.Property(x => x.PlatformFeeBps).HasColumnName("platform_fee_bps").IsRequired();
+        builder.Property(x => x.UpdatedByUserId).HasColumnName("updated_by_user_id").IsRequired();
+        builder.Property(x => x.UpdatedAt).HasColumnName("updated_at").IsRequired();
+    }
+}
+
+internal sealed class TaxPostureConfiguration : IEntityTypeConfiguration<TaxPostureRow>
+{
+    public void Configure(EntityTypeBuilder<TaxPostureRow> builder)
+    {
+        builder.ToTable("tax_posture", AdminDbContext.SchemaName);
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).HasColumnName("id");
+        builder.Property(x => x.FacilitatorActive).HasColumnName("facilitator_active").IsRequired();
+        builder.Property(x => x.PerStateJson).HasColumnName("per_state_json").HasColumnType("jsonb").IsRequired();
+        builder.Property(x => x.UpdatedByUserId).HasColumnName("updated_by_user_id").IsRequired();
+        builder.Property(x => x.UpdatedAt).HasColumnName("updated_at").IsRequired();
     }
 }
 
