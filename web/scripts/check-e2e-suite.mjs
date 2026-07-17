@@ -11,7 +11,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Honest authored total (architect: count Playwright's total incl. test.fixme;
-// do not pad to a round number). anon 19 + guest 16 + owner 14 + platform-admin 6.
+// do not pad to a round number). anon 19 + guest 16 + owner 19 + platform-admin 6.
 // VRB-110 batched the deferred WEB-GUEST specs (+8 anon: home-featured 2,
 // seo-surface 3, a11y-flows 3; +6 guest: mobile-nav 2, mobile-checkout 1 fixme,
 // edit-profile 1, a11y-flows 2), taking 31 → 45.
@@ -19,7 +19,9 @@ import { fileURLToPath } from 'node:url';
 // fixme), taking 45 → 49.
 // VRB-311 added anonymous/consent-legal (+6 anon: no-beacon-before-accept,
 // accept, reject, legal pages, footer/manage, post-accept-beacon fixme), 49 → 55.
-const EXPECTED_SCENARIOS = 55;
+// VRB-210 added owner/admin-settings-shell (+5 owner: index nav, platform-403,
+// nav-to-panel, placeholder, save-flow fixme), 55 → 60.
+const EXPECTED_SCENARIOS = 60;
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const e2eDir = join(webRoot, 'tests', 'e2e');
