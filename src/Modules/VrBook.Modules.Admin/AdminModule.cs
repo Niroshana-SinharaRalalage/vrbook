@@ -36,6 +36,12 @@ public sealed class AdminModule : IModuleRegistration
         // real DB-backed resolver. Scoped because it reads the scoped AdminDbContext.
         services.Replace(ServiceDescriptor.Scoped<IFeatureToggle, DbFeatureToggle>());
 
+        // VRB-216 Phase B — replace the config-backed settings providers (VrBook.Infrastructure)
+        // with the DB-backed ones (admin.* tables, platform-admin editable). Invisible to PAY.
+        services.Replace(ServiceDescriptor.Scoped<ICancellationTierProvider, DbCancellationTierProvider>());
+        services.Replace(ServiceDescriptor.Scoped<IPlatformFeeResolver, DbPlatformFeeResolver>());
+        services.Replace(ServiceDescriptor.Scoped<ITaxPostureProvider, DbTaxPostureProvider>());
+
         services.AddModuleAssembly(typeof(AdminModule).Assembly);
         return services;
     }
