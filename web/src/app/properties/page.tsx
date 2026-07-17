@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
+import { TrackOnMount } from '@/components/consent/TrackOnMount';
 import { PropertyCard, type PropertyCardModel } from '@/components/property/PropertyCard';
 import { searchProperties, type PropertySummary } from '@/lib/api/catalog';
 
@@ -95,6 +96,10 @@ const PropertiesPage = ({ searchParams }: PropertiesPageProps) => {
   return (
     <>
       <SiteHeader />
+      {/* VRB-311 funnel — record a search when a destination query is present. */}
+      {searchParams.destination && (
+        <TrackOnMount event="search_performed" props={{ destination: searchParams.destination }} />
+      )}
       <main className="container py-10">
         <header className="mb-8 space-y-1">
           <h1 className="text-3xl font-semibold tracking-tight">Browse stays</h1>

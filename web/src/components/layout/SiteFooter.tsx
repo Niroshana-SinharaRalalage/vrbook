@@ -1,5 +1,7 @@
 import Link from 'next/link';
 
+import { CookiePreferencesButton } from '@/components/consent/CookiePreferencesButton';
+
 export const SiteFooter = () => {
   const year = new Date().getFullYear();
   return (
@@ -22,6 +24,17 @@ export const SiteFooter = () => {
           <Link href="/auth/signout" className="hover:text-foreground">
             Sign out
           </Link>
+          {/* VRB-311 — legal + consent surfaces */}
+          <Link href="/legal/terms" className="hover:text-foreground">
+            Terms
+          </Link>
+          <Link href="/legal/privacy" className="hover:text-foreground">
+            Privacy
+          </Link>
+          <Link href="/legal/cancellation" className="hover:text-foreground">
+            Cancellation
+          </Link>
+          <CookiePreferencesButton className="text-left hover:text-foreground" />
         </nav>
         <p>&copy; {year} VrBook</p>
       </div>
