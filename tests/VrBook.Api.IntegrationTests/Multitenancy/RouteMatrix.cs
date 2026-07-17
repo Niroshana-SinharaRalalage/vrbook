@@ -214,6 +214,53 @@ public static class RouteMatrix
         yield return Anon("Anonymous_PUT_toggle_returns_401",
             "PUT", "/api/v1/admin/toggles/{key}");
 
+        // ====================================================================
+        // VRB-216 — /api/v1/admin/platform/settings/* (PlatformSettingsController)
+        // [Authorize(Roles="PlatformAdmin")] — global platform settings, no tenant
+        // dimension. GETs assert the PlatformAdmin happy path; PUT happy-paths (which
+        // need a valid body) live in the Contract/integration tests, so here the PUT
+        // rows assert only the who-may-reach rejections.
+        // ====================================================================
+        yield return new Cell("PlatformAdmin_GET_cancellation_tiers_returns_200",
+            "GET", "/api/v1/admin/platform/settings/cancellation-tiers", Persona.PlatformAdmin, TargetTenant.None, Ok);
+        yield return OwnerRejected("OwnerA_GET_cancellation_tiers_returns_403",
+            "GET", "/api/v1/admin/platform/settings/cancellation-tiers", Persona.OwnerA);
+        yield return Anon("Anonymous_GET_cancellation_tiers_returns_401",
+            "GET", "/api/v1/admin/platform/settings/cancellation-tiers");
+        yield return OwnerRejected("OwnerA_PUT_cancellation_tiers_returns_403",
+            "PUT", "/api/v1/admin/platform/settings/cancellation-tiers", Persona.OwnerA);
+        yield return Anon("Anonymous_PUT_cancellation_tiers_returns_401",
+            "PUT", "/api/v1/admin/platform/settings/cancellation-tiers");
+
+        yield return new Cell("PlatformAdmin_GET_platform_fee_returns_200",
+            "GET", "/api/v1/admin/platform/settings/platform-fee", Persona.PlatformAdmin, TargetTenant.None, Ok);
+        yield return OwnerRejected("OwnerA_GET_platform_fee_returns_403",
+            "GET", "/api/v1/admin/platform/settings/platform-fee", Persona.OwnerA);
+        yield return Anon("Anonymous_GET_platform_fee_returns_401",
+            "GET", "/api/v1/admin/platform/settings/platform-fee");
+        yield return OwnerRejected("OwnerA_PUT_platform_fee_returns_403",
+            "PUT", "/api/v1/admin/platform/settings/platform-fee/{tenantId}", Persona.OwnerA);
+        yield return Anon("Anonymous_PUT_platform_fee_returns_401",
+            "PUT", "/api/v1/admin/platform/settings/platform-fee/{tenantId}");
+
+        yield return new Cell("PlatformAdmin_GET_tax_posture_returns_200",
+            "GET", "/api/v1/admin/platform/settings/tax-posture", Persona.PlatformAdmin, TargetTenant.None, Ok);
+        yield return OwnerRejected("OwnerA_GET_tax_posture_returns_403",
+            "GET", "/api/v1/admin/platform/settings/tax-posture", Persona.OwnerA);
+        yield return Anon("Anonymous_GET_tax_posture_returns_401",
+            "GET", "/api/v1/admin/platform/settings/tax-posture");
+        yield return OwnerRejected("OwnerA_PUT_tax_posture_returns_403",
+            "PUT", "/api/v1/admin/platform/settings/tax-posture", Persona.OwnerA);
+        yield return Anon("Anonymous_PUT_tax_posture_returns_401",
+            "PUT", "/api/v1/admin/platform/settings/tax-posture");
+
+        // VRB-211 — /api/v1/admin/settings/changes (SettingsController) is [Authorize]
+        // (any admin; the section filter scopes it), so a tenant owner may read it.
+        yield return new Cell("OwnerA_GET_settings_changes_returns_200",
+            "GET", "/api/v1/admin/settings/changes", Persona.OwnerA, TargetTenant.None, Ok);
+        yield return Anon("Anonymous_GET_settings_changes_returns_401",
+            "GET", "/api/v1/admin/settings/changes");
+
         foreach (var tenant in new[] { TargetTenant.A, TargetTenant.B })
         {
             yield return new Cell(
