@@ -77,7 +77,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-309 | DEVOPS | Must | TODO | |
 | VRB-312 | DEVOPS | Must | TODO | |
 | VRB-313 | DEVOPS | Must | TODO | |
-| VRB-311 | COMPLIANCE | Must | CLAIMED | story/VRB-311 |
+| VRB-311 | COMPLIANCE | Must | DONE | story/VRB-311 |
 | VRB-310 | COMPLIANCE | Must | TODO | |
 
 ## Wave 3 — Phase 3 (post-launch; strictly sequenced)
@@ -118,6 +118,6 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 
 ---
 
-**Progress rollup:** 20 / 86 DONE. Update this count in your `done:` commit.
+**Progress rollup:** 21 / 86 DONE. Update this count in your `done:` commit.
 
 > **DEFERRED (owner decision 2026-07-14):** VRB-301 (cd-prod.yml) + VRB-302 (blue-green rollback) — build & validate on staging first, design prod infra/deploy later. Do not claim these until re-activated.
