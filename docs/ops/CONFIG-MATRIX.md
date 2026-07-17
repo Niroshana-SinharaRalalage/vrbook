@@ -56,6 +56,7 @@
 | 33 | `PORT` / `HOSTNAME` | Bicep | 3000 / localhost | 3000 / `0.0.0.0` | 3000 / `0.0.0.0` | ✅ |
 | 34 | `NEXT_TELEMETRY_DISABLED` | Bicep | 1 | 1 | 1 | ✅ |
 | 35 | `NEXT_PUBLIC_MAPBOX_TOKEN` | env.d.ts only (**unread**) | — | — | — | 🔶 declared, not consumed |
+| 36 | `NEXT_PUBLIC_APPLICATIONINSIGHTS_CONNECTION_STRING` | NEXT_PUBLIC ← KV `appinsights-connection-string` (**producer: `infra/main.bicep`**) | empty (analytics no-op) | Bicep-written per-env | Bicep-written (own prod property) | ✅ VRB-311 (producer documented; parity test allowlists it; web safe-disabled when empty) |
 | 36 | `NEXT_PUBLIC_SIGNALR_NEGOTIATE_URL` | env.d.ts only (**unread**) | — | — | — | 🔶 declared, not consumed |
 | 37 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | env.d.ts only (**unread**) | — | — | — | ⚠️ needed when Stripe Elements ships — VRB-217 |
 | **CORS / Swagger / hosting** |

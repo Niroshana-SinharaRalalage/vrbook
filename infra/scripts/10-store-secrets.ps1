@@ -107,6 +107,9 @@ Set-KvSecret -Name 'entra-tenant-issuer-host' -Value 'pending-identity-setup' `
 # values; on re-run the idempotent skip preserves whatever real value is already set.
 #   NOTE: acs-connection-string is intentionally NOT seeded here — infra/modules/
 #   acs.bicep writes it at deploy time (it is the documented producer).
+#   NOTE: appinsights-connection-string is likewise NOT seeded here — infra/main.bicep
+#   (VRB-311) writes it from appi.outputs.connectionString (documented producer;
+#   the web app dependsOn it so it exists before the secretRef binds).
 Set-KvSecret -Name 'stripe-secret' -Value 'pending-identity-setup' `
     -Description 'Stripe__SecretKey (sk_...). Placeholder so the secretRef resolves on a fresh deploy; operator overwrites via the interactive prompt below (test for dev/staging, live for prod).'
 Set-KvSecret -Name 'stripe-webhook-secret' -Value 'pending-identity-setup' `
