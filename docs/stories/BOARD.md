@@ -57,7 +57,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-213 | SETTINGS | Must | TODO | |
 | VRB-214 | SETTINGS | Must | TODO | |
 | VRB-215 | SETTINGS | Must | TODO | |
-| VRB-216 | SETTINGS | Must | TODO | |
+| VRB-216 | SETTINGS | Must | CLAIMED | story/VRB-216-contracts |
 | VRB-217 | SETTINGS | Must | TODO | |
 | VRB-218 | SETTINGS | Should | TODO | |
 | VRB-219 | SETTINGS | Should | TODO | |
