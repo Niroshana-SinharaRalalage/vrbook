@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CancellationForm } from './CancellationPanel';
 import type { PropertyCancellationSettingsDto } from '@/lib/api/settings';
@@ -14,6 +14,13 @@ vi.mock('@/lib/api/settings', () => ({
 vi.mock('@/hooks/useAuthedQuery', () => ({
   useAuthedQuery: () => ({ data: [], isLoading: false, isError: false, needsSignIn: false }),
 }));
+
+beforeAll(() => {
+  Element.prototype.hasPointerCapture ??= () => false;
+  Element.prototype.setPointerCapture ??= () => undefined;
+  Element.prototype.releasePointerCapture ??= () => undefined;
+  Element.prototype.scrollIntoView ??= () => undefined;
+});
 
 const initial: PropertyCancellationSettingsDto = {
   propertyId: 'p1',
@@ -32,25 +39,45 @@ const initial: PropertyCancellationSettingsDto = {
   lastChangedAt: null,
 };
 
-describe('<CancellationForm /> — the VRB-210 worked example', () => {
+describe('<CancellationForm /> (VRB-215)', () => {
   beforeEach(() => putPropertyCancellation.mockReset());
 
-  it('shows the platform tiers read-only and the upgrade %', () => {
+  it('renders both models as a radio group with per-model descriptions', () => {
     render(<CancellationForm propertyId="p1" initial={initial} />);
-    expect(screen.getByText(/platform tiers/i)).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /refundable upgrade \(\+8% of subtotal\)/i })).toBeInTheDocument();
+    const group = screen.getByRole('radiogroup', { name: /cancellation model/i });
+    expect(within(group).getByRole('radio', { name: /tiered refund/i })).toBeChecked();
+    const upgrade = within(group).getByRole('radio', { name: /refundable-rate upgrade/i });
+    expect(upgrade).toHaveAccessibleDescription(/8% of the subtotal/i);
   });
 
-  it('edits the model, saves, and calls the API', async () => {
+  it('has no price input (upgrade price is platform-set)', () => {
+    render(<CancellationForm propertyId="p1" initial={initial} />);
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  it('updates the guest preview when the model changes', async () => {
+    const user = userEvent.setup();
+    render(<CancellationForm propertyId="p1" initial={initial} />);
+    await user.click(screen.getByRole('radio', { name: /refundable-rate upgrade/i }));
+    const preview = screen.getByText(/guests will see/i).parentElement!;
+    expect(preview).toHaveTextContent(/non-refundable/i);
+  });
+
+  it('switching models prompts a confirm modal, then saves', async () => {
     putPropertyCancellation.mockResolvedValue({ ...initial, model: 'RefundableUpgrade' });
     const user = userEvent.setup();
     render(<CancellationForm propertyId="p1" initial={initial} />);
-    await user.selectOptions(screen.getByLabelText(/policy model/i), 'RefundableUpgrade');
+
+    await user.click(screen.getByRole('radio', { name: /refundable-rate upgrade/i }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveAccessibleName(/change cancellation policy/i);
+    expect(putPropertyCancellation).not.toHaveBeenCalled(); // not until confirmed
+
+    await user.click(within(dialog).getByRole('button', { name: /save policy/i }));
     expect(putPropertyCancellation).toHaveBeenCalledWith('p1', { model: 'RefundableUpgrade' });
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/saved/i));
   });
-
-  // NB: server 422 → field-error mapping is unit-tested directly in
-  // useSettingsForm.test.ts; not re-tested through the UI here.
 });
