@@ -39,7 +39,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | ID | Lane | Priority | Status | Branch |
 |---|---|---|---|---|
 | VRB-105 | PAY | Must | DONE | story/VRB-105 |
-| VRB-104 | PAY | Must | IN-REVIEW | story/VRB-104 |
+| VRB-104 | PAY | Must | DONE | story/VRB-104 |
 | VRB-103 | PAY | Must | TODO | |
 | VRB-102 | PAY | Must | TODO | |
 | VRB-113 | PAY | Should | TODO | |
@@ -118,6 +118,6 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 
 ---
 
-**Progress rollup:** 23 / 86 DONE. Update this count in your `done:` commit.
+**Progress rollup:** 24 / 86 DONE. Update this count in your `done:` commit.
 
 > **DEFERRED (owner decision 2026-07-14):** VRB-301 (cd-prod.yml) + VRB-302 (blue-green rollback) — build & validate on staging first, design prod infra/deploy later. Do not claim these until re-activated.
