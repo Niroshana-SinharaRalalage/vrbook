@@ -23,6 +23,9 @@ public sealed class SeedSecretsParityTests
         {
             // Written by infra/modules/acs.bicep at deploy time (main.bicep line ~74 in acs.bicep).
             ["acs-connection-string"] = "infra/modules/acs.bicep",
+            // VRB-311 — written by infra/main.bicep from appi.outputs.connectionString
+            // (the web app dependsOn it so it exists before the secretRef binds).
+            ["appinsights-connection-string"] = "infra/main.bicep",
         };
 
     /// <summary>Secrets seeded but intentionally NOT bound as a Container App secretRef —

@@ -130,12 +130,20 @@ jobs:
           AUTHORITY_ADMIN=$(az keyvault secret show --vault-name kv-vrbook-staging --name entra-web-authority-admin --query value -o tsv)
           AUTHORITY_GUEST=$(az keyvault secret show --vault-name kv-vrbook-staging --name entra-web-authority-guest --query value -o tsv)
           CLIENT_ID=$(az keyvault secret show --vault-name kv-vrbook-staging --name entra-web-client-id --query value -o tsv)
+          # VRB-311 — App Insights connection string for the browser bundle.
+          # Tolerant: if the secret is absent/placeholder the build-arg is empty
+          # and analytics is a no-op (the web ships safe-disabled). Written to KV
+          # per-env by main.bicep, so a staging property can't leak into prod.
+          APPINSIGHTS_CS=$(az keyvault secret show --vault-name kv-vrbook-staging --name appinsights-connection-string --query value -o tsv 2>/dev/null || echo "")
+          if [ "$APPINSIGHTS_CS" = "pending-identity-setup" ]; then APPINSIGHTS_CS=""; fi
           echo "::add-mask::${AUTHORITY_ADMIN}"
           echo "::add-mask::${AUTHORITY_GUEST}"
           echo "::add-mask::${CLIENT_ID}"
+          echo "::add-mask::${APPINSIGHTS_CS}"
           echo "authority_admin=${AUTHORITY_ADMIN}" >> "$GITHUB_OUTPUT"
           echo "authority_guest=${AUTHORITY_GUEST}" >> "$GITHUB_OUTPUT"
           echo "client_id=${CLIENT_ID}" >> "$GITHUB_OUTPUT"
+          echo "appinsights_cs=${APPINSIGHTS_CS}" >> "$GITHUB_OUTPUT"
 
       # VRB-205 item 3 (closes G8) — resolve the API base URL from the LIVE
       # Container App instead of a baked FQDN, so it survives any CAE rebuild.
@@ -160,6 +168,7 @@ jobs:
             NEXT_PUBLIC_ENTRA_AUTHORITY_ADMIN=${{ steps.entra.outputs.authority_admin }}
             NEXT_PUBLIC_ENTRA_AUTHORITY_GUEST=${{ steps.entra.outputs.authority_guest }}
             NEXT_PUBLIC_ENTRA_CLIENT_ID=${{ steps.entra.outputs.client_id }}
+            NEXT_PUBLIC_APPLICATIONINSIGHTS_CONNECTION_STRING=${{ steps.entra.outputs.appinsights_cs }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max
 
