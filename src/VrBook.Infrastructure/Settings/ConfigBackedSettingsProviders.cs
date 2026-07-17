@@ -22,6 +22,7 @@ public sealed class ConfigCancellationTierProvider(IConfiguration configuration)
             SecondTierDays: configuration.GetValue("Cancellation:Tiers:SecondTierDays", d.SecondTierDays),
             MiddleTierRefundPct: configuration.GetValue("Cancellation:Tiers:MiddleTierRefundPct", d.MiddleTierRefundPct),
             FinalCutoffHours: configuration.GetValue("Cancellation:Tiers:FinalCutoffHours", d.FinalCutoffHours),
+            UpgradePricePct: configuration.GetValue("Cancellation:Tiers:UpgradePricePct", d.UpgradePricePct),
             Version: 0);
         return Task.FromResult(tiers);
     }

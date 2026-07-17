@@ -18,18 +18,22 @@ public interface ICancellationTierProvider
 /// cancelling at least this many days before check-in. <paramref name="SecondTierDays"/>:
 /// lower bound of the partial band. <paramref name="MiddleTierRefundPct"/>: percent
 /// refunded within the band (0–100). <paramref name="FinalCutoffHours"/>: no refund
-/// inside this many hours. <paramref name="Version"/>: monotonic version of the
-/// active row (0 for config-backed) — snapshotted onto bookings for provenance.
-/// Invariant: <c>FirstTierDays &gt; SecondTierDays</c> and <c>MiddleTierRefundPct ∈ [0,100]</c>.
+/// inside this many hours. <paramref name="UpgradePricePct"/>: the platform-set
+/// RefundableUpgrade price as a percent of subtotal (Q2, VRB-216) — the resolver
+/// computes the concrete amount at Place. <paramref name="Version"/>: monotonic version
+/// of the active row (0 for config-backed) — snapshotted onto bookings for provenance.
+/// Invariant: <c>FirstTierDays &gt; SecondTierDays</c>, <c>MiddleTierRefundPct ∈ [0,100]</c>,
+/// <c>UpgradePricePct ∈ [0,100]</c>.
 /// </summary>
 public sealed record GlobalCancellationTiers(
     int FirstTierDays,
     int SecondTierDays,
     int MiddleTierRefundPct,
     int FinalCutoffHours,
+    int UpgradePricePct,
     int Version)
 {
-    /// <summary>The seed defaults (7 / 2 / 50% / 48h) — the Q24 proposal starting point;
-    /// fully editable via VRB-216 once the DB-backed provider lands.</summary>
-    public static readonly GlobalCancellationTiers Default = new(7, 2, 50, 48, Version: 0);
+    /// <summary>The seed defaults (7 / 2 / 50% / 48h; upgrade 8% of subtotal) — the Q24
+    /// starting point; fully editable via VRB-216 once the DB-backed provider lands.</summary>
+    public static readonly GlobalCancellationTiers Default = new(7, 2, 50, 48, UpgradePricePct: 8, Version: 0);
 }
