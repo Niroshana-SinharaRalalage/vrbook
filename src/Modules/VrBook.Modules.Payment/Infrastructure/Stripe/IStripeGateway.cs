@@ -11,8 +11,10 @@ public interface IStripeGateway
 
     /// <summary>
     /// OPS.M.5 §3.6 + §3.7 — Connect-aware overload that routes the charge to a
-    /// destination connected account, takes a platform application fee, and
-    /// uses the destination for VAT/tax via <c>OnBehalfOf</c>.
+    /// destination connected account and takes a platform application fee. The
+    /// platform stays merchant-of-record: <c>OnBehalfOf</c> is deliberately NOT
+    /// set (VRB-105 / gap G38), so tax/settlement liability sits on the platform
+    /// per the marketplace-facilitator posture (VRB-103).
     /// </summary>
     Task<StripeIntentCreated> CreatePaymentIntentAsync(
         decimal amount,

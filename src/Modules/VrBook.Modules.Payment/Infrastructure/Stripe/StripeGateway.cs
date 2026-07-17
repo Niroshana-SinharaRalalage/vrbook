@@ -53,6 +53,27 @@ internal sealed class StripeGateway : IStripeGateway, VrBook.Contracts.Interface
     {
         RequireConfigured();
         var service = new PaymentIntentService();
+        var opts = BuildDestinationChargeOptions(amount, currency, metadata, destinationAccountId, applicationFeeAmount);
+        var requestOpts = new RequestOptions { IdempotencyKey = idempotencyKey };
+        var pi = await StripeRetryPipeline.Build().ExecuteAsync(
+            async token => await service.CreateAsync(opts, requestOpts, token),
+            cancellationToken);
+        logger.LogInformation(
+            "Stripe PaymentIntent created stripe_payment_intent_id={Id} destination_account={Dest} fee_cents={Fee} on_behalf_of={OnBehalfOf} idempotency_key={Key}",
+            pi.Id, destinationAccountId ?? "<platform>", applicationFeeAmount, opts.OnBehalfOf is not null, idempotencyKey);
+        return new StripeIntentCreated(pi.Id, pi.ClientSecret, MapStatus(pi.Status));
+    }
+
+    /// <summary>
+    /// Builds the <see cref="PaymentIntentCreateOptions"/>. Extracted for
+    /// unit-testability (VRB-105). For a Connect destination charge the platform
+    /// stays merchant-of-record: <c>TransferData.Destination</c> +
+    /// <c>ApplicationFeeAmount</c> route funds + fee.
+    /// </summary>
+    internal static PaymentIntentCreateOptions BuildDestinationChargeOptions(
+        decimal amount, string currency, IDictionary<string, string>? metadata,
+        string? destinationAccountId, long applicationFeeAmount)
+    {
         var opts = new PaymentIntentCreateOptions
         {
             Amount = ToCents(amount),
@@ -64,20 +85,15 @@ internal sealed class StripeGateway : IStripeGateway, VrBook.Contracts.Interface
         };
         if (destinationAccountId is not null)
         {
-            // OPS.M.5 §3.6 (D6) — Connect destination charge: funds land on the
-            // connected account net of the application fee; OnBehalfOf for VAT.
+            // Connect destination charge — platform is merchant-of-record
+            // (VRB-105 / gap G38): route funds net of the platform fee to the
+            // connected account, but do NOT set OnBehalfOf — that would make the
+            // supplier the settlement merchant + card-statement entity, which
+            // contradicts the marketplace-facilitator tax posture (VRB-103).
             opts.TransferData = new PaymentIntentTransferDataOptions { Destination = destinationAccountId };
             opts.ApplicationFeeAmount = applicationFeeAmount;
-            opts.OnBehalfOf = destinationAccountId;
         }
-        var requestOpts = new RequestOptions { IdempotencyKey = idempotencyKey };
-        var pi = await StripeRetryPipeline.Build().ExecuteAsync(
-            async token => await service.CreateAsync(opts, requestOpts, token),
-            cancellationToken);
-        logger.LogInformation(
-            "Stripe PaymentIntent created stripe_payment_intent_id={Id} destination_account={Dest} fee_cents={Fee} idempotency_key={Key}",
-            pi.Id, destinationAccountId ?? "<platform>", applicationFeeAmount, idempotencyKey);
-        return new StripeIntentCreated(pi.Id, pi.ClientSecret, MapStatus(pi.Status));
+        return opts;
     }
 
     public async Task<StripeIntentUpdate> CapturePaymentIntentAsync(string stripePaymentIntentId, CancellationToken cancellationToken = default)
