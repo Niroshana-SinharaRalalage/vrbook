@@ -39,7 +39,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | ID | Lane | Priority | Status | Branch |
 |---|---|---|---|---|
 | VRB-105 | PAY | Must | DONE | story/VRB-105 |
-| VRB-104 | PAY | Must | TODO | |
+| VRB-104 | PAY | Must | CLAIMED | story/VRB-104 |
 | VRB-103 | PAY | Must | TODO | |
 | VRB-102 | PAY | Must | TODO | |
 | VRB-113 | PAY | Should | TODO | |
