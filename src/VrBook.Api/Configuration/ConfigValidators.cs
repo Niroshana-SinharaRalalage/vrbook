@@ -15,8 +15,13 @@ namespace VrBook.Api.Configuration;
 
 /// <summary>Entra required-presence gate. Only registered outside Development —
 /// a missing value here must crash the host rather than boot with JwtBearer
-/// unwired (gap G5).</summary>
-internal sealed class EntraExternalIdOptionsValidator : IValidateOptions<EntraExternalIdOptions>
+/// unwired (gap G5). VRB-209 (gap G7) adds a <b>Production-only</b>
+/// <c>AdminFlowName</c> requirement: in prod the admin-vs-guest provisioning gate
+/// (ADR-0016) must not be silently inert, so an unset flow name fails fast; Staging
+/// is exempt because the real Entra admin flow doesn't exist until OPS.M.22 (the gate
+/// stays inert there by design, admins pre-seeded).</summary>
+internal sealed class EntraExternalIdOptionsValidator(bool requireAdminFlowName)
+    : IValidateOptions<EntraExternalIdOptions>
 {
     public ValidateOptionsResult Validate(string? name, EntraExternalIdOptions options)
     {
@@ -32,6 +37,10 @@ internal sealed class EntraExternalIdOptionsValidator : IValidateOptions<EntraEx
         if (string.IsNullOrWhiteSpace(options.ClientId))
         {
             failures.Add("EntraExternalId:ClientId is required (Staging/Production).");
+        }
+        if (requireAdminFlowName && string.IsNullOrWhiteSpace(options.AdminFlowName))
+        {
+            failures.Add("EntraExternalId:AdminFlowName is required (Production) — the admin-vs-guest provisioning gate (ADR-0016) must not boot silently inert; set it to the Entra admin sign-in flow name.");
         }
         return failures.Count == 0
             ? ValidateOptionsResult.Success

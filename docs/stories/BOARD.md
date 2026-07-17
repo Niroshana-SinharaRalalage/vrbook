@@ -31,7 +31,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-301 | DEVOPS | Must (P0) | DEFERRED | (prod pipeline — postponed to pre-launch, owner 2026-07-14) |
 | VRB-302 | DEVOPS | Must (P0) | DEFERRED | (blue-green rollback — postponed with VRB-301) |
 | VRB-303 | DEVOPS | Must | DONE | story/VRB-303 |
-| VRB-304 | DEVOPS | Must | TODO | |
+| VRB-304 | DEVOPS | Must | IN-REVIEW | story/VRB-304 |
 | VRB-306 | DEVOPS | Must | DONE | story/VRB-306 |
 
 ## Wave 1 — Launch features (claim after Wave 0 `DONE`)
@@ -57,7 +57,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-213 | SETTINGS | Must | TODO | |
 | VRB-214 | SETTINGS | Must | TODO | |
 | VRB-215 | SETTINGS | Must | TODO | |
-| VRB-216 | SETTINGS | Must | TODO | |
+| VRB-216 | SETTINGS | Must | CLAIMED | story/VRB-216-contracts |
 | VRB-217 | SETTINGS | Must | TODO | |
 | VRB-218 | SETTINGS | Should | TODO | |
 | VRB-219 | SETTINGS | Should | TODO | |
@@ -65,7 +65,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-206 | SETTINGS | P1 | DONE | story/VRB-206 |
 | VRB-207 | SETTINGS | P1 | DONE | story/VRB-207 |
 | VRB-208 | SETTINGS | P2 | DONE | story/VRB-208 |
-| VRB-209 | SETTINGS | P2 | TODO | |
+| VRB-209 | SETTINGS | P2 | DONE | story/VRB-209 |
 
 ## Wave 2 — Launch-week (operator-gated)
 
@@ -118,6 +118,6 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 
 ---
 
-**Progress rollup:** 19 / 86 DONE. Update this count in your `done:` commit.
+**Progress rollup:** 20 / 86 DONE. Update this count in your `done:` commit.
 
 > **DEFERRED (owner decision 2026-07-14):** VRB-301 (cd-prod.yml) + VRB-302 (blue-green rollback) — build & validate on staging first, design prod infra/deploy later. Do not claim these until re-activated.

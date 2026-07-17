@@ -42,7 +42,10 @@ public static class ConfigValidationExtensions
         else
         {
             entra.ValidateDataAnnotations().ValidateOnStart();
-            services.AddSingleton<IValidateOptions<EntraExternalIdOptions>, EntraExternalIdOptionsValidator>();
+            // VRB-209 (G7) — AdminFlowName is fail-fast required in Production only; Staging
+            // is exempt (no real Entra admin flow until OPS.M.22 — the gate stays inert there).
+            services.AddSingleton<IValidateOptions<EntraExternalIdOptions>>(
+                new EntraExternalIdOptionsValidator(requireAdminFlowName: environment.IsProduction()));
             validated.Add((typeof(EntraExternalIdOptions), EntraExternalIdOptions.SectionName));
         }
 

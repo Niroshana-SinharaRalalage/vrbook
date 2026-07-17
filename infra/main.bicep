@@ -239,6 +239,10 @@ module pg 'modules/postgres-flexible.bicep' = {
     skuTier: pgTier
     storageSizeGB: pgStorageGB
     backupRetentionDays: pgBackupRetention
+    // VRB-304 — geo-redundant backup for prod DR (paired-region geo-restore).
+    // Enabled at server-create only; prod gets it on the VRB-301 prod deploy.
+    // staging/dev stay Disabled (no cross-region cost; existing servers unchanged).
+    geoRedundantBackup: isProd ? 'Enabled' : 'Disabled'
     haEnabled: isProd
     administratorLogin: pgAdminLogin
     administratorLoginPassword: pgAdminPassword
@@ -367,6 +371,12 @@ var apiEnvVars = [
   // Value is e.g. `vrbookcid.ciamlogin.com` — not sensitive, but stored in
   // KV for symmetry with the rest of the Entra config.
   { name: 'EntraExternalId__TenantIssuerHost', secretRef: 'entra-tenant-issuer-host' }
+  // VRB-209 (G7) — admin sign-in flow name that gates admin-vs-guest provisioning
+  // (ADR-0016). Staging carries an inert placeholder (no real Entra admin flow until
+  // OPS.M.22, so the gate stays off — admins are pre-seeded + promoted via the shim);
+  // prod is empty so the Production-only fail-fast forces the operator to set the real
+  // flow name at cutover, rather than booting with the admin gate silently inert.
+  { name: 'EntraExternalId__AdminFlowName', value: isProd ? '' : 'pending-ops-m22-admin-flow' }
   // App:WebBaseUrl — same-origin base URL for outbound deep links (review
   // notification etc.). Empty in staging + prod so links fall through to the
   // handler's built-in fallback; populated in dev so notification templates
@@ -388,6 +398,9 @@ var apiEnvVars = [
   // Platform-wide service fee retained on refunds for captured bookings (0..100).
   // Set to 0 to issue full refunds. Per-property fees land in A5.1.
   { name: 'Refund__ServiceFeePercent', value: '0' }
+  // VRB-209 (G7) — was referenced by the Payment handlers but set nowhere; now explicit
+  // per env. false = suppliers must connect their own Stripe (no platform-account fallback).
+  { name: 'Payment__AllowPlatformFallback', value: 'false' }
   { name: 'Loyalty__BronzeThreshold', value: '1' }
   { name: 'Loyalty__SilverThreshold', value: '3' }
   { name: 'Loyalty__GoldThreshold', value: '6' }
