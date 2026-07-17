@@ -125,6 +125,29 @@ public sealed class RefundForBookingHandlerTests
         result.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task NegativeBalanceGuardUsesPersistedPriorReversals()
+    {
+        // VRB-104 (G37) — a prior refund of 50 where Stripe actually reversed $0
+        // of platform fee (persisted). Truth = the connected account kept the fee,
+        // so there is LESS headroom than the old proportional approximation assumed.
+        var pi = NewSucceededPi(amount: 100m);
+        pi.AddRefund("re_prior", 50m, "earlier", feeReversalCents: 0);
+        var (handler, _, lookup) = NewHandler(pi);
+        lookup.GetAsync(TenantA, Arg.Any<CancellationToken>())
+            .Returns(new TenantStripeContext(TenantA, "acct_seed", 1500, "USD"));
+
+        // A further 45 refund → net-to-tenant 38.25. With persisted priors the
+        // available connected balance is (85 - 50) = 35 (< 38.25 → reject). The old
+        // approximation (prior fee ≈ 7.5) would leave 42.5 and wrongly pass.
+        Func<Task> act = () => handler.Handle(
+            new RefundForBookingCommand(BookingX, 45m, "any", TenantA), CancellationToken.None);
+
+        var ex = await act.Should().ThrowAsync<BusinessRuleViolationException>();
+        ex.Which.Rule.Should().Be("payment.negative_balance_refund",
+            because: "the guard must read the persisted $0 reversal, not the proportional approximation.");
+    }
+
     private static PaymentIntent NewSucceededPi(decimal amount)
     {
         var pi = PaymentIntent.Create(

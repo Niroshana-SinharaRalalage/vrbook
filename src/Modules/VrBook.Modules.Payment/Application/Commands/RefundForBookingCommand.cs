@@ -103,10 +103,14 @@ internal sealed class RefundForBookingHandler(
             var bps = ctx!.PlatformFeeBps;
             var applicationFeeAmount = StripeFeeCalculator.ApplicationFeeCents(pi.Amount, bps) / 100m;
             // Sum prior NET refunds to the tenant = priorRefunds - priorFeeReversals.
-            // We don't persist the prior reversal cents on Refund yet (§3.6 follow-up),
-            // so approximate: assume each prior refund used the proportional reversal.
-            var priorTenantNet = sumPriorRefunds
-                - sumPriorRefunds * bps / 10_000m;
+            // VRB-104 (G37) — use the PERSISTED prior fee reversals (Stripe's actual
+            // amount, read back at refund time); only fall back to the proportional
+            // approximation for legacy rows created before fee_reversal_cents existed.
+            var sumPriorFeeReversals = pi.Refunds.Sum(r =>
+                r.FeeReversalCents.HasValue
+                    ? r.FeeReversalCents.Value / 100m
+                    : r.Amount * bps / 10_000m);
+            var priorTenantNet = sumPriorRefunds - sumPriorFeeReversals;
             var thisRefundNet = refundAmount - refundAmount * bps / 10_000m;
             var availableConnectedBalance = (pi.Amount - applicationFeeAmount) - priorTenantNet;
             if (thisRefundNet > availableConnectedBalance)
@@ -150,7 +154,10 @@ internal sealed class RefundForBookingHandler(
                 idempotencyKey: StripeIdempotency.ForRefund(refundId),
                 reason: cmd.Reason,
                 cancellationToken: cancellationToken);
-        pi.AddRefund(stripeRefund.Id, stripeRefund.Amount, cmd.Reason);
+        // VRB-104 (G37) — persist the ACTUAL fee reversal Stripe performed (read
+        // back in the gateway) so the negative-balance guard reads truth, not an
+        // approximation, on the next refund.
+        pi.AddRefund(stripeRefund.Id, stripeRefund.Amount, cmd.Reason, stripeRefund.FeeReversalCents);
         await uow.SaveChangesAsync(cancellationToken);
         return true;
     }
