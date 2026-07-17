@@ -49,4 +49,4 @@ public interface IStripeGateway
 
 public sealed record StripeIntentCreated(string Id, string ClientSecret, PaymentStatus Status);
 public sealed record StripeIntentUpdate(string Id, PaymentStatus Status, string? ChargeId);
-public sealed record StripeRefundCreated(string Id, decimal Amount, RefundStatus Status);
+public sealed record StripeRefundCreated(string Id, decimal Amount, RefundStatus Status, long? FeeReversalCents = null);

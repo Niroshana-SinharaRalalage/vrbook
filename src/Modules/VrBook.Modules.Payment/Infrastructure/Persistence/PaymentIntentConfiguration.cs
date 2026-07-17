@@ -57,6 +57,9 @@ internal sealed class RefundConfiguration : IEntityTypeConfiguration<Refund>
         b.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(3);
         b.Property(x => x.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20);
         b.Property(x => x.Reason).HasColumnName("reason").HasMaxLength(200);
+        // VRB-104 (G37) — actual platform-fee reversal for this refund, cents.
+        // Nullable: null = non-Connect refund or a legacy pre-migration row.
+        b.Property(x => x.FeeReversalCents).HasColumnName("fee_reversal_cents");
         b.HasIndex(x => x.PaymentIntentId);
     }
 }

@@ -131,42 +131,93 @@ internal sealed class StripeGateway : IStripeGateway, VrBook.Contracts.Interface
     {
         RequireConfigured();
         var service = new RefundService();
+        var opts = BuildRefundOptions(stripePaymentIntentId, amount, refundApplicationFee);
+        // Stripe's Reason enum is limited (requested_by_customer / duplicate / fraudulent);
+        // user-supplied free-text reasons aren't compatible, so we keep our own copy server-side.
+        _ = reason;
+        var requestOpts = new RequestOptions { IdempotencyKey = idempotencyKey };
+        var refund = await StripeRetryPipeline.Build().ExecuteAsync(
+            async token => await service.CreateAsync(opts, requestOpts, token),
+            cancellationToken);
+
+        // VRB-104 (G37) — RefundApplicationFee=true reverses the platform fee
+        // ATOMICALLY with the refund (proportional on a partial refund). Read the
+        // ACTUAL reversed cents back from Stripe (authoritative — avoids our-calc
+        // rounding drift). Fall back to the computed proportional only if the
+        // read-back itself fails, so a read hiccup never drops the DB record.
+        long? feeReversalCents = null;
+        if (refundApplicationFee)
+        {
+            feeReversalCents = await ReadActualFeeReversalCentsAsync(refund.ChargeId, cancellationToken)
+                ?? applicationFeeRefundCents;
+        }
+
+        logger.LogInformation(
+            "Stripe refund issued stripe_refund_id={Id} refund_application_fee={Reverse} fee_reversal_cents={Cents} idempotency_key={Key}",
+            refund.Id, refundApplicationFee, feeReversalCents, idempotencyKey);
+        return new StripeRefundCreated(refund.Id, refund.Amount / 100m, MapRefundStatus(refund.Status), feeReversalCents);
+    }
+
+    /// <summary>
+    /// Builds the refund options (VRB-104 seam, unit-testable). A partial refund
+    /// with <c>RefundApplicationFee=true</c> makes Stripe reverse the application
+    /// fee proportionally — no explicit partial-fee amount is set (the SDK's
+    /// RefundCreateOptions has no typed field for it, and a separate
+    /// ApplicationFeeRefund would double-reverse).
+    /// </summary>
+    internal static RefundCreateOptions BuildRefundOptions(
+        string stripePaymentIntentId, decimal? amount, bool refundApplicationFee)
+    {
         var opts = new RefundCreateOptions
         {
             PaymentIntent = stripePaymentIntentId,
             Reason = "requested_by_customer",
         };
-        // Stripe's Reason enum is limited (requested_by_customer / duplicate / fraudulent).
-        // User-supplied free-text reasons aren't compatible; we keep our own copy server-side.
-        _ = reason;
         if (amount.HasValue)
         {
             opts.Amount = ToCents(amount.Value);
         }
-        // OPS.M.5 §3.6 (D6) — fee reversal for Connect destination charges.
         if (refundApplicationFee)
         {
             opts.RefundApplicationFee = true;
         }
-        if (applicationFeeRefundCents is { } cents)
+        return opts;
+    }
+
+    /// <summary>
+    /// VRB-104 — reads the actual platform-fee reversal (cents) Stripe performed,
+    /// from the charge's newest application-fee refund. Returns null if it can't be
+    /// read (the caller then falls back to the computed proportional amount).
+    /// </summary>
+    private async Task<long?> ReadActualFeeReversalCentsAsync(string? chargeId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(chargeId))
         {
-            // Stripe accepts an explicit amount via the metadata or via a follow-up
-            // ApplicationFeeRefundService.CreateAsync call; the RefundCreateOptions
-            // surface doesn't include a typed property for it on 47.x. Use metadata
-            // so audit trail records the intended proportional reversal.
-            opts.Metadata = new Dictionary<string, string>
-            {
-                ["application_fee_refund_cents"] = cents.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            };
+            return null;
         }
-        var requestOpts = new RequestOptions { IdempotencyKey = idempotencyKey };
-        var refund = await StripeRetryPipeline.Build().ExecuteAsync(
-            async token => await service.CreateAsync(opts, requestOpts, token),
-            cancellationToken);
-        logger.LogInformation(
-            "Stripe refund issued stripe_refund_id={Id} refund_application_fee={Reverse} application_fee_refund_cents={Cents} idempotency_key={Key}",
-            refund.Id, refundApplicationFee, applicationFeeRefundCents, idempotencyKey);
-        return new StripeRefundCreated(refund.Id, refund.Amount / 100m, MapRefundStatus(refund.Status));
+        try
+        {
+            var charge = await new ChargeService().GetAsync(
+                chargeId,
+                new ChargeGetOptions { Expand = new List<string> { "application_fee" } },
+                cancellationToken: cancellationToken);
+            if (string.IsNullOrEmpty(charge.ApplicationFeeId))
+            {
+                return null;
+            }
+            var feeRefunds = await new ApplicationFeeRefundService().ListAsync(
+                charge.ApplicationFeeId,
+                new ApplicationFeeRefundListOptions { Limit = 1 },
+                cancellationToken: cancellationToken);
+            return feeRefunds.Data.FirstOrDefault()?.Amount;
+        }
+        catch (StripeException ex)
+        {
+            logger.LogWarning(ex,
+                "Could not read the actual application-fee reversal for charge {ChargeId}; using the computed fallback.",
+                chargeId);
+            return null;
+        }
     }
 
     public bool VerifyWebhookSignature(string payload, string signatureHeader, out string? eventType, out string? rawEventJson)

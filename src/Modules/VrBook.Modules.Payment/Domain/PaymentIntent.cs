@@ -90,9 +90,9 @@ public sealed class PaymentIntent : AggregateRoot
         Raise(new PaymentFailed(TenantId, Id, BookingId, reason));
     }
 
-    public Refund AddRefund(string stripeRefundId, decimal amount, string? reason)
+    public Refund AddRefund(string stripeRefundId, decimal amount, string? reason, long? feeReversalCents = null)
     {
-        var refund = new Refund(TenantId, Id, stripeRefundId, amount, Currency, reason);
+        var refund = new Refund(TenantId, Id, stripeRefundId, amount, Currency, reason, feeReversalCents);
         _refunds.Add(refund);
         Raise(new RefundIssued(TenantId, refund.Id, Id, BookingId, amount, Currency, reason ?? string.Empty));
         return refund;

@@ -15,9 +15,20 @@ public sealed class Refund : Entity
     public RefundStatus Status { get; private set; }
     public string? Reason { get; private set; }
 
+    /// <summary>
+    /// VRB-104 (gap G37) — platform application fee actually reversed by Stripe
+    /// for this refund, in cents (read back from Stripe = authoritative). Null
+    /// for a non-Connect refund, or a legacy row created before this column
+    /// existed (the negative-balance guard falls back to a proportional
+    /// approximation only for those null rows).
+    /// </summary>
+    public long? FeeReversalCents { get; private set; }
+
     private Refund() { } // EF
 
-    internal Refund(Guid tenantId, Guid paymentIntentId, string stripeRefundId, decimal amount, string currency, string? reason)
+    internal Refund(
+        Guid tenantId, Guid paymentIntentId, string stripeRefundId, decimal amount,
+        string currency, string? reason, long? feeReversalCents = null)
     {
         if (tenantId == Guid.Empty)
         {
@@ -32,6 +43,7 @@ public sealed class Refund : Entity
         Currency = currency.ToUpperInvariant();
         Status = RefundStatus.Pending;
         Reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        FeeReversalCents = feeReversalCents;
     }
 
     public void UpdateStatus(RefundStatus status)
