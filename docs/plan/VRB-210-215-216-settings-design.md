@@ -43,9 +43,10 @@ admin.cancellation_tiers            -- single active row + version history (appe
   second_tier_days  int   not null   -- partial band lower bound  (default 2)
   middle_tier_pct   int   not null   -- % refunded in the band 0..100 (default 50)
   final_cutoff_hours int  not null   -- no refund < N3 hours      (default 48)
+  upgrade_price_pct  int  not null   -- RefundableUpgrade price = pct % of subtotal (Q2; default e.g. 8)
   updated_by_user_id uuid not null
   updated_at        timestamptz not null
-  -- CHECK: first_tier_days > second_tier_days; middle_tier_pct in [0,100]
+  -- CHECK: first_tier_days > second_tier_days; middle_tier_pct in [0,100]; upgrade_price_pct in [0,100]
 
 admin.platform_fee_overrides         -- per-tenant fee override (default lives on identity.tenants.platform_fee_bps)
   tenant_id         uuid  pk
@@ -71,13 +72,13 @@ Extend the `catalog` schema (Property aggregate; tenant-scoped DbContext via `Ad
 catalog.property_cancellation_config
   property_id       uuid pk (fk property)
   tenant_id         uuid not null            -- RLS GUC column (app.current_tenant)
-  model             int  not null            -- 0=Tiered, 1=RefundableUpgrade
-  upgrade_price_amount   numeric(12,2) null  -- model 1 only
-  upgrade_price_currency text null
+  model             int  not null            -- 0=Tiered, 1=RefundableUpgrade (host enables; no price input — Q2 corrected)
   updated_by_user_id uuid not null
   updated_at        timestamptz not null
   -- RLS policy mirrors OpsM9_Catalog_RlsPolicies
 ```
+
+The RefundableUpgrade **price is platform-set** (`admin.cancellation_tiers.upgrade_price_pct`), not per-property — the host row only records the model choice.
 
 The launch model set is **`{Tiered, RefundableUpgrade}`** (Q24), not the legacy `Flexible/Moderate/Strict` (`CancellationPolicyCode.cs:3-8`). VRB-102 explicitly replaces the old enum root (`EPIC-launch-features.md:65`). Recommend a new `CancellationModel` enum in Contracts and deprecating `CancellationPolicyCode` reads (arch-test RED-then-GREEN to prove no old-enum consumers remain).
 
@@ -253,7 +254,7 @@ Critical objective: **unblock PAY (VRB-102) soonest** → the Contracts boundary
 
 ### PRODUCT / POLICY — OWNER-ANSWERED
 1. **Tier numbers → FULLY CONFIGURABLE.** Owner: *"No hard-and-fast rule — this should be configurable and the parameters changeable at any time."* → Confirms the DB-backed, platform-admin-editable `admin.cancellation_tiers` design. **7/2/50/48 is the SEED default only** (not a locked value); the PUT endpoint + versioned rows are the point. No further owner input needed to build.
-2. **Refundable-upgrade pricing → FLAT, HOST-SET, PLATFORM-CAPPED.** Store `upgrade_price_amount` + currency per property (host-set); add a **platform-level cap** `admin.cancellation_tiers.upgrade_cap_pct` (or a sibling platform-config row) expressed as **% of booking subtotal**; validation rejects a host flat amount that exceeds `cap_pct × subtotal` at Place time (and warns in the settings UI using a representative subtotal). Cap is itself platform-admin-editable (VRB-216).
+2. **Refundable-upgrade pricing → PLATFORM-SET % OF SUBTOTAL.** *(Corrected 2026-07-17 — the TL's direct owner-ask is authoritative; the owner delegated the call to the TL.)* One platform-admin-editable rate **`upgrade_price_pct`** (VRB-216, on the platform config row) applied to the booking subtotal. Hosts do **not** set an amount — they only **enable/disable** the RefundableUpgrade model per property (VRB-215). The upgrade amount is **computed at Place** (`upgrade_price_pct × subtotal`) and stored on the booking-line snapshot (`refundable_upgrade_price_amount`), so PAY reads a concrete amount. No per-property price columns; no cap (the single platform % is the price).
 3. **Fee visibility → SHOW FEE % + NET.** `Property/PayoutSettingsDto` exposes both the platform fee % and the host's net; the settings/payout UI renders "Platform fee: N% — your net: $X". No hidden-fee mode.
 4. **Model availability → BOTH MODELS, ALL TENANTS.** No per-tenant gating; **drop the per-tenant allow-flag** — every host freely picks Tiered or RefundableUpgrade. Simplifies VRB-215 (no gating column/check).
 
@@ -267,7 +268,7 @@ Critical objective: **unblock PAY (VRB-102) soonest** → the Contracts boundary
 - Policy snapshot copied onto the booking line at Place; tiers version-stamped for provenance (§1a/§1c).
 - Legacy `CancellationPolicyCode {Flexible,Moderate,Strict}` → `CancellationModel {Tiered,RefundableUpgrade}`, enforced by a RED-then-GREEN arch test (§1b/§5).
 - Audit reuses `identity.audit_log` + `AuditLogBehavior`; additions = redaction hook + `GetSettingsChangesQuery` (§1d).
-- **Owner-driven adjustments (2026-07-16):** upgrade price = host-set flat **+ platform % cap** (new `upgrade_cap_pct` platform config + Place-time validation); **no per-tenant model gating**; fee shown to hosts (DTO exposes fee % + net).
+- **Owner-driven adjustments (2026-07-16, Q2 corrected 2026-07-17):** upgrade price = **platform-set `upgrade_price_pct` × subtotal** (computed at Place, stored on the snapshot; hosts only enable the model — no per-property price/cap); **no per-tenant model gating**; fee shown to hosts (DTO exposes fee % + net). **Additive contract change for Phase B:** add `UpgradePricePct` to `GlobalCancellationTiers` (non-breaking for PAY) so Place-time can compute the amount.
 
 ### TECHNICAL (architect-decided, recorded for TL visibility)
 - No new Settings context; settings owned per-domain (§1).
