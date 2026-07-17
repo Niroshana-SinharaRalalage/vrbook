@@ -1,7 +1,11 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
+import { Suspense } from 'react';
 
 import { Providers } from '@/components/Providers';
+import { ConsentProvider } from '@/lib/consent/ConsentProvider';
+import { CookieConsent } from '@/components/consent/CookieConsent';
+import { AnalyticsRouteTracker } from '@/components/consent/AnalyticsRouteTracker';
 import './globals.css';
 
 const inter = Inter({
@@ -43,7 +47,15 @@ const RootLayout = ({ children }: RootLayoutProps) => {
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body>
-        <Providers>{children}</Providers>
+        {/* VRB-311 — ConsentProvider wraps everything (incl. the MSAL-gated
+            Providers) so the banner shows pre-auth; analytics stays consent-gated. */}
+        <ConsentProvider>
+          <Providers>{children}</Providers>
+          <CookieConsent />
+          <Suspense fallback={null}>
+            <AnalyticsRouteTracker />
+          </Suspense>
+        </ConsentProvider>
       </body>
     </html>
   );

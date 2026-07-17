@@ -18,6 +18,10 @@ const sitemap = async (): Promise<MetadataRoute.Sitemap> => {
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: `${SITE_URL}/`, changeFrequency: 'daily', priority: 1 },
     { url: `${SITE_URL}/properties`, changeFrequency: 'daily', priority: 0.9 },
+    // VRB-311 — legal surfaces (crawlable; low churn).
+    { url: `${SITE_URL}/legal/terms`, changeFrequency: 'yearly', priority: 0.3 },
+    { url: `${SITE_URL}/legal/privacy`, changeFrequency: 'yearly', priority: 0.3 },
+    { url: `${SITE_URL}/legal/cancellation`, changeFrequency: 'yearly', priority: 0.3 },
   ];
 
   try {

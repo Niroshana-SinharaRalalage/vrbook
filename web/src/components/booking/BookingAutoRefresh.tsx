@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+
+import { track } from '@/lib/analytics/analytics';
 
 interface BookingAutoRefreshProps {
   /**
@@ -25,6 +27,15 @@ const NON_TERMINAL = new Set([
 
 export const BookingAutoRefresh = ({ status, intervalMs = 5000 }: BookingAutoRefreshProps) => {
   const router = useRouter();
+
+  // VRB-311 funnel — fire once when the booking reaches Confirmed.
+  const confirmedTracked = useRef(false);
+  useEffect(() => {
+    if (status === 'Confirmed' && !confirmedTracked.current) {
+      confirmedTracked.current = true;
+      track('booking_confirmed');
+    }
+  }, [status]);
 
   useEffect(() => {
     if (!NON_TERMINAL.has(status)) return undefined;

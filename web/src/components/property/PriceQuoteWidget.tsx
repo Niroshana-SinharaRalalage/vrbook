@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { track } from '@/lib/analytics/analytics';
 import { computeQuote, type Quote } from '@/lib/api/pricing';
 import { createHold, placeBooking } from '@/lib/api/booking';
 import { getAvailability, type BlockedRange } from '@/lib/api/catalog';
@@ -74,6 +75,7 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
     }
     setBooking(true);
     setError(null);
+    track('booking_started', { propertyId }); // VRB-311 funnel
     try {
       // Slice 0.1 + 0.2 closed the booking-race by requiring a Redis hold to
       // be consumed inside the serializable placeBooking transaction. Create
@@ -89,6 +91,7 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
         agreedToHouseRules: true,
         applyLoyaltyDiscount: false,
       });
+      track('booking_tentative', { propertyId, bookingId: result.id }); // VRB-311 funnel
       router.push(`/bookings/${result.id}`);
     } catch (err) {
       if (err instanceof ApiProblemError) {
@@ -100,6 +103,15 @@ export const PriceQuoteWidget = ({ propertyId, maxGuests }: PriceQuoteWidgetProp
       setBooking(false);
     }
   };
+
+  // VRB-311 funnel — record the first successful quote view per property.
+  const quoteTracked = useRef(false);
+  useEffect(() => {
+    if (quote && !quoteTracked.current) {
+      quoteTracked.current = true;
+      track('quote_viewed', { propertyId });
+    }
+  }, [quote, propertyId]);
 
   // Initial mount: fetch the year-of-availability map so the date picker
   // can warn before Book. Quote auto-fetch is handled by the effect below.

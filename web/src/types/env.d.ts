@@ -9,5 +9,11 @@ declare namespace NodeJS {
     readonly NEXT_PUBLIC_ENTRA_CLIENT_ID: string;
     readonly NEXT_PUBLIC_MAPBOX_TOKEN: string;
     readonly NEXT_PUBLIC_SIGNALR_NEGOTIATE_URL: string;
+    // Public base URL for canonicals/metadata (VRB-109); optional, falls back.
+    readonly NEXT_PUBLIC_SITE_URL?: string;
+    // VRB-311 — App Insights connection string for consent-gated web analytics.
+    // Optional: when absent, analytics is silently disabled. DEVOPS wires the
+    // per-env value via the web Dockerfile build-arg + infra webEnvVars.
+    readonly NEXT_PUBLIC_APPLICATIONINSIGHTS_CONNECTION_STRING?: string;
   }
 }
