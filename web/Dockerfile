@@ -22,7 +22,12 @@ ARG NEXT_PUBLIC_API_BASE_URL=""
 ARG NEXT_PUBLIC_ENTRA_AUTHORITY_ADMIN=""
 ARG NEXT_PUBLIC_ENTRA_AUTHORITY_GUEST=""
 ARG NEXT_PUBLIC_ENTRA_CLIENT_ID=""
+# VRB-311 — App Insights (browser SDK). Per-env at build time so a staging
+# property can never leak into a prod bundle. Empty default ⇒ analytics no-op,
+# so the web ships safe-disabled until the value is wired.
+ARG NEXT_PUBLIC_APPLICATIONINSIGHTS_CONNECTION_STRING=""
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+ENV NEXT_PUBLIC_APPLICATIONINSIGHTS_CONNECTION_STRING=${NEXT_PUBLIC_APPLICATIONINSIGHTS_CONNECTION_STRING}
 # Slice OPS.M.12.6/M.21.FIX — per-flow authorities inline into MSAL config.
 # The legacy NEXT_PUBLIC_ENTRA_AUTHORITY was dropped in M.12.8; the M.12.6
 # msalConfig reads _ADMIN + _GUEST directly. Missing this build-arg chain was

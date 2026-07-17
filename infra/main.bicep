@@ -627,7 +627,33 @@ var webEnvVars = [
   { name: 'NEXT_PUBLIC_ENTRA_AUTHORITY_ADMIN', secretRef: 'entra-web-authority-admin' }
   { name: 'NEXT_PUBLIC_ENTRA_AUTHORITY_GUEST', secretRef: 'entra-web-authority-guest' }
   { name: 'NEXT_PUBLIC_ENTRA_CLIENT_ID', secretRef: 'entra-web-client-id' }
+  // VRB-311 — App Insights connection string for server components; the browser
+  // bundle reads the build-arg (cd-staging-web.yml + web/Dockerfile). KV-backed.
+  { name: 'NEXT_PUBLIC_APPLICATIONINSIGHTS_CONNECTION_STRING', secretRef: 'appinsights-connection-string' }
 ]
+
+// VRB-311 — publish the App Insights connection string to Key Vault so both the
+// web build (cd-staging-web.yml build-arg) and the web app runtime read it
+// per-env. Written from the deploy output (like acs-connection-string), so prod
+// gets ITS OWN property's string automatically — no cross-env leak, no stale
+// placeholder. The web app `dependsOn` this so the secret exists before the
+// secretRef binds (KV-secret-before-bind trap).
+// existing-by-name (kv module names it 'kv-vrbook-${env}') — an `existing`
+// parent must be resolvable at start-of-deployment, so we can't use kv.outputs.
+resource kvForAiSecret 'Microsoft.KeyVault/vaults@2024-04-01-preview' existing = {
+  name: 'kv-vrbook-${env}'
+}
+resource appInsightsConnStringSecret 'Microsoft.KeyVault/vaults/secrets@2024-04-01-preview' = {
+  parent: kvForAiSecret
+  name: 'appinsights-connection-string'
+  properties: {
+    value: appi.outputs.connectionString
+  }
+  // value depends on appi implicitly; add kv so the vault exists first.
+  dependsOn: [
+    kv
+  ]
+}
 
 module webApp 'modules/container-app.bicep' = {
   name: 'web'
@@ -652,6 +678,8 @@ module webApp 'modules/container-app.bicep' = {
       { name: 'entra-web-authority-admin', keyVaultSecretName: 'entra-web-authority-admin' }
       { name: 'entra-web-authority-guest', keyVaultSecretName: 'entra-web-authority-guest' }
       { name: 'entra-web-client-id', keyVaultSecretName: 'entra-web-client-id' }
+      // VRB-311 — App Insights connection string (written to KV above).
+      { name: 'appinsights-connection-string', keyVaultSecretName: 'appinsights-connection-string' }
     ]
     keyVaultName: kv.outputs.name
     scaleRuleType: 'http'
@@ -659,6 +687,10 @@ module webApp 'modules/container-app.bicep' = {
     includeProbes: false
     enableIngress: true
   }
+  // VRB-311 — ensure the KV secret exists before the web app's secretRef binds.
+  dependsOn: [
+    appInsightsConnStringSecret
+  ]
 }
 
 // ---------- Front Door (prod + staging only) ----------
