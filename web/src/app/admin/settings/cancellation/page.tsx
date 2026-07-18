@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { RecentChangesPanel } from '@/components/settings/RecentChangesPanel';
 import { SettingsLayout } from '@/components/settings/SettingsLayout';
 import { CancellationPanel } from '@/components/settings/panels/CancellationPanel';
 import { useAuthedQuery } from '@/hooks/useAuthedQuery';
@@ -41,7 +42,13 @@ export default function CancellationSettingsPage() {
         )}
 
         {propertyId ? (
-          <CancellationPanel key={propertyId} propertyId={propertyId} />
+          <>
+            <CancellationPanel key={propertyId} propertyId={propertyId} />
+            {/* Audit trail renders at the page level so it shows the live
+                /admin/settings/changes history independently of the
+                cancellation-model endpoint's availability (VRB-211). */}
+            <RecentChangesPanel section="cancellation" propertyId={propertyId} />
+          </>
         ) : (
           <p className="text-sm text-muted-foreground">
             You have no listings yet. Create one to configure its cancellation policy.

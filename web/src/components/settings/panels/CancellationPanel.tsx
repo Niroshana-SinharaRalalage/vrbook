@@ -12,7 +12,6 @@ import {
   type GlobalCancellationTiersDto,
   type PropertyCancellationSettingsDto,
 } from '@/lib/api/settings';
-import { RecentChangesPanel } from '../RecentChangesPanel';
 import { SafeDefault } from '../SafeDefault';
 import { SaveBar } from '../SaveBar';
 import { SettingsSection } from '../SettingsSection';
@@ -143,8 +142,6 @@ export const CancellationForm = ({
         }}
         onConfirm={confirmSave}
       />
-
-      <RecentChangesPanel section="cancellation" propertyId={propertyId} />
     </div>
   );
 };
