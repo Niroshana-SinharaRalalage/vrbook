@@ -18,6 +18,10 @@ internal sealed class PropertyConfiguration : IEntityTypeConfiguration<Property>
         b.Property(p => p.Description).HasColumnName("description").HasColumnType("text").IsRequired();
         b.Property(p => p.Type).HasColumnName("property_type").HasConversion<string>().HasMaxLength(40).IsRequired();
 
+        // VRB-215 — host-selected cancellation model (nullable; unset ⇒ Tiered). Stored as
+        // the enum name for readability, matching property_type. Reuses the Property RLS.
+        b.Property(p => p.CancellationModel).HasColumnName("cancellation_model").HasConversion<string>().HasMaxLength(40);
+
         // Address (value object — flattened columns).
         b.OwnsOne(p => p.Address, addr =>
         {
