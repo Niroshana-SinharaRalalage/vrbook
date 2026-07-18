@@ -2,10 +2,11 @@ import { test, expect } from '../fixtures/auth.fixture';
 import { ensureAdminContext } from '../support/adminContext';
 
 /**
- * VRB-210 — the settings UI shell. The owner persona is a tenant-admin, so it
- * sees the tenant sections and is refused the platform area. The full
- * edit→save→audit path is fixme'd until Agent 2's VRB-215/216 endpoints land
- * (the shell is dark-launched: routes are URL-reachable but unlinked from nav).
+ * VRB-210 shell + shell-integration pass. The owner persona is a tenant-admin,
+ * so it sees the tenant sections and is refused the platform area. The nav is
+ * re-linked and the audit trail renders against the live /changes endpoint; the
+ * full edit→save path stays fixme'd until Agent 2's cancellation-model endpoint
+ * lands on staging.
  */
 
 test.beforeEach(async ({ page }) => {
@@ -38,6 +39,20 @@ test('the section nav navigates to the cancellation panel', async ({ page }) => 
 test('a scaffolded section shows its placeholder', async ({ page }) => {
   await page.goto('/admin/settings/pricing');
   await expect(page.getByText(/delivered in VRB-213/i)).toBeVisible();
+});
+
+test('the Settings area is reachable from the admin sidebar (re-linked)', async ({ page }) => {
+  await page.goto('/admin');
+  await page.getByRole('navigation').getByRole('link', { name: 'Settings' }).first().click();
+  await expect(page).toHaveURL(/\/admin\/settings$/);
+});
+
+test('the recent-changes audit panel renders against the live /changes endpoint (VRB-211)', async ({ page }) => {
+  await page.goto('/admin/settings/cancellation');
+  // The audit panel calls GET /admin/settings/changes (live). It must render
+  // its card (empty state or history) — NOT the "unavailable" error state.
+  await expect(page.getByRole('heading', { name: 'Recent changes' })).toBeVisible();
+  await expect(page.getByText(/change history is currently unavailable/i)).toHaveCount(0);
 });
 
 test.fixme('owner edits a setting invalid→valid, saves, and sees the audit line', async ({ page }) => {

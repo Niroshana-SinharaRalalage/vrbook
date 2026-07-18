@@ -13,6 +13,7 @@ import {
   Star,
   BarChart3,
   RefreshCw,
+  Settings,
   Sparkles,
   Mail,
   Rocket,
@@ -45,9 +46,9 @@ const items: readonly NavItem[] = [
   { href: '/admin/sync', label: 'Sync', icon: RefreshCw },
   { href: '/admin/notifications', label: 'Notifications', icon: Mail },
   { href: '/admin/amenities', label: 'Amenities', icon: Sparkles },
-  // VRB-210 — the settings UI shell is dark-launched (routes are URL-reachable
-  // but unlinked) until the domain panels + VRB-203 flag are ready. Re-add:
-  // { href: '/admin/settings', label: 'Settings', icon: Settings },
+  // VRB-210 shell dark-launched → re-linked in the shell-integration pass now
+  // that the settings area + audit trail (/changes) are live.
+  { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 
 const platformItems: readonly NavItem[] = [
