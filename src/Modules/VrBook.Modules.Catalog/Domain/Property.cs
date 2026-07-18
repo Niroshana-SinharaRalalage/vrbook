@@ -48,6 +48,17 @@ public sealed class Property : AggregateRoot
     public int RatingCount { get; private set; }
 
     /// <summary>
+    /// VRB-215 — the host-selected cancellation model for this property (owner-locked
+    /// launch set: Tiered | RefundableUpgrade). Nullable: unset ⇒ Tiered (the default),
+    /// so existing rows and new properties behave as Tiered until a host chooses. The
+    /// per-guest upgrade amount is platform-priced (VRB-216 UpgradePricePct), not stored here.
+    /// </summary>
+    public CancellationModel? CancellationModel { get; private set; }
+
+    /// <summary>VRB-215 — set the property's cancellation model (tenant-admin).</summary>
+    public void SetCancellationModel(CancellationModel model) => CancellationModel = model;
+
+    /// <summary>
     /// Recalculated from the Reviews module via PropertyRatingRecomputeRequested.
     /// Owned by Reviews (A6) — A2 leaves the setter dormant until then.
     /// </summary>

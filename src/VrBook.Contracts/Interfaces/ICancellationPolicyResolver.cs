@@ -31,13 +31,31 @@ public sealed record CancellationPolicySnapshot(
     int? TierVersion,
     bool RefundableUpgradePurchased,
     decimal? RefundableUpgradePriceAmount,
-    string? RefundableUpgradePriceCurrency)
+    string? RefundableUpgradePriceCurrency,
+    // VRB-215 — appended with a default so it's NON-BREAKING for existing callers
+    // (PAY's refund calculator constructs this positionally). Carries the platform
+    // upgrade % so Booking's Place can finalize the amount; null for Tiered.
+    int? UpgradePricePct = null)
 {
-    /// <summary>Builds a Tiered snapshot from the active global tiers.</summary>
+    /// <summary>Builds a Tiered snapshot from the active global tiers (no upgrade).</summary>
     public static CancellationPolicySnapshot Tiered(GlobalCancellationTiers t) => new(
         CancellationModel.Tiered,
         t.FirstTierDays, t.SecondTierDays, t.MiddleTierRefundPct, t.FinalCutoffHours, t.Version,
         RefundableUpgradePurchased: false,
         RefundableUpgradePriceAmount: null,
-        RefundableUpgradePriceCurrency: null);
+        RefundableUpgradePriceCurrency: null,
+        UpgradePricePct: null);
+
+    /// <summary>VRB-215 — the RefundableUpgrade *policy* (subtotal-free): carries the platform
+    /// <see cref="GlobalCancellationTiers.UpgradePricePct"/> so Booking's Place can finalize
+    /// <c>RefundableUpgradePriceAmount = subtotal × UpgradePricePct / 100</c> and set the
+    /// purchase decision. The Catalog resolver returns this; Booking finalizes the amount.</summary>
+    public static CancellationPolicySnapshot RefundableUpgrade(GlobalCancellationTiers t) => new(
+        CancellationModel.RefundableUpgrade,
+        FirstTierDays: null, SecondTierDays: null, MiddleTierRefundPct: null,
+        FinalCutoffHours: null, TierVersion: t.Version,
+        RefundableUpgradePurchased: false,
+        RefundableUpgradePriceAmount: null,
+        RefundableUpgradePriceCurrency: null,
+        UpgradePricePct: t.UpgradePricePct);
 }

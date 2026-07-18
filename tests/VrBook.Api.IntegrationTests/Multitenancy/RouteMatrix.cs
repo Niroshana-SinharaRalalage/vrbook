@@ -250,6 +250,14 @@ public static class RouteMatrix
         yield return Anon("Anonymous_GET_settings_changes_returns_401",
             "GET", "/api/v1/admin/settings/changes");
 
+        // VRB-215 — per-property cancellation-model selection (tenant-admin, tenant-scoped
+        // {propertyId}). Anon rows cover the who-may-reach gate; the owner happy path needs a
+        // real property id (Contract test), like the other property-scoped routes above.
+        yield return Anon("Anonymous_GET_settings_cancellation_returns_401",
+            "GET", "/api/v1/admin/settings/cancellation/{propertyId}");
+        yield return Anon("Anonymous_PUT_settings_cancellation_returns_401",
+            "PUT", "/api/v1/admin/settings/cancellation/{propertyId}");
+
         foreach (var tenant in new[] { TargetTenant.A, TargetTenant.B })
         {
             yield return new Cell(

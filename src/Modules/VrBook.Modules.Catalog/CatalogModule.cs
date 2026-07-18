@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
 using VrBook.Infrastructure.Outbox;
@@ -35,6 +36,11 @@ public sealed class CatalogModule : IModuleRegistration
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<CatalogDbContext>());
 
         services.AddSingleton<IPropertyImageUrlBuilder, PropertyImageUrlBuilder>();
+
+        // VRB-215 — replace the config-backed policy resolver with the per-property one
+        // (reads Property.CancellationModel). Scoped: reads the scoped CatalogDbContext.
+        services.Replace(ServiceDescriptor.Scoped<ICancellationPolicyResolver,
+                           VrBook.Modules.Catalog.Infrastructure.CatalogCancellationPolicyResolver>());
 
         services.AddModuleAssembly(typeof(CatalogModule).Assembly);
         return services;
