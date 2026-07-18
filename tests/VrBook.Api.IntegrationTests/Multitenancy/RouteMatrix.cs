@@ -232,17 +232,6 @@ public static class RouteMatrix
         yield return Anon("Anonymous_PUT_cancellation_tiers_returns_401",
             "PUT", "/api/v1/admin/platform/settings/cancellation-tiers");
 
-        yield return new Cell("PlatformAdmin_GET_platform_fee_returns_200",
-            "GET", "/api/v1/admin/platform/settings/platform-fee", Persona.PlatformAdmin, TargetTenant.None, Ok);
-        yield return OwnerRejected("OwnerA_GET_platform_fee_returns_403",
-            "GET", "/api/v1/admin/platform/settings/platform-fee", Persona.OwnerA);
-        yield return Anon("Anonymous_GET_platform_fee_returns_401",
-            "GET", "/api/v1/admin/platform/settings/platform-fee");
-        yield return OwnerRejected("OwnerA_PUT_platform_fee_returns_403",
-            "PUT", "/api/v1/admin/platform/settings/platform-fee/{tenantId}", Persona.OwnerA);
-        yield return Anon("Anonymous_PUT_platform_fee_returns_401",
-            "PUT", "/api/v1/admin/platform/settings/platform-fee/{tenantId}");
-
         yield return new Cell("PlatformAdmin_GET_tax_posture_returns_200",
             "GET", "/api/v1/admin/platform/settings/tax-posture", Persona.PlatformAdmin, TargetTenant.None, Ok);
         yield return OwnerRejected("OwnerA_GET_tax_posture_returns_403",

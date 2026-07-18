@@ -31,29 +31,6 @@ public sealed class SettingsCommandValidatorTests
     }
 
     [Fact]
-    public void Fee_Valid_Passes()
-    {
-        new SetPlatformFeeValidator().Validate(new SetPlatformFeeCommand(Guid.NewGuid(), 1500))
-            .IsValid.Should().BeTrue();
-    }
-
-    [Theory]
-    [InlineData(15000)]  // > 10000 bps
-    [InlineData(-1)]     // negative
-    public void Fee_OutOfRange_Fails(int bps)
-    {
-        new SetPlatformFeeValidator().Validate(new SetPlatformFeeCommand(Guid.NewGuid(), bps))
-            .IsValid.Should().BeFalse();
-    }
-
-    [Fact]
-    public void Fee_EmptyTenant_Fails()
-    {
-        new SetPlatformFeeValidator().Validate(new SetPlatformFeeCommand(Guid.Empty, 1500))
-            .IsValid.Should().BeFalse();
-    }
-
-    [Fact]
     public void Tax_ValidRoster_Passes()
     {
         var cmd = new SetTaxPostureCommand(true, new Dictionary<string, bool> { ["CA"] = true, ["NY"] = false });

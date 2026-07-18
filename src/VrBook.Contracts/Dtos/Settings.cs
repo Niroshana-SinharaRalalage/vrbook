@@ -39,12 +39,6 @@ public sealed record PropertyCancellationSettingsDto(
     string? LastChangedBy,
     DateTimeOffset? LastChangedAt);
 
-/// <summary>VRB-216 — platform fee configuration: the default bps + per-tenant overrides
-/// (PlatformAdmin settings). Hosts see their effective fee % + net (Q4).</summary>
-public sealed record PlatformFeeConfigDto(int DefaultBps, IReadOnlyList<TenantFeeOverrideDto> Overrides);
-
-public sealed record TenantFeeOverrideDto(Guid TenantId, int FeeBps);
-
 /// <summary>VRB-216 — platform tax posture (PlatformAdmin settings): marketplace-facilitator
 /// flag + per-state enablement roster (Q25). Engine is PAY VRB-103; this is the posture only.</summary>
 public sealed record TaxPostureDto(
