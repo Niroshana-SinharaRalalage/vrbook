@@ -51,7 +51,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-108 | WEB-GUEST | Must | DONE | story/VRB-108 |
 | VRB-109 | WEB-GUEST | Must | DONE | story/VRB-109 |
 | VRB-110 | WEB-GUEST | Must | DONE | story/VRB-110 |
-| VRB-110-followup | A11Y | Should | CLAIMED | story/VRB-110-followup |
+| VRB-110-followup | A11Y | Should | DONE | story/VRB-110-followup |
 | VRB-210 | SETTINGS | Must | DONE | story/VRB-210 |
 | VRB-211 | SETTINGS | Must | CLAIMED | story/VRB-211 |
 | VRB-212 | SETTINGS | Must | TODO | |
