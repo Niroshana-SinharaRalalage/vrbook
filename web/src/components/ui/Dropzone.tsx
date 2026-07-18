@@ -73,6 +73,7 @@ export const Dropzone = ({
         type="file"
         accept={accept}
         multiple
+        aria-label={label}
         className="hidden"
         onChange={(e) => {
           emit(e.target.files);

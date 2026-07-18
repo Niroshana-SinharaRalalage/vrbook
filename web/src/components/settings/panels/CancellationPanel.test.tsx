@@ -1,8 +1,11 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { axe, toHaveNoViolations } from 'jest-axe';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CancellationForm } from './CancellationPanel';
+
+expect.extend(toHaveNoViolations);
 import type { PropertyCancellationSettingsDto } from '@/lib/api/settings';
 
 const putPropertyCancellation = vi.fn();
@@ -79,5 +82,20 @@ describe('<CancellationForm /> (VRB-215)', () => {
     await user.click(within(dialog).getByRole('button', { name: /save policy/i }));
     expect(putPropertyCancellation).toHaveBeenCalledWith('p1', { model: 'RefundableUpgrade' });
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/saved/i));
+  });
+
+  // ---- VRB-110-followup a11y ----
+  it('has no axe violations (radio-group)', async () => {
+    const { container } = render(<CancellationForm propertyId="p1" initial={initial} />);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no axe violations with the confirm modal open', async () => {
+    const user = userEvent.setup();
+    render(<CancellationForm propertyId="p1" initial={initial} />);
+    await user.click(screen.getByRole('radio', { name: /refundable-rate upgrade/i }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    const dialog = await screen.findByRole('dialog');
+    expect(await axe(dialog)).toHaveNoViolations();
   });
 });

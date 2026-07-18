@@ -11,7 +11,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Honest authored total (architect: count Playwright's total incl. test.fixme;
-// do not pad to a round number). anon 19 + guest 16 + owner 21 + platform-admin 6.
+// do not pad to a round number). anon 19 + guest 16 + owner 24 + platform-admin 6.
 // VRB-110 batched the deferred WEB-GUEST specs (+8 anon: home-featured 2,
 // seo-surface 3, a11y-flows 3; +6 guest: mobile-nav 2, mobile-checkout 1 fixme,
 // edit-profile 1, a11y-flows 2), taking 31 → 45.
@@ -23,7 +23,9 @@ import { fileURLToPath } from 'node:url';
 // nav-to-panel, placeholder, save-flow fixme), 55 → 60.
 // Shell-integration pass added +2 owner (nav re-linked reachable; audit panel
 // renders live /changes — VRB-211), 60 → 62.
-const EXPECTED_SCENARIOS = 62;
+// VRB-110-followup added owner/a11y-flows (+3 owner: gallery edit, settings shell,
+// cancellation panel axe scans), 62 -> 65.
+const EXPECTED_SCENARIOS = 65;
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const e2eDir = join(webRoot, 'tests', 'e2e');
