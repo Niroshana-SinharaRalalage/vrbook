@@ -1,8 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { axe, toHaveNoViolations } from 'jest-axe';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Dropzone } from './Dropzone';
+
+expect.extend(toHaveNoViolations);
 
 describe('<Dropzone />', () => {
   it('is a labelled button describing the limits', () => {
@@ -26,5 +29,12 @@ describe('<Dropzone />', () => {
     render(<Dropzone onFiles={onFiles} disabled />);
     await userEvent.click(screen.getByRole('button'));
     expect(onFiles).not.toHaveBeenCalled();
+  });
+
+  it('has no axe violations (VRB-110-followup)', async () => {
+    const { container } = render(
+      <Dropzone onFiles={vi.fn()} description="JPEG, PNG or WebP · up to 10 MB each." />,
+    );
+    expect(await axe(container)).toHaveNoViolations();
   });
 });

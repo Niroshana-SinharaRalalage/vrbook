@@ -1,7 +1,10 @@
 import { render, screen, within } from '@testing-library/react';
+import { axe, toHaveNoViolations } from 'jest-axe';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SettingsLayout } from './SettingsLayout';
+
+expect.extend(toHaveNoViolations);
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/admin/settings/cancellation',
@@ -38,5 +41,10 @@ describe('<SettingsLayout /> — role-gated sections (VRB-210, ADR-0016)', () =>
   it('renders the page title', () => {
     render(<SettingsLayout title="My Settings">body</SettingsLayout>);
     expect(screen.getByRole('heading', { level: 1, name: 'My Settings' })).toBeInTheDocument();
+  });
+
+  it('has no axe violations (VRB-110-followup)', async () => {
+    const { container } = render(<SettingsLayout title="Settings">body</SettingsLayout>);
+    expect(await axe(container)).toHaveNoViolations();
   });
 });

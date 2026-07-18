@@ -1,9 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { axe, toHaveNoViolations } from 'jest-axe';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PropertyPhotoManager } from './PropertyPhotoManager';
+
+expect.extend(toHaveNoViolations);
 import type { PropertyImage } from '@/lib/api/catalog';
 
 const upload = vi.fn();
@@ -94,5 +97,25 @@ describe('<PropertyPhotoManager />', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Delete photo' }));
     expect(del).toHaveBeenCalledWith('p1', 'a');
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(1));
+  });
+
+  // ---- VRB-110-followup a11y ----
+  it('has no axe violations', async () => {
+    const { container } = renderManager();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('exposes a labelled drag handle and a live region for reorder announcements', () => {
+    renderManager();
+    // each tile has a keyboard-focusable, labelled reorder handle (dnd-kit)
+    expect(screen.getAllByRole('button', { name: /reorder photo/i }).length).toBeGreaterThan(0);
+    // announcements go through polite live regions (our own + dnd-kit's drag announcer)
+    expect(screen.getAllByRole('status').length).toBeGreaterThan(0);
+  });
+
+  it('gives every tile a distinguishing accessible name', () => {
+    renderManager();
+    expect(screen.getByRole('listitem', { name: /photo 1 of 2, cover/i })).toBeInTheDocument();
+    expect(screen.getByRole('listitem', { name: /photo 2 of 2/i })).toBeInTheDocument();
   });
 });
