@@ -25,11 +25,19 @@ public static class FeatureFlagKeys
     /// selection, not a live toggle. Default: off.</summary>
     public const string BookingUseRedisHoldStore = "Features:Booking.UseRedisHoldStore";
 
+    /// <summary>VRB-102 — route cancellation refunds through the snapshotted
+    /// cancellation-policy engine (tiered / refundable-upgrade) instead of the flat
+    /// <c>Refund:ServiceFeePercent</c>. Consumed by the refund path (Phase B) once
+    /// the per-booking policy snapshot lands; falls back to the flat refund when off.
+    /// Default: off (dev/staging override to on via config).</summary>
+    public const string CancellationEngineV2 = "Features:Cancellation.EngineV2";
+
     /// <summary>Known flags + their built-in safe defaults, for the list endpoint.</summary>
     public static readonly IReadOnlyDictionary<string, bool> KnownDefaults = new Dictionary<string, bool>
     {
         [LoyaltyEnabled] = true,
         [BookingUseRedisHoldStore] = false,
+        [CancellationEngineV2] = false,
     };
 
     /// <summary>The memory-cache key for a flag — shared by the resolver (read) and the
