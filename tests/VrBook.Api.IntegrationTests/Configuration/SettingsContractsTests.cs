@@ -71,14 +71,6 @@ public sealed class SettingsContractsTests
     }
 
     [Fact]
-    public async Task FeeResolver_DefaultsTo1500_OverridableByConfig()
-    {
-        (await new ConfigPlatformFeeResolver(Config()).GetFeeBpsAsync(Guid.NewGuid())).Should().Be(1500);
-        (await new ConfigPlatformFeeResolver(Config(("Payment:PlatformFeeBps", "1200")))
-            .GetFeeBpsAsync(Guid.NewGuid())).Should().Be(1200);
-    }
-
-    [Fact]
     public async Task TaxPosture_DefaultsTo_FacilitatorActive_EmptyRoster()
     {
         var posture = await new ConfigTaxPostureProvider().GetAsync();

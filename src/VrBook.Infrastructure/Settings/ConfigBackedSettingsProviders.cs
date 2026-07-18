@@ -39,14 +39,6 @@ public sealed class ConfigCancellationPolicyResolver(ICancellationTierProvider t
     }
 }
 
-/// <summary>Config-backed fee resolver: returns the platform default (1500 bps / 15%)
-/// or <c>Payment:PlatformFeeBps</c>. VRB-216 folds the per-tenant override in.</summary>
-public sealed class ConfigPlatformFeeResolver(IConfiguration configuration) : IPlatformFeeResolver
-{
-    public Task<int> GetFeeBpsAsync(Guid tenantId, CancellationToken ct = default) =>
-        Task.FromResult(configuration.GetValue("Payment:PlatformFeeBps", 1500));
-}
-
 /// <summary>Config-backed tax posture: facilitator active, empty per-state roster.
 /// VRB-216 replaces with the <c>admin.tax_posture</c>-backed impl.</summary>
 public sealed class ConfigTaxPostureProvider : ITaxPostureProvider

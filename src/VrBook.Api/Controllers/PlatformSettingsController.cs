@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -31,18 +30,10 @@ public sealed class PlatformSettingsController(IMediator mediator) : ControllerB
         [FromBody] SetGlobalTiersCommand command, CancellationToken ct) =>
         Ok(await mediator.Send(command, ct));
 
-    [HttpGet("platform-fee")]
-    [SwaggerOperation(Summary = "Get the platform fee default + per-tenant overrides (PlatformAdmin).")]
-    [ProducesResponseType(typeof(PlatformFeeConfigDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<PlatformFeeConfigDto>> GetFee(CancellationToken ct) =>
-        Ok(await mediator.Send(new GetPlatformFeeConfigQuery(), ct));
-
-    [HttpPut("platform-fee/{tenantId:guid}")]
-    [SwaggerOperation(Summary = "Set a per-tenant platform-fee override (PlatformAdmin).")]
-    [ProducesResponseType(typeof(PlatformFeeConfigDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<PlatformFeeConfigDto>> SetFee(
-        Guid tenantId, [FromBody] SetPlatformFeeOverrideRequest body, CancellationToken ct) =>
-        Ok(await mediator.Send(new SetPlatformFeeCommand(tenantId, body.PlatformFeeBps), ct));
+    // NOTE: the per-tenant platform fee is NOT a setting here — it's the single
+    // source of truth on identity.tenants.PlatformFeeBps, set via the existing
+    // PUT /api/v1/admin/platform/tenants/{tenantId}/platform-fee (TenantsPlatformController).
+    // VRB-216 deliberately does not duplicate it.
 
     [HttpGet("tax-posture")]
     [SwaggerOperation(Summary = "Get the platform tax posture (PlatformAdmin).")]
@@ -57,6 +48,3 @@ public sealed class PlatformSettingsController(IMediator mediator) : ControllerB
         [FromBody] SetTaxPostureCommand command, CancellationToken ct) =>
         Ok(await mediator.Send(command, ct));
 }
-
-/// <summary>Body for the per-tenant fee override (the tenant id is the route param).</summary>
-public sealed record SetPlatformFeeOverrideRequest([property: JsonRequired] int PlatformFeeBps);

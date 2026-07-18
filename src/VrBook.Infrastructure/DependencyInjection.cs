@@ -90,7 +90,6 @@ public static class DependencyInjection
         // Scoped to match the DB-backed impls VRB-216 will Replace() them with.
         services.AddScoped<ICancellationTierProvider, VrBook.Infrastructure.Settings.ConfigCancellationTierProvider>();
         services.AddScoped<ICancellationPolicyResolver, VrBook.Infrastructure.Settings.ConfigCancellationPolicyResolver>();
-        services.AddScoped<IPlatformFeeResolver, VrBook.Infrastructure.Settings.ConfigPlatformFeeResolver>();
         services.AddScoped<ITaxPostureProvider, VrBook.Infrastructure.Settings.ConfigTaxPostureProvider>();
 
         return services;

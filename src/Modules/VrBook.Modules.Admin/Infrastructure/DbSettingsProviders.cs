@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using VrBook.Contracts.Interfaces;
 using VrBook.Modules.Admin.Domain;
 using VrBook.Modules.Admin.Infrastructure.Persistence;
@@ -24,19 +23,6 @@ public sealed class DbCancellationTierProvider(AdminDbContext db) : ICancellatio
             : new GlobalCancellationTiers(
                 row.FirstTierDays, row.SecondTierDays, row.MiddleTierRefundPct,
                 row.FinalCutoffHours, row.UpgradePricePct, row.Version);
-    }
-}
-
-/// <summary>Reads a per-tenant override from <c>admin.platform_fee_overrides</c>; falls back
-/// to the platform default (<c>Payment:PlatformFeeBps</c>, 1500). The booking-time fee read
-/// stays <c>TenantStripeContext.PlatformFeeBps</c> — this resolver is for the settings display.</summary>
-public sealed class DbPlatformFeeResolver(AdminDbContext db, IConfiguration configuration) : IPlatformFeeResolver
-{
-    public async Task<int> GetFeeBpsAsync(Guid tenantId, CancellationToken ct = default)
-    {
-        var over = await db.PlatformFeeOverrides.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.TenantId == tenantId, ct);
-        return over?.PlatformFeeBps ?? configuration.GetValue("Payment:PlatformFeeBps", 1500);
     }
 }
 

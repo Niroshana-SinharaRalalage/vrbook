@@ -22,9 +22,10 @@ public sealed class AdminDbContext(
 
     public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
 
-    // VRB-216 — product-settings tables (platform-global, no RLS).
+    // VRB-216 — product-settings tables (platform-global, no RLS). The per-tenant
+    // platform fee is NOT here: it stays the single source of truth on
+    // identity.tenants.PlatformFeeBps (set via SetTenantPlatformFeeBpsCommand).
     public DbSet<CancellationTiers> CancellationTiers => Set<CancellationTiers>();
-    public DbSet<PlatformFeeOverride> PlatformFeeOverrides => Set<PlatformFeeOverride>();
     public DbSet<TaxPostureRow> TaxPosture => Set<TaxPostureRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -47,19 +48,6 @@ internal sealed class CancellationTiersConfiguration : IEntityTypeConfiguration<
         builder.Property(x => x.MiddleTierRefundPct).HasColumnName("middle_tier_pct").IsRequired();
         builder.Property(x => x.FinalCutoffHours).HasColumnName("final_cutoff_hours").IsRequired();
         builder.Property(x => x.UpgradePricePct).HasColumnName("upgrade_price_pct").IsRequired();
-        builder.Property(x => x.UpdatedByUserId).HasColumnName("updated_by_user_id").IsRequired();
-        builder.Property(x => x.UpdatedAt).HasColumnName("updated_at").IsRequired();
-    }
-}
-
-internal sealed class PlatformFeeOverrideConfiguration : IEntityTypeConfiguration<PlatformFeeOverride>
-{
-    public void Configure(EntityTypeBuilder<PlatformFeeOverride> builder)
-    {
-        builder.ToTable("platform_fee_overrides", AdminDbContext.SchemaName);
-        builder.HasKey(x => x.TenantId);
-        builder.Property(x => x.TenantId).HasColumnName("tenant_id");
-        builder.Property(x => x.PlatformFeeBps).HasColumnName("platform_fee_bps").IsRequired();
         builder.Property(x => x.UpdatedByUserId).HasColumnName("updated_by_user_id").IsRequired();
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at").IsRequired();
     }
