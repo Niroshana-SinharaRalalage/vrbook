@@ -79,7 +79,8 @@
 | 52 | `IFeatureToggle` runtime | `DbFeatureToggle` (DB override → config → default; 30s IMemoryCache per-replica) | real | real | real | ✅ VRB-203 (replaces `StubFeatureToggle`, closes G13; Redis distributed bust deferred) |
 | 53 | `GET/PUT /admin/toggles` | `TogglesController` → MediatR (`[Authorize(Roles="PlatformAdmin")]`) | live | live | live | ✅ VRB-203 (real, PlatformAdmin-only; was 501) |
 | **iCal rate-limit policy** |
-| 54 | `ChannelPoll` host suffixes / token / window / burst | `ChannelPollOptions.cs:23-30` **hard-coded** (bound, no appsettings) | hard-coded | hard-coded | hard-coded | ⚠️ move to config — VRB-214 |
+| 54 | `ChannelPoll:MaxWaitSeconds` | appsettings → `ChannelPollOptions` (Bind + `ValidateOnStart`) | 30 | 30 | 30 | ✅ VRB-214 (**config-bound** — was class-default only) |
+| 54b | `ChannelPoll:Hosts` | appsettings (array of host policies) → `ChannelPollOptions.Hosts`; consumed by the **per-replica** `InMemoryHostRateLimiter` | 5 policies (airbnb/booking/vrbo/homeaway/`*`) | same | same | ✅ VRB-214 (config-bound; **per-replica rate-limit state — G28 documented, distributed deferred**) |
 | **Bootstrap / seed** |
 | 55 | `Bootstrap:SeedPlatformAdmins` | Bicep array (Migrator) | `[]` | `niroshanaks@gmail.com` | `[]` (add before deploy) | ✅ |
 | 56 | `Bootstrap:E2e:Enabled` | Bicep bool (Migrator) | false | **true** | **false** | ✅ |
