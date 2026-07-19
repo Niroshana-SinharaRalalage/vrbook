@@ -10,6 +10,8 @@ using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
 using VrBook.Modules.Catalog.Application.Properties.Commands;
 using VrBook.Modules.Identity.Application.Settings;
+using VrBook.Modules.Sync.Application.ChannelFeeds.Commands;
+using VrBook.Modules.Sync.Application.ChannelFeeds.Queries;
 
 namespace VrBook.Api.Controllers;
 
@@ -49,7 +51,24 @@ public sealed class SettingsController(IMediator mediator, ICurrentUser currentU
     public async Task<ActionResult<PropertyCancellationSettingsDto>> SetCancellation(
         Guid propertyId, [FromBody] SetPropertyCancellationRequest body, CancellationToken ct = default) =>
         Ok(await mediator.Send(new SetPropertyCancellationModelCommand(CallerTenantId(), propertyId, body.Model), ct));
+
+    // VRB-214 — availability: inbound/outbound channel feeds + poll cadence.
+    [HttpGet("availability/feeds")]
+    [SwaggerOperation(Summary = "List the tenant's channel feeds + poll cadence + outbound .ics URL (tenant-admin).")]
+    [ProducesResponseType(typeof(IReadOnlyList<ChannelFeedDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<ChannelFeedDto>>> Feeds(CancellationToken ct = default) =>
+        Ok(await mediator.Send(new ListChannelFeedsQuery(), ct));
+
+    [HttpPut("availability/feeds/{feedId:guid}/cadence")]
+    [SwaggerOperation(Summary = "Set an inbound feed's poll cadence, 15–1440 min (tenant-admin).")]
+    [ProducesResponseType(typeof(ChannelFeedDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ChannelFeedDto>> SetFeedCadence(
+        Guid feedId, [FromBody] SetFeedCadenceRequest body, CancellationToken ct = default) =>
+        Ok(await mediator.Send(new SetFeedCadenceCommand(feedId, body.PollIntervalMinutes, CallerTenantId()), ct));
 }
 
 /// <summary>Body for the per-property cancellation-model selection (property id is the route param).</summary>
 public sealed record SetPropertyCancellationRequest([property: JsonRequired] CancellationModel Model);
+
+/// <summary>Body for the feed poll-cadence write (feed id is the route param).</summary>
+public sealed record SetFeedCadenceRequest([property: JsonRequired] int PollIntervalMinutes);

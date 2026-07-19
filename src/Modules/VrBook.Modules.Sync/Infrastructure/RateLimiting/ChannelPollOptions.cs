@@ -47,3 +47,35 @@ public sealed class HostPolicy
     /// <summary>Maximum burst capacity (bucket size).</summary>
     public int BurstSize { get; set; }
 }
+
+/// <summary>
+/// VRB-214 (G28) — fail-fast validation for the outbound poll rate-limit config: a
+/// non-positive wait/window/rate/burst, or an empty host suffix, would break the
+/// limiter. Registered via <c>ValidateOnStart</c> in <c>SyncModule</c>.
+/// </summary>
+internal sealed class ChannelPollOptionsValidator : Microsoft.Extensions.Options.IValidateOptions<ChannelPollOptions>
+{
+    public Microsoft.Extensions.Options.ValidateOptionsResult Validate(string? name, ChannelPollOptions options)
+    {
+        var failures = new List<string>();
+        if (options.MaxWaitSeconds < 1)
+        {
+            failures.Add($"ChannelPoll:MaxWaitSeconds must be ≥ 1 (was {options.MaxWaitSeconds}).");
+        }
+        if (options.Hosts.Count == 0)
+        {
+            failures.Add("ChannelPoll:Hosts must list at least one policy (include a '*' catch-all).");
+        }
+        foreach (var h in options.Hosts)
+        {
+            if (string.IsNullOrWhiteSpace(h.HostSuffix) || h.TokensPerWindow < 1 || h.WindowSeconds < 1 || h.BurstSize < 1)
+            {
+                failures.Add(
+                    $"ChannelPoll:Hosts entry '{h.HostSuffix}' is invalid — HostSuffix required and TokensPerWindow/WindowSeconds/BurstSize must be ≥ 1.");
+            }
+        }
+        return failures.Count == 0
+            ? Microsoft.Extensions.Options.ValidateOptionsResult.Success
+            : Microsoft.Extensions.Options.ValidateOptionsResult.Fail(failures);
+    }
+}

@@ -258,6 +258,16 @@ public static class RouteMatrix
         yield return Anon("Anonymous_PUT_settings_cancellation_returns_401",
             "PUT", "/api/v1/admin/settings/cancellation/{propertyId}");
 
+        // VRB-214 — availability feeds + poll cadence (tenant-admin, SettingsController [Authorize]).
+        // GET is reachable by a tenant owner (like /changes); the cadence PUT happy path is the
+        // integration round-trip (needs a real feed id). Anon rows cover the who-may-reach gate.
+        yield return new Cell("OwnerA_GET_settings_availability_feeds_returns_200",
+            "GET", "/api/v1/admin/settings/availability/feeds", Persona.OwnerA, TargetTenant.None, Ok);
+        yield return Anon("Anonymous_GET_settings_availability_feeds_returns_401",
+            "GET", "/api/v1/admin/settings/availability/feeds");
+        yield return Anon("Anonymous_PUT_settings_availability_cadence_returns_401",
+            "PUT", "/api/v1/admin/settings/availability/feeds/{feedId}/cadence");
+
         foreach (var tenant in new[] { TargetTenant.A, TargetTenant.B })
         {
             yield return new Cell(

@@ -35,8 +35,13 @@ public sealed class SyncModule : IModuleRegistration
         services.Replace(ServiceDescriptor.Scoped<IExternalChannelConflictChecker, RealExternalChannelConflictChecker>());
 
         // OPS.M.6 §3.2 + §3.3 + §3.4 (D2/D3/D4) — per-host outbound rate limit.
-        services.Configure<ChannelPollOptions>(
-            configuration.GetSection(ChannelPollOptions.SectionName));
+        // VRB-214 (G28) — bound from the ChannelPoll section (now explicit in appsettings,
+        // per-env-overridable) + fail-fast validated. NOTE: the limiter state is
+        // per-replica (InMemoryHostRateLimiter) — distributed rate-limiting is deferred.
+        services.AddOptions<ChannelPollOptions>()
+            .Bind(configuration.GetSection(ChannelPollOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<ChannelPollOptions>, ChannelPollOptionsValidator>();
         services.AddSingleton<IRateLimiter, InMemoryHostRateLimiter>();
         services.AddTransient<OutboundRateLimitHandler>();
 

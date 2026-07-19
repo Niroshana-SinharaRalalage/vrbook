@@ -53,7 +53,7 @@ Prioritized register of everything incomplete, stubbed, or defective, from the P
 | G25 | **P1** | Backup/restore **not tested** (PG Flex has backups; restore never exercised) | — |
 | G26 | **P1** | Sandbox-only integrations: Stripe TEST, ACS managed domain (no custom DKIM), Entra placeholders | CONFIG-INVENTORY §4 |
 | G27 | P1 | Quality gates informational-only: .NET integration tests, Pact provider verify, Trivy, nightly authed E2E, k6, ZAP | CI workflows |
-| G28 | P2 | Outbound iCal rate limiter is **in-memory per-replica** (not distributed) | `InMemoryHostRateLimiter` |
+| G28 | ✅ **RESOLVED (VRB-214)** | ~~Outbound iCal rate limiter is **in-memory per-replica** (not distributed)~~ Config **moved to config** (`ChannelPoll:*` now explicit in appsettings, Bind + `ValidateOnStart`, per-env-overridable) + the per-replica limitation is **documented** (CONFIG-MATRIX 54/54b + `ChannelPollOptions` doc + `SyncModule`): the token buckets live per container replica; distributed rate-limiting is deferred (same posture as VRB-203's per-replica cache). | `ChannelPollOptions.cs`, `SyncModule.cs`, `appsettings.json` | Documented + tunable; distributed = post-launch if ever needed |
 | G29 | P2 | Redis not deployed — holds + distributed lock on Postgres/no-op | `deployRedis=false` |
 | G30 | P2 | Optimistic concurrency globally disabled (Phase-1 single-actor) | `BaseDbContext.cs:48-58` |
 | G31 | P2 | Pact provider verifier skipped (WAF/Kestrel adapter pending); 1 of 12 consumer interactions lands (OPS.1.9) | `PactVerifierTests.cs:43` |
