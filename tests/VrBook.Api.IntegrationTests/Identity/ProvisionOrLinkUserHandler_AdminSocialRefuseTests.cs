@@ -54,9 +54,14 @@ public sealed class ProvisionOrLinkUserHandler_AdminSocialRefuseTests(IdentityAp
 
         for (var i = 0; i < tenantMembershipCount; i++)
         {
+            // A membership FKs to a real tenant (FK_tenant_memberships_tenants_tenant_id,
+            // OPS.M.1). Seed the parent tenant first — a random Guid violated the FK (23503).
+            var slug = $"t-{Guid.NewGuid():N}"[..12];
+            var tenant = Tenant.Create(slug, $"Acme {i}", new Email(SharedEmail));
+            db.Tenants.Add(tenant);
             var m = TenantMembership.Create(
                 userId: user.Id,
-                tenantId: Guid.NewGuid(),
+                tenantId: tenant.Id,
                 role: "tenant_admin",
                 isPrimary: i == 0);
             db.Set<TenantMembership>().Add(m);
