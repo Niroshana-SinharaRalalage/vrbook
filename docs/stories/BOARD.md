@@ -40,7 +40,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 |---|---|---|---|---|
 | VRB-105 | PAY | Must | DONE | story/VRB-105 |
 | VRB-104 | PAY | Must | DONE | story/VRB-104 |
-| VRB-103 | PAY | Must | TODO | |
+| VRB-103 | PAY | Must | CLAIMED | story/VRB-103 |
 | VRB-102 | PAY | Must | IN-REVIEW | story/VRB-102 |
 | VRB-113 | PAY | Should | TODO | |
 | VRB-111 | PAY | Should | TODO | |
