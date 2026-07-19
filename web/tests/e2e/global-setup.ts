@@ -47,23 +47,40 @@ const ensureAuthDir = (): void => {
  * the actual staging CIAM user flow (operator walk, OPS.2.8 §7 checklist).
  */
 const completeEntraSignIn = async (page: Page, email: string, password: string): Promise<void> => {
+  // Entra External ID (CIAM) hosted sign-in uses a newer UI than classic
+  // AAD/B2C (a labelled "Email address" textbox + "Next", then a password step),
+  // so locators are role/placeholder-first for CIAM with the legacy
+  // `loginfmt`/`idSIButton9` markup kept as fallbacks (OPS.2.8 first-live-run).
   const emailField = page
-    .locator('input[type="email"], input[name="loginfmt"]')
+    .getByRole('textbox', { name: /email/i })
+    .or(page.getByPlaceholder(/email/i))
+    .or(page.locator('input[type="email"], input[name="loginfmt"]'))
     .first();
   await emailField.waitFor({ state: 'visible', timeout: 30_000 });
   await emailField.fill(email);
-  await page.locator('#idSIButton9, input[type="submit"], button[type="submit"]').first().click();
+  await page
+    .getByRole('button', { name: /next|continue|sign in/i })
+    .or(page.locator('#idSIButton9, input[type="submit"], button[type="submit"]'))
+    .first()
+    .click();
 
   const passwordField = page
     .locator('input[type="password"], input[name="passwd"]')
     .first();
   await passwordField.waitFor({ state: 'visible', timeout: 30_000 });
   await passwordField.fill(password);
-  await page.locator('#idSIButton9, input[type="submit"], button[type="submit"]').first().click();
+  await page
+    .getByRole('button', { name: /sign in|next|submit|continue/i })
+    .or(page.locator('#idSIButton9, input[type="submit"], button[type="submit"]'))
+    .first()
+    .click();
 
   // Optional "Stay signed in?" (KMSI) interstitial. Answer "No" — the captured
   // session is enough for the run and we avoid a long-lived persistent cookie.
-  const staySignedInNo = page.locator('#idBtn_Back');
+  const staySignedInNo = page
+    .getByRole('button', { name: /^no$/i })
+    .or(page.locator('#idBtn_Back'))
+    .first();
   try {
     await staySignedInNo.waitFor({ state: 'visible', timeout: 5_000 });
     await staySignedInNo.click();
