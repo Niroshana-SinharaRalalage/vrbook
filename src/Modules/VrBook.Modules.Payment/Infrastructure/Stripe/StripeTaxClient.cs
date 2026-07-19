@@ -5,10 +5,10 @@ using Stripe;
 using Stripe.Tax;
 using VrBook.Contracts.Common;
 using VrBook.Domain.Common;
-using VrBook.Modules.Payment.Infrastructure.Stripe;
+using VrBook.Modules.Payment.Infrastructure.Tax;
 using StripeAddress = VrBook.Contracts.Common.Address;
 
-namespace VrBook.Modules.Payment.Infrastructure.Tax;
+namespace VrBook.Modules.Payment.Infrastructure.Stripe;
 
 /// <summary>
 /// VRB-103 — the ONLY Stripe-Tax-touching type. Calls the Stripe Tax <c>Calculations</c> API
