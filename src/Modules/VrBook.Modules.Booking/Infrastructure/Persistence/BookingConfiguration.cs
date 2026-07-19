@@ -44,6 +44,17 @@ internal sealed class BookingConfiguration : IEntityTypeConfiguration<DomainBook
 
         b.Property(x => x.CancellationPolicy).HasColumnName("cancellation_policy")
             .HasConversion<string>().HasMaxLength(20);
+        // VRB-102 (Phase B) — snapshotted cancellation policy (nullable = legacy/pre-flag).
+        b.Property(x => x.CancellationSnapshotModel).HasColumnName("cancellation_model")
+            .HasConversion<string>().HasMaxLength(20);
+        b.Property(x => x.CancellationFirstTierDays).HasColumnName("cancellation_first_tier_days");
+        b.Property(x => x.CancellationSecondTierDays).HasColumnName("cancellation_second_tier_days");
+        b.Property(x => x.CancellationMiddleTierRefundPct).HasColumnName("cancellation_middle_tier_refund_pct");
+        b.Property(x => x.CancellationFinalCutoffHours).HasColumnName("cancellation_final_cutoff_hours");
+        b.Property(x => x.CancellationTierVersion).HasColumnName("cancellation_tier_version");
+        b.Property(x => x.RefundableUpgradePurchased).HasColumnName("refundable_upgrade_purchased").HasDefaultValue(false);
+        b.Property(x => x.RefundableUpgradePriceAmount).HasColumnName("refundable_upgrade_price_amount").HasColumnType("numeric(12,2)");
+        b.Property(x => x.RefundableUpgradePriceCurrency).HasColumnName("refundable_upgrade_price_currency").HasMaxLength(3);
         b.Property(x => x.TentativeUntil).HasColumnName("tentative_until");
         b.Property(x => x.ConfirmedAt).HasColumnName("confirmed_at");
         b.Property(x => x.CancelledAt).HasColumnName("cancelled_at");

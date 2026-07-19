@@ -37,7 +37,47 @@ public sealed class Booking : AggregateRoot
     public decimal Discount { get; internal set; }
     public decimal Total { get; private set; }
 
+    // Legacy cancellation policy — kept as an [Obsolete] bridge for the DTO /
+    // Notifications read path for one release (VRB-102). New refunds resolve from
+    // the snapshot below; the enum is retired once no consumer reads it.
     public CancellationPolicyCode CancellationPolicy { get; private set; } = CancellationPolicyCode.Moderate;
+
+    // VRB-102 (Phase B) — the effective cancellation policy snapshotted onto the
+    // booking at Place, so later global-tier / per-property changes never alter an
+    // in-flight booking. One policy per booking (per-line is the Phase-3 cart's
+    // concern). Null until stamped (legacy bookings / pre-flag). Mapped from the
+    // Contracts CancellationPolicySnapshot in the handler (domain stays enum-only,
+    // not coupled to the Contracts record).
+    public CancellationModel? CancellationSnapshotModel { get; private set; }
+    public int? CancellationFirstTierDays { get; private set; }
+    public int? CancellationSecondTierDays { get; private set; }
+    public int? CancellationMiddleTierRefundPct { get; private set; }
+    public int? CancellationFinalCutoffHours { get; private set; }
+    public int? CancellationTierVersion { get; private set; }
+    public bool RefundableUpgradePurchased { get; private set; }
+    public decimal? RefundableUpgradePriceAmount { get; private set; }
+    public string? RefundableUpgradePriceCurrency { get; private set; }
+
+    /// <summary>
+    /// VRB-102 — stamp the resolved cancellation policy onto the booking at Place.
+    /// Immutable thereafter (the whole point of the snapshot). Called by
+    /// <c>PlaceBookingHandler</c> after <c>ICancellationPolicyResolver.ResolveAsync</c>.
+    /// </summary>
+    public void StampCancellationPolicy(
+        CancellationModel model,
+        int? firstTierDays, int? secondTierDays, int? middleTierRefundPct, int? finalCutoffHours, int? tierVersion,
+        bool refundableUpgradePurchased, decimal? refundableUpgradePriceAmount, string? refundableUpgradePriceCurrency)
+    {
+        CancellationSnapshotModel = model;
+        CancellationFirstTierDays = firstTierDays;
+        CancellationSecondTierDays = secondTierDays;
+        CancellationMiddleTierRefundPct = middleTierRefundPct;
+        CancellationFinalCutoffHours = finalCutoffHours;
+        CancellationTierVersion = tierVersion;
+        RefundableUpgradePurchased = refundableUpgradePurchased;
+        RefundableUpgradePriceAmount = refundableUpgradePriceAmount;
+        RefundableUpgradePriceCurrency = refundableUpgradePriceCurrency;
+    }
 
     public DateTimeOffset? TentativeUntil { get; private set; }
     public DateTimeOffset? ConfirmedAt { get; private set; }

@@ -40,6 +40,9 @@ internal sealed class RefundForBookingHandler(
     IUnitOfWork uow,
     IOptions<RefundOptions> refundOptions,
     IConfiguration configuration,
+    // VRB-102 Phase B — cancellation-policy refund resolution (behind the flag).
+    IBookingCancellationLookup cancellationLookup,
+    IFeatureToggle featureToggle,
     ILogger<RefundForBookingHandler> logger)
     : IRequestHandler<RefundForBookingCommand, bool>
 {
@@ -77,7 +80,9 @@ internal sealed class RefundForBookingHandler(
             return true;
         }
 
-        var refundAmount = cmd.Amount ?? ComputeRefundAmount(pi.Amount, refundOptions.Value.ServiceFeePercent);
+        var refundAmount = cmd.Amount
+            ?? await ResolvePolicyRefundAmountAsync(cmd.BookingId, pi.Amount, cancellationToken)
+            ?? ComputeRefundAmount(pi.Amount, refundOptions.Value.ServiceFeePercent);
 
         // OPS.M.5 §3.6 (D6) — over-refund guard. Sum prior refunds and reject if
         // (this + prior) exceeds the captured total.
@@ -160,6 +165,32 @@ internal sealed class RefundForBookingHandler(
         pi.AddRefund(stripeRefund.Id, stripeRefund.Amount, cmd.Reason, stripeRefund.FeeReversalCents);
         await uow.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    // VRB-102 Phase B — when the cancellation engine is on AND the booking carries a
+    // policy snapshot, resolve the guest refund from the snapshotted policy; otherwise
+    // null so the caller falls back to the flat service-fee refund. Literal flag key
+    // (not the Admin FeatureFlagKeys constant) to avoid a Payment→Admin reference —
+    // kept in sync with FeatureFlagKeys.CancellationEngineV2.
+    private async Task<decimal?> ResolvePolicyRefundAmountAsync(Guid bookingId, decimal capturedAmount, CancellationToken ct)
+    {
+        var engineOn = await featureToggle.IsEnabledAsync("Features:Cancellation.EngineV2", defaultValue: false, ct: ct);
+        if (!engineOn)
+        {
+            return null;
+        }
+        var info = await cancellationLookup.GetAsync(bookingId, ct);
+        if (info?.Model is not { } model)
+        {
+            return null; // legacy booking / no snapshot → flat fallback
+        }
+        var snapshot = new CancellationPolicySnapshot(
+            model, info.FirstTierDays, info.SecondTierDays, info.MiddleTierRefundPct,
+            info.FinalCutoffHours, info.TierVersion,
+            info.RefundableUpgradePurchased, info.RefundableUpgradePriceAmount, info.RefundableUpgradePriceCurrency);
+        var untilCheckIn =
+            new DateTimeOffset(info.CheckinDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero) - DateTimeOffset.UtcNow;
+        return CancellationRefundCalculator.Resolve(snapshot, untilCheckIn, capturedAmount);
     }
 
     private static decimal ComputeRefundAmount(decimal captured, decimal serviceFeePct)

@@ -57,6 +57,10 @@ public sealed class BookingModule : IModuleRegistration
         services.AddScoped<VrBook.Contracts.Interfaces.IBookingEmailLookup,
                            VrBook.Modules.Booking.Infrastructure.Persistence.BookingEmailLookup>();
 
+        // VRB-102 Phase B — cross-module read for the Payment refund path (snapshotted policy).
+        services.AddScoped<VrBook.Contracts.Interfaces.IBookingCancellationLookup,
+                           VrBook.Modules.Booking.Infrastructure.Persistence.BookingCancellationLookup>();
+
         // VRB-208 (G3) — checkout-hold TTL is now config-driven + fail-fast validated
         // (was a hard-coded 15-min const in CreateHoldHandler; the Booking:HoldDurationMinutes
         // key was dead). Registered in the module so both the API and the booking workers bind it.

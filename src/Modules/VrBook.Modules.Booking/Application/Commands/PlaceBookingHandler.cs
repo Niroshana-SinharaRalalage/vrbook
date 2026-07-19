@@ -30,6 +30,11 @@ internal sealed class PlaceBookingHandler(
     IPropertyOwnerLookup propertyOwners,
     BookingDbContext db,
     IOptions<BookingSlaOptions> slaOptions,
+    // VRB-102 Phase B — resolved as IEnumerable so the handler stays DI-safe before
+    // Agent 2's ICancellationPolicyResolver / ICancellationTierProvider impls register:
+    // empty ⇒ no snapshot stamped (bookings keep null policy → refund falls back to flat).
+    IEnumerable<ICancellationPolicyResolver> policyResolvers,
+    IEnumerable<ICancellationTierProvider> tierProviders,
     Microsoft.Extensions.Logging.ILogger<PlaceBookingHandler> logger) : IRequestHandler<PlaceBookingCommand, BookingDto>
 {
     public async Task<BookingDto> Handle(PlaceBookingCommand request, CancellationToken cancellationToken)
@@ -124,6 +129,41 @@ internal sealed class PlaceBookingHandler(
                 .Select(g => (g.FullName, g.IsPrimary)),
             specialRequests: r.SpecialRequests,
             tentativeSla: slaOptions.Value.TentativeSla); // VRB-207 (G2) — 48h locked, config-driven
+
+        // VRB-102 Phase B — stamp the effective cancellation policy onto the booking
+        // so later global-tier / per-property changes never alter this in-flight
+        // booking. Inert until Agent 2's resolver registers (see ctor). For the
+        // RefundableUpgrade model the concrete price is computed here at Place from
+        // the global UpgradePricePct × subtotal (the guest opt-in wires with checkout).
+        var policyResolver = policyResolvers.FirstOrDefault();
+        if (policyResolver is not null)
+        {
+            var snapshot = await policyResolver.ResolveAsync(property.Id, bookingTenantId, cancellationToken);
+            if (snapshot.Model == CancellationModel.RefundableUpgrade)
+            {
+                decimal? upgradePrice = null;
+                if (tierProviders.FirstOrDefault() is { } tp)
+                {
+                    var active = await tp.GetActiveAsync(cancellationToken);
+                    upgradePrice = decimal.Round(
+                        quote.Subtotal.Amount * active.UpgradePricePct / 100m, 2, MidpointRounding.AwayFromZero);
+                }
+                booking.StampCancellationPolicy(
+                    snapshot.Model, null, null, null, null, null,
+                    refundableUpgradePurchased: false, // guest opt-in lands with the checkout UI
+                    refundableUpgradePriceAmount: upgradePrice,
+                    refundableUpgradePriceCurrency: quote.Total.Currency);
+            }
+            else
+            {
+                booking.StampCancellationPolicy(
+                    snapshot.Model,
+                    snapshot.FirstTierDays, snapshot.SecondTierDays, snapshot.MiddleTierRefundPct,
+                    snapshot.FinalCutoffHours, snapshot.TierVersion,
+                    refundableUpgradePurchased: false, refundableUpgradePriceAmount: null,
+                    refundableUpgradePriceCurrency: null);
+            }
+        }
 
         // Slice 0.2: serializable transaction + SELECT FOR UPDATE row lock + hold
         // consumption all in one atomic step. Closes the race per proposal §7.3.
