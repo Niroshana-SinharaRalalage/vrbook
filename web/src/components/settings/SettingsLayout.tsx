@@ -24,8 +24,8 @@ export const SettingsLayout = ({
   const router = useRouter();
   const { isPlatformAdmin, isTenantAdmin } = useSettingsAccess();
 
-  const visible = SETTINGS_SECTIONS.filter((s) =>
-    s.scope === 'platform' ? isPlatformAdmin : isTenantAdmin,
+  const visible = SETTINGS_SECTIONS.filter(
+    (s) => s.ready && (s.scope === 'platform' ? isPlatformAdmin : isTenantAdmin),
   );
   const isActive = (item: SettingsNavItem) => pathname === item.href || pathname.startsWith(`${item.href}/`);
 

@@ -22,20 +22,24 @@ describe('<SettingsLayout /> — role-gated sections (VRB-210, ADR-0016)', () =>
 
   const nav = () => screen.getByRole('navigation', { name: /settings sections/i });
 
-  it('a tenant-admin sees tenant sections but NOT platform-only sections', () => {
+  it('a tenant-admin sees only READY tenant sections (placeholders + platform hidden)', () => {
     render(<SettingsLayout title="Settings">body</SettingsLayout>);
+    // Cancellation is ready → linked.
     expect(within(nav()).getByRole('link', { name: 'Cancellation policy' })).toBeInTheDocument();
+    // A not-yet-built tenant section (ready:false) is hidden from the nav.
+    expect(within(nav()).queryByRole('link', { name: 'Pricing & fees' })).not.toBeInTheDocument();
+    // Platform-only section hidden for a tenant-admin.
     expect(within(nav()).queryByRole('link', { name: 'Platform fee' })).not.toBeInTheDocument();
-    expect(within(nav()).queryByRole('link', { name: 'Global cancellation tiers' })).not.toBeInTheDocument();
   });
 
-  it('a platform-admin sees platform sections', () => {
+  it('hides unbuilt platform sections even from a platform-admin (ready-gated)', () => {
     access.isPlatformAdmin = true;
     access.isTenantAdmin = false;
     render(<SettingsLayout title="Settings">body</SettingsLayout>);
-    expect(within(nav()).getByRole('link', { name: 'Platform fee' })).toBeInTheDocument();
-    expect(within(nav()).getByRole('link', { name: 'Tax posture' })).toBeInTheDocument();
-    expect(within(nav()).queryByRole('link', { name: 'Cancellation policy' })).not.toBeInTheDocument();
+    // No platform section is ready yet → none surface; the domain story flips
+    // its `ready` flag when it ships.
+    expect(within(nav()).queryByRole('link', { name: 'Platform fee' })).not.toBeInTheDocument();
+    expect(within(nav()).queryByRole('link', { name: 'Tax posture' })).not.toBeInTheDocument();
   });
 
   it('renders the page title', () => {
