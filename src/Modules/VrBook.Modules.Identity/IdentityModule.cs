@@ -31,6 +31,8 @@ public sealed class IdentityModule : IModuleRegistration
         services.AddScoped<IUserEmailLookup, UserEmailLookup>();
         // OPS.M.5 §3.4 (D4) — cross-module lookup for Stripe Connect routing.
         services.AddScoped<ITenantStripeContextLookup, TenantStripeContextLookup>();
+        // VRB-212 — cross-module tenant Stripe-readiness read for the property-activation gate.
+        services.AddScoped<ITenantStripeReadinessLookup, TenantStripeReadinessLookup>();
         // OPS.M.5 §3.7 + §3.8 — Payment-module webhook handler invokes this
         // to apply Tenant.UpdateStripeAccountReadiness on account.updated events.
         services.AddScoped<IConnectAccountReadinessUpdater, ConnectAccountReadinessUpdater>();
