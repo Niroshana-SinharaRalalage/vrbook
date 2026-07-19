@@ -21,6 +21,7 @@ internal sealed class UpdatePropertyHandler(
     ICurrentUser currentUser,
     IAmenityRepository amenities,
     CatalogDbContext db,
+    ITenantStripeReadinessLookup tenantReadiness,
     IPropertyImageUrlBuilder urls) : IRequestHandler<UpdatePropertyCommand, PropertyDto>
 {
     public async Task<PropertyDto> Handle(UpdatePropertyCommand request, CancellationToken cancellationToken)
@@ -53,12 +54,29 @@ internal sealed class UpdatePropertyHandler(
         // NotFoundException to preserve the existing 404 contract.
         var existing = await db.Properties.AsNoTracking()
             .Where(p => p.Id == request.Id)
-            .Select(p => new { p.Id, p.Slug, p.TenantId })
+            .Select(p => new { p.Id, p.Slug, p.TenantId, p.IsActive, ImageCount = p.Images.Count })
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Property", request.Id);
         if (existing.TenantId != request.TenantId)
         {
             throw new NotFoundException("Property", request.Id);
+        }
+
+        // VRB-212 — enforce the publish gate on the false→true activation transition.
+        // The procedural ExecuteUpdate below can't call Property.Activate(), so replicate
+        // its precondition via the shared Property.CheckActivation (single source of truth),
+        // projecting the tenant's Stripe readiness at the handler boundary. Closes the
+        // publish-without-payment-ready bypass (the old path set IsActive blindly).
+        if (r.IsActive && !existing.IsActive)
+        {
+            var readiness = await tenantReadiness.GetAsync(request.TenantId, cancellationToken)
+                ?? throw new NotFoundException("Tenant", request.TenantId);
+            var block = Property.CheckActivation(
+                readiness.Status, readiness.ChargesEnabled, readiness.PayoutsEnabled, existing.ImageCount);
+            if (block is not null)
+            {
+                throw new BusinessRuleViolationException(block.Code, block.Message);
+            }
         }
 
         // Validate domain VOs by constructing them - throws if invariants violated.

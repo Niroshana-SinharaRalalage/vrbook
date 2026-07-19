@@ -1,8 +1,10 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using VrBook.Contracts.Dtos;
+using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
 using VrBook.Modules.Catalog.Application.Common;
+using VrBook.Modules.Catalog.Domain;
 using VrBook.Modules.Catalog.Infrastructure.Persistence;
 
 namespace VrBook.Modules.Catalog.Application.Properties.Queries;
@@ -19,6 +21,7 @@ internal sealed class GetPropertyDetailByIdHandler(
     IPropertyRepository properties,
     IAmenityRepository amenities,
     IPropertyImageUrlBuilder urls,
+    ITenantStripeReadinessLookup tenantReadiness,
     CatalogDbContext db) : IRequestHandler<GetPropertyDetailByIdQuery, PropertyDto>
 {
     public async Task<PropertyDto> Handle(GetPropertyDetailByIdQuery request, CancellationToken cancellationToken)
@@ -35,6 +38,15 @@ internal sealed class GetPropertyDetailByIdHandler(
             .Select(a => a.ToDto())
             .ToArray();
 
-        return p.ToDto(amenityDtos, urls.ToUrl);
+        var dto = p.ToDto(amenityDtos, urls.ToUrl);
+
+        // VRB-212 — project the tenant's Stripe readiness so the settings UI can enable/
+        // explain the publish toggle (the enforcement itself lives in UpdatePropertyHandler).
+        var readiness = await tenantReadiness.GetAsync(p.TenantId, cancellationToken);
+        var block = readiness is null
+            ? new ActivationBlock("property.tenant_not_payment_ready", "Tenant payment readiness is unknown.")
+            : Property.CheckActivation(readiness.Status, readiness.ChargesEnabled, readiness.PayoutsEnabled, p.Images.Count);
+
+        return dto with { CanActivate = block is null, ActivationBlockedReason = block?.Message };
     }
 }

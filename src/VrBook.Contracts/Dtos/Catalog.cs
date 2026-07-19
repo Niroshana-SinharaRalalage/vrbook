@@ -31,7 +31,13 @@ public sealed record PropertyDto(
     // on the DTO for wire-format compatibility while the web form fills
     // out the field; production reads never return null (column is NOT
     // NULL DEFAULT 24 per M.16.2 migration).
-    int TurnoverHours = 24);
+    int TurnoverHours = 24,
+    // VRB-212 — activation gate for the property-settings UI. CanActivate is false when
+    // the tenant isn't Stripe-ready (or no images); ActivationBlockedReason explains why.
+    // Defaulted (true/null) so the 14 non-settings ToDto call-sites stay non-breaking —
+    // only the admin property-settings read projects the tenant's readiness to fill them.
+    bool CanActivate = true,
+    string? ActivationBlockedReason = null);
 
 /// <summary>
 /// Slice 1 — admin list view of a property. Adds <c>IsActive</c> (so the UI can

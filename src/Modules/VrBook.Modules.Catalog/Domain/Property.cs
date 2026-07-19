@@ -219,26 +219,10 @@ public sealed class Property : AggregateRoot
     public void Activate(string tenantStatus, bool tenantChargesEnabled, bool tenantPayoutsEnabled)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantStatus);
-        if (!string.Equals(tenantStatus, "Active", StringComparison.Ordinal))
+        var block = CheckActivation(tenantStatus, tenantChargesEnabled, tenantPayoutsEnabled, _images.Count);
+        if (block is not null)
         {
-            throw new BusinessRuleViolationException(
-                "property.tenant_not_payment_ready",
-                $"Property cannot be activated while tenant status is '{tenantStatus}'. " +
-                "Complete Stripe Connect onboarding first.");
-        }
-        if (!tenantChargesEnabled || !tenantPayoutsEnabled)
-        {
-            throw new BusinessRuleViolationException(
-                "property.tenant_not_payment_ready",
-                "Property cannot be activated until the tenant's Stripe Connect account " +
-                $"has charges_enabled (currently {tenantChargesEnabled}) AND payouts_enabled " +
-                $"(currently {tenantPayoutsEnabled}).");
-        }
-        if (_images.Count == 0)
-        {
-            throw new BusinessRuleViolationException(
-                "property.requires_image",
-                "Add at least one photo before publishing this listing.");
+            throw new BusinessRuleViolationException(block.Code, block.Message);
         }
         IsActive = true;
     }
@@ -257,6 +241,39 @@ public sealed class Property : AggregateRoot
         "Tracked for deletion in Slice OPS.M.11 properties-lifecycle.")]
     public void Activate() => IsActive = true;
 #pragma warning restore S1133
+
+    /// <summary>
+    /// VRB-212 — the pure publish-precondition check, the SINGLE source of truth for the
+    /// activation gate. Returns <c>null</c> when the property may go live, else the blocking
+    /// reason. Used by the gated <c>Activate(string, bool, bool)</c> (throws) AND by
+    /// <c>UpdatePropertyHandler</c>, which enforces it on the <c>false→true</c> IsActive
+    /// transition (the procedural PUT path can't call the aggregate method, and previously
+    /// bypassed the gate entirely).
+    /// </summary>
+    public static ActivationBlock? CheckActivation(
+        string tenantStatus, bool tenantChargesEnabled, bool tenantPayoutsEnabled, int imageCount)
+    {
+        if (!string.Equals(tenantStatus, "Active", StringComparison.Ordinal))
+        {
+            return new ActivationBlock("property.tenant_not_payment_ready",
+                $"Property cannot be activated while tenant status is '{tenantStatus}'. " +
+                "Complete Stripe Connect onboarding first.");
+        }
+        if (!tenantChargesEnabled || !tenantPayoutsEnabled)
+        {
+            return new ActivationBlock("property.tenant_not_payment_ready",
+                "Property cannot be activated until the tenant's Stripe Connect account " +
+                $"has charges_enabled (currently {tenantChargesEnabled}) AND payouts_enabled " +
+                $"(currently {tenantPayoutsEnabled}).");
+        }
+        if (imageCount == 0)
+        {
+            return new ActivationBlock("property.requires_image",
+                "Add at least one photo before publishing this listing.");
+        }
+        return null;
+    }
+
     public void Deactivate(string reason)
     {
         IsActive = false;
@@ -326,3 +343,8 @@ public sealed class Property : AggregateRoot
         }
     }
 }
+
+/// <summary>VRB-212 — a property-activation block: a stable <paramref name="Code"/>
+/// (e.g. <c>property.tenant_not_payment_ready</c>) + a human-readable
+/// <paramref name="Message"/> surfaced to the host.</summary>
+public sealed record ActivationBlock(string Code, string Message);

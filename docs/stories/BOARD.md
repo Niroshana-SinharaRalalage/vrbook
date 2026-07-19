@@ -55,7 +55,7 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | settings-nav-gate | SETTINGS | Should | DONE | story/settings-nav-gate |
 | VRB-210 | SETTINGS | Must | DONE | story/VRB-210 |
 | VRB-211 | SETTINGS | Must | DONE | story/VRB-211 |
-| VRB-212 | SETTINGS | Must | TODO | |
+| VRB-212 | SETTINGS | Must | CLAIMED | story/VRB-212-backend (backend, me) + Agent 3 (panel) |
 | VRB-213 | SETTINGS | Must | TODO | |
 | VRB-214 | SETTINGS | Must | CLAIMED | story/VRB-214 (reopened — integration round-trip RED in the suite) |
 | VRB-215 | SETTINGS | Must | CLAIMED | story/VRB-215 (reopened — set-model integration round-trip RED) |
