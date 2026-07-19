@@ -97,13 +97,21 @@ const completeEntraSignIn = async (page: Page, email: string, password: string):
 const waitForMsalSession = async (page: Page): Promise<void> => {
   await expect
     .poll(
-      async () =>
-        page.evaluate(() =>
-          Object.keys(window.sessionStorage).some(
-            (k) => k.includes('login.windows') || k.includes('msal') || k.includes('accesstoken'),
-          ),
-        ),
-      { timeout: 30_000, message: 'MSAL never populated sessionStorage after sign-in' },
+      async () => {
+        try {
+          return await page.evaluate(() =>
+            Object.keys(window.sessionStorage).some(
+              (k) => k.includes('login.windows') || k.includes('msal') || k.includes('accesstoken'),
+            ),
+          );
+        } catch {
+          // The page is still redirecting after sign-in (Entra → /auth callback
+          // → app); evaluating mid-navigation destroys the context. Treat as
+          // "not ready yet" so the poll retries once the redirects settle.
+          return false;
+        }
+      },
+      { timeout: 45_000, message: 'MSAL never populated sessionStorage after sign-in' },
     )
     .toBe(true);
 };
@@ -121,10 +129,16 @@ const establishOwnerTenantContext = async (page: Page): Promise<void> => {
     await page.waitForURL((url) => url.pathname.startsWith('/admin'), { timeout: 30_000 });
   }
   await expect
-    .poll(() => page.evaluate(() => window.sessionStorage.getItem('vrbook:active-tenant')), {
-      timeout: 30_000,
-      message: 'active tenant never established for the owner persona',
-    })
+    .poll(
+      async () => {
+        try {
+          return await page.evaluate(() => window.sessionStorage.getItem('vrbook:active-tenant'));
+        } catch {
+          return null; // mid-navigation; retry
+        }
+      },
+      { timeout: 30_000, message: 'active tenant never established for the owner persona' },
+    )
     .not.toBeNull();
 };
 
