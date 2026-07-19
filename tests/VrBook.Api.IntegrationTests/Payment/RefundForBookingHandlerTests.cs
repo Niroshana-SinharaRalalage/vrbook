@@ -148,6 +148,44 @@ public sealed class RefundForBookingHandlerTests
             because: "the guard must read the persisted $0 reversal, not the proportional approximation.");
     }
 
+    [Fact]
+    public async Task Engine_on_uses_snapshotted_policy_refund_not_flat()
+    {
+        var pi = NewSucceededPi(amount: 100m);
+        var cancelLookup = Substitute.For<IBookingCancellationLookup>();
+        cancelLookup.GetAsync(BookingX, Arg.Any<CancellationToken>()).Returns(
+            new BookingCancellationInfo(
+                BookingX,
+                CheckinDate: DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), // far future → full tier
+                Model: CancellationModel.Tiered,
+                FirstTierDays: 7, SecondTierDays: 2, MiddleTierRefundPct: 50, FinalCutoffHours: 48, TierVersion: 1,
+                RefundableUpgradePurchased: false, RefundableUpgradePriceAmount: null, RefundableUpgradePriceCurrency: null));
+        var toggle = Substitute.For<IFeatureToggle>();
+        toggle.IsEnabledAsync("Features:Cancellation.EngineV2",
+                Arg.Any<Guid?>(), Arg.Any<Guid?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        var (handler, gateway, lookup) = NewHandler(pi, cancelLookup, toggle);
+        lookup.GetAsync(TenantA, Arg.Any<CancellationToken>())
+            .Returns(new TenantStripeContext(TenantA, "acct_seed", 1500, "USD"));
+        gateway.RefundAsync(Arg.Any<string>(), Arg.Any<decimal?>(), Arg.Any<string>(), Arg.Any<string?>(),
+                Arg.Any<bool>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+            .Returns(new StripeRefundCreated("re_pol", 100m, RefundStatus.Succeeded));
+
+        // Amount=null → the engine resolves from the snapshot. A far-future tiered cancel
+        // = FULL refund (100), NOT the flat ServiceFeePercent refund (90).
+        await handler.Handle(
+            new RefundForBookingCommand(BookingX, null, "guest_cancel", TenantA), CancellationToken.None);
+
+        await gateway.Received(1).RefundAsync(
+            stripePaymentIntentId: pi.StripePaymentIntentId,
+            amount: 100m,
+            idempotencyKey: Arg.Any<string>(),
+            reason: "guest_cancel",
+            refundApplicationFee: Arg.Any<bool>(),
+            applicationFeeRefundCents: Arg.Any<long?>(),
+            cancellationToken: Arg.Any<CancellationToken>());
+    }
+
     private static PaymentIntent NewSucceededPi(decimal amount)
     {
         var pi = PaymentIntent.Create(
@@ -164,7 +202,10 @@ public sealed class RefundForBookingHandlerTests
     }
 
     private static (RefundForBookingHandler handler, IStripeGateway gateway,
-        ITenantStripeContextLookup lookup) NewHandler(PaymentIntent? piToReturn)
+        ITenantStripeContextLookup lookup) NewHandler(
+            PaymentIntent? piToReturn,
+            IBookingCancellationLookup? cancellationLookup = null,
+            IFeatureToggle? featureToggle = null)
     {
         var gateway = Substitute.For<IStripeGateway>();
         gateway.IsConfigured.Returns(true);
@@ -178,8 +219,11 @@ public sealed class RefundForBookingHandlerTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Payment:AllowPlatformFallback"] = "false" })
             .Build();
+        // VRB-102 Phase B — defaults keep the flat refund path (toggle off, no snapshot).
+        var cancel = cancellationLookup ?? Substitute.For<IBookingCancellationLookup>();
+        var toggle = featureToggle ?? Substitute.For<IFeatureToggle>();
         var handler = new RefundForBookingHandler(
-            gateway, lookup, repo, uow, refundOpts, config,
+            gateway, lookup, repo, uow, refundOpts, config, cancel, toggle,
             NullLogger<RefundForBookingHandler>.Instance);
         return (handler, gateway, lookup);
     }
