@@ -56,3 +56,10 @@ Either outcome is fine — (B) is the guaranteed fallback. ROPC is only a conven
 ## Guardrails (why this is safe, not a backdoor)
 - Real Entra-issued tokens, real claim pipeline, real admin-gate middleware exercised — **no `[AllowAnonymous]`/DevAuth**, so `OpsOps2_AdminSurfaceAndTestBackdoorTests` stays green.
 - Accounts are staging-only, isolated `e2e-tenant`, deterministic fixture. **Rotate the KV passwords periodically; never provision in prod.**
+
+## EXECUTED 2026-07-19 — status + the ROPC verdict (definitive)
+- ✅ **Personas created** in the CIAM tenant (`c6ada840-…` / `vrbook.ciamlogin.com`): `e2e-owner@vrbook.test`, `e2e-platform-admin@vrbook.test`, `e2e-guest@vrbook.test` (email+password local accounts). **`mail` attribute set** on each = its `@vrbook.test` email (so the `email` claim emits and matches the DB seed).
+- ✅ **KV passwords set**: `e2e-{owner,platform-admin,guest}-password` in `kv-vrbook-staging`.
+- ✅ **DB seed confirmed**: migrator job `caj-vrbook-migrator-staging` has `Bootstrap__E2e__Enabled=True`; a manual run succeeded (SeedE2EBackfill re-seeds `is_platform_admin`/`tenant_admin` rows).
+- ❌ **ROPC is NOT viable for admin tokens here (verified live).** ROPC authenticates and even emits the correct `email` claim, but the token carries **no `tfp`/`acr` user-flow marker**, so `UserProvisioningMiddleware`'s OPS.M.22 admin-preseed gate never recognizes it as an admin-flow login and the `PlatformAdmin` role never materializes → **403**. ROPC bypasses the `AdminSignUpSignIn` user flow by design; it cannot produce an admin-flow token.
+- ✅ **THE token path = interactive `AdminSignUpSignIn` sign-in via Playwright `global-setup.ts`** (the same flow real admins use — it carries the flow marker, so the role materializes). Personas now exist, so the authed Playwright projects are unblocked. For API-only step-6, pull the bearer from the Playwright-captured session, not ROPC.
