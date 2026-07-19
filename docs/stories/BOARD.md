@@ -54,12 +54,12 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 | VRB-110-followup | A11Y | Should | DONE | story/VRB-110-followup |
 | settings-nav-gate | SETTINGS | Should | DONE | story/settings-nav-gate |
 | VRB-210 | SETTINGS | Must | DONE | story/VRB-210 |
-| VRB-211 | SETTINGS | Must | CLAIMED | story/VRB-211 |
+| VRB-211 | SETTINGS | Must | DONE | story/VRB-211 |
 | VRB-212 | SETTINGS | Must | TODO | |
 | VRB-213 | SETTINGS | Must | TODO | |
 | VRB-214 | SETTINGS | Must | TODO | |
-| VRB-215 | SETTINGS | Must | CLAIMED | story/VRB-215 (web panel merged; backend: Agent2 resolver+config, Agent1 snapshot) |
-| VRB-216 | SETTINGS | Must | CLAIMED | story/VRB-216-contracts |
+| VRB-215 | SETTINGS | Must | DONE | story/VRB-215 |
+| VRB-216 | SETTINGS | Must | DONE | story/VRB-216 |
 | VRB-217 | SETTINGS | Must | TODO | |
 | VRB-218 | SETTINGS | Should | TODO | |
 | VRB-219 | SETTINGS | Should | TODO | |
@@ -120,6 +120,6 @@ Edit only your own story's row to minimise conflicts. Full rules: [`../AGENT-PLA
 
 ---
 
-**Progress rollup:** 24 / 86 DONE. Update this count in your `done:` commit.
+**Progress rollup:** 27 / 86 DONE. Update this count in your `done:` commit.
 
 > **DEFERRED (owner decision 2026-07-14):** VRB-301 (cd-prod.yml) + VRB-302 (blue-green rollback) — build & validate on staging first, design prod infra/deploy later. Do not claim these until re-activated.
