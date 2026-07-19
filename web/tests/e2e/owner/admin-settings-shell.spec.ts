@@ -13,13 +13,21 @@ test.beforeEach(async ({ page }) => {
   await ensureAdminContext(page);
 });
 
-test('the settings index shows the section nav (tenant sections only)', async ({ page }) => {
+test('the settings nav shows only READY sections (placeholders + platform hidden)', async ({ page }) => {
   await page.goto('/admin/settings');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
   const nav = page.getByRole('navigation', { name: /settings sections/i });
   await expect(nav.getByRole('link', { name: 'Cancellation policy' })).toBeVisible();
-  // platform-only section is hidden for a tenant-admin
+  // not-yet-built placeholder sections are gated out of the nav (pre-prod hide)
+  await expect(nav.getByRole('link', { name: 'Pricing & fees' })).toHaveCount(0);
+  await expect(nav.getByRole('link', { name: 'Availability' })).toHaveCount(0);
+  // platform-only section hidden for a tenant-admin
   await expect(nav.getByRole('link', { name: 'Platform fee' })).toHaveCount(0);
+});
+
+test('a gated placeholder section is still reachable by direct URL (unlinked, not removed)', async ({ page }) => {
+  await page.goto('/admin/settings/pricing');
+  await expect(page.getByText(/delivered in VRB-213/i)).toBeVisible();
 });
 
 test('a tenant-admin is refused the platform settings area (403)', async ({ page }) => {
@@ -34,11 +42,6 @@ test('the section nav navigates to the cancellation panel', async ({ page }) => 
     .click();
   await expect(page).toHaveURL(/\/admin\/settings\/cancellation$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Cancellation policy' })).toBeVisible();
-});
-
-test('a scaffolded section shows its placeholder', async ({ page }) => {
-  await page.goto('/admin/settings/pricing');
-  await expect(page.getByText(/delivered in VRB-213/i)).toBeVisible();
 });
 
 test('the Settings area is reachable from the admin sidebar (re-linked)', async ({ page }) => {
