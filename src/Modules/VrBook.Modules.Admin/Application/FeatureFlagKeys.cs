@@ -32,12 +32,20 @@ public static class FeatureFlagKeys
     /// Default: off (dev/staging override to on via config).</summary>
     public const string CancellationEngineV2 = "Features:Cancellation.EngineV2";
 
+    /// <summary>VRB-103 — use the real Stripe-Tax <c>ITaxCalculator</c> (platform-facilitator
+    /// tax + fail-closed) instead of the zero-tax stub. Startup-time DI selection (like the
+    /// hold store), not a live toggle: the calculator is chosen at composition. Off ⇒ the stub
+    /// (quotes show $0 = current behavior). Default: off prod until Stripe Tax is enabled on the
+    /// platform account; on for dev/staging with test keys.</summary>
+    public const string StripeTaxEnabled = "Features:StripeTax.Enabled";
+
     /// <summary>Known flags + their built-in safe defaults, for the list endpoint.</summary>
     public static readonly IReadOnlyDictionary<string, bool> KnownDefaults = new Dictionary<string, bool>
     {
         [LoyaltyEnabled] = true,
         [BookingUseRedisHoldStore] = false,
         [CancellationEngineV2] = false,
+        [StripeTaxEnabled] = false,
     };
 
     /// <summary>The memory-cache key for a flag — shared by the resolver (read) and the

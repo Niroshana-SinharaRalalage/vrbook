@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using VrBook.Application.Common;
 using VrBook.Contracts.Interfaces;
 using VrBook.Infrastructure.Outbox;
@@ -8,6 +9,7 @@ using VrBook.Infrastructure.Persistence;
 using VrBook.Modules.Payment.Application;
 using VrBook.Modules.Payment.Infrastructure.Persistence;
 using VrBook.Modules.Payment.Infrastructure.Stripe;
+using VrBook.Modules.Payment.Infrastructure.Tax;
 
 namespace VrBook.Modules.Payment;
 
@@ -31,6 +33,20 @@ public sealed class PaymentModule : IModuleRegistration
 
         services.AddScoped<IPaymentIntentRepository, PaymentIntentRepository>();
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<PaymentDbContext>());
+
+        // VRB-103 — bind Tax config always; swap the A0 zero-tax stub for the real
+        // Stripe-Tax calculator (platform-facilitator, fail-closed) ONLY when the flag is on.
+        // Startup-time DI selection (like Booking.UseRedisHoldStore), not a live toggle: the
+        // calculator is chosen at composition, so a runtime override has no effect until restart.
+        // Flag off ⇒ StubTaxCalculator stays ⇒ quotes show $0 = current behavior (safe default).
+        // Literal key string avoids a module→Admin (FeatureFlagKeys) reference.
+        services.Configure<TaxOptions>(configuration.GetSection(TaxOptions.SectionName));
+        var stripeTaxEnabled = configuration.GetValue("Features:StripeTax.Enabled", false);
+        if (stripeTaxEnabled)
+        {
+            services.AddSingleton<IStripeTaxClient, StripeTaxClient>();
+            services.Replace(ServiceDescriptor.Singleton<ITaxCalculator, StripeTaxCalculator>());
+        }
 
         services.AddModuleAssembly(typeof(PaymentModule).Assembly);
         return services;
