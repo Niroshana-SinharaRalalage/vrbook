@@ -26,7 +26,7 @@ export const SETTINGS_SECTIONS: readonly SettingsNavItem[] = [
   { href: '/admin/settings/pricing', label: 'Pricing & fees', scope: 'tenant', ready: false },
   { href: '/admin/settings/availability', label: 'Availability', scope: 'tenant', ready: false },
   { href: '/admin/settings/notifications', label: 'Notifications', scope: 'tenant', ready: false },
-  { href: '/admin/platform/settings/cancellation-tiers', label: 'Global cancellation tiers', scope: 'platform', ready: false },
+  { href: '/admin/platform/settings/cancellation-tiers', label: 'Global cancellation tiers', scope: 'platform', ready: true },
   { href: '/admin/platform/settings/platform-fee', label: 'Platform fee', scope: 'platform', ready: false },
   { href: '/admin/platform/settings/tax-posture', label: 'Tax posture', scope: 'platform', ready: false },
 ];

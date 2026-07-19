@@ -65,27 +65,24 @@ export const putPropertyCancellation = (
     { method: 'PUT', body },
   );
 
-// ---- Platform-admin: DTOs for the VRB-216 panels (defined for reuse) ----
-export interface TenantFeeOverrideDto {
-  readonly tenantId: string;
-  readonly feeBps: number;
-}
-
-export interface PlatformFeeConfigDto {
-  readonly defaultBps: number;
-  readonly overrides: readonly TenantFeeOverrideDto[];
-}
-
-export interface TaxPostureDto {
-  readonly facilitatorActive: boolean;
-  readonly perStateEnabled: Readonly<Record<string, boolean>>;
+// ---- Platform-admin: global cancellation tiers (VRB-216) ----
+// (Platform fee is NOT a setting — it lives on identity.tenants.PlatformFeeBps
+// via TenantsPlatformController; tax-posture fns land with its own panel slice.)
+export interface SetGlobalTiersBody {
+  readonly firstTierDays: number;
+  readonly secondTierDays: number;
+  readonly middleTierRefundPct: number;
+  readonly finalCutoffHours: number;
+  readonly upgradePricePct: number;
 }
 
 export const getGlobalCancellationTiers = (): Promise<GlobalCancellationTiersDto> =>
   apiFetch<GlobalCancellationTiersDto>('/api/v1/admin/platform/settings/cancellation-tiers');
 
-export const getPlatformFee = (): Promise<PlatformFeeConfigDto> =>
-  apiFetch<PlatformFeeConfigDto>('/api/v1/admin/platform/settings/platform-fee');
-
-export const getTaxPosture = (): Promise<TaxPostureDto> =>
-  apiFetch<TaxPostureDto>('/api/v1/admin/platform/settings/tax-posture');
+export const putGlobalCancellationTiers = (
+  body: SetGlobalTiersBody,
+): Promise<GlobalCancellationTiersDto> =>
+  apiFetch<GlobalCancellationTiersDto>('/api/v1/admin/platform/settings/cancellation-tiers', {
+    method: 'PUT',
+    body,
+  });

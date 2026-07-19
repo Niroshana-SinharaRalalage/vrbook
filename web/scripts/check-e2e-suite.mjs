@@ -25,7 +25,8 @@ import { fileURLToPath } from 'node:url';
 // renders live /changes — VRB-211), 60 → 62.
 // VRB-110-followup added owner/a11y-flows (+3 owner: gallery edit, settings shell,
 // cancellation panel axe scans), 62 -> 65.
-const EXPECTED_SCENARIOS = 65;
+// VRB-216-web added platform-admin/settings-tiers (+3: renders, nav-ready, axe), 65 -> 68.
+const EXPECTED_SCENARIOS = 68;
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const e2eDir = join(webRoot, 'tests', 'e2e');
