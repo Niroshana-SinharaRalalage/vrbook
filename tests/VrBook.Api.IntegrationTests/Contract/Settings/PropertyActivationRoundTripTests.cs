@@ -19,7 +19,12 @@ namespace VrBook.Api.IntegrationTests.Contract.Settings;
 [Collection(nameof(TwoTenantApiCollection))]
 public sealed class PropertyActivationRoundTripTests(TwoTenantApiFixture fixture)
 {
+    // GET full detail is the admin read surface (carries CanActivate/ActivationBlockedReason);
+    // the write goes through the tenant-facing PUT (api/v1/properties/{id}) — the admin route
+    // is read-only, so PUTting there is a 405.
     private static string Detail(Guid id) => $"/api/v1/admin/properties/{id}";
+
+    private static string Update(Guid id) => $"/api/v1/properties/{id}";
 
     // Map a fetched PropertyDto back to the UpdatePropertyRequest shape (same Address type
     // round-trips), overriding only title/isActive.
@@ -55,7 +60,7 @@ public sealed class PropertyActivationRoundTripTests(TwoTenantApiFixture fixture
 
         try
         {
-            var put = await client.PutAsJsonAsync(Detail(id), ToUpdateBody(p, title: newTitle, isActive: false));
+            var put = await client.PutAsJsonAsync(Update(id), ToUpdateBody(p, title: newTitle, isActive: false));
             put.StatusCode.Should().Be(HttpStatusCode.OK);
 
             var got = (await client.GetFromJsonAsync<PropertyDto>(Detail(id), SettingsTestJson.Options))!;
@@ -69,7 +74,7 @@ public sealed class PropertyActivationRoundTripTests(TwoTenantApiFixture fixture
         {
             // Restore the shared property so this mutation doesn't bleed into other
             // TwoTenantApiCollection tests (order-independence).
-            await client.PutAsJsonAsync(Detail(id), ToUpdateBody(p));
+            await client.PutAsJsonAsync(Update(id), ToUpdateBody(p));
         }
     }
 
@@ -88,15 +93,15 @@ public sealed class PropertyActivationRoundTripTests(TwoTenantApiFixture fixture
             p.ActivationBlockedReason.Should().NotBeNullOrWhiteSpace();
 
             // Ensure inactive, then attempt to publish → the false→true transition is blocked.
-            await client.PutAsJsonAsync(Detail(id), ToUpdateBody(p, isActive: false));
-            var publish = await client.PutAsJsonAsync(Detail(id), ToUpdateBody(p, isActive: true));
+            await client.PutAsJsonAsync(Update(id), ToUpdateBody(p, isActive: false));
+            var publish = await client.PutAsJsonAsync(Update(id), ToUpdateBody(p, isActive: true));
 
             publish.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity,
                 "a property cannot go live while its tenant isn't Stripe-ready (property.tenant_not_payment_ready).");
         }
         finally
         {
-            await client.PutAsJsonAsync(Detail(id), ToUpdateBody(p)); // restore shared property state
+            await client.PutAsJsonAsync(Update(id), ToUpdateBody(p)); // restore shared property state
         }
     }
 
@@ -108,7 +113,7 @@ public sealed class PropertyActivationRoundTripTests(TwoTenantApiFixture fixture
         var p = (await ownerA.GetFromJsonAsync<PropertyDto>(Detail(id), SettingsTestJson.Options))!;
 
         var ownerB = fixture.CreateClientAs("OwnerB");
-        var resp = await ownerB.PutAsJsonAsync(Detail(id), ToUpdateBody(p, title: "hijack"));
+        var resp = await ownerB.PutAsJsonAsync(Update(id), ToUpdateBody(p, title: "hijack"));
 
         resp.StatusCode.Should().BeOneOf(
             new[] { HttpStatusCode.Forbidden, HttpStatusCode.NotFound },

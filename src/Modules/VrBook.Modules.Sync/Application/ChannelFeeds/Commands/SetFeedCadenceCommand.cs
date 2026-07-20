@@ -45,7 +45,11 @@ internal sealed class SetFeedCadenceHandler(SyncDbContext db, IFeedUrlBuilder ur
     {
         ChannelFeedAuthorization.RequireTenantAdmin(currentUser, cmd.TenantId);
 
-        var feed = await db.ChannelFeeds.FirstOrDefaultAsync(f => f.Id == cmd.FeedId, cancellationToken)
+        // Explicit tenant scope (mirrors SetPropertyCancellationModelHandler): a cross-tenant
+        // feed id resolves to NotFound, independent of RLS. RLS is defence-in-depth, not the
+        // sole guard — the integration DB proved a pure-RLS lookup leaks the row cross-tenant.
+        var feed = await db.ChannelFeeds
+            .FirstOrDefaultAsync(f => f.Id == cmd.FeedId && f.TenantId == cmd.TenantId, cancellationToken)
             ?? throw new NotFoundException("ChannelFeed", cmd.FeedId);
 
         // Reuse the aggregate's config update — cadence only; keep url + enabled as-is.
