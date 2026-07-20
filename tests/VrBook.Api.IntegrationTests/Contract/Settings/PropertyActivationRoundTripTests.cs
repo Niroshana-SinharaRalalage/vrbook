@@ -53,15 +53,24 @@ public sealed class PropertyActivationRoundTripTests(TwoTenantApiFixture fixture
         var p = (await client.GetFromJsonAsync<PropertyDto>(Detail(id)))!;
         var newTitle = $"Edited {Guid.NewGuid():N}".Substring(0, 20);
 
-        var put = await client.PutAsJsonAsync(Detail(id), ToUpdateBody(p, title: newTitle, isActive: false));
-        put.StatusCode.Should().Be(HttpStatusCode.OK);
+        try
+        {
+            var put = await client.PutAsJsonAsync(Detail(id), ToUpdateBody(p, title: newTitle, isActive: false));
+            put.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var got = (await client.GetFromJsonAsync<PropertyDto>(Detail(id)))!;
-        got.Title.Should().Be(newTitle);
+            var got = (await client.GetFromJsonAsync<PropertyDto>(Detail(id)))!;
+            got.Title.Should().Be(newTitle);
 
-        var changes = await client.GetFromJsonAsync<List<SettingsChangeDto>>(
-            "/api/v1/admin/settings/changes?section=property");
-        changes!.Should().Contain(c => c.Action == "settings.property.update");
+            var changes = await client.GetFromJsonAsync<List<SettingsChangeDto>>(
+                "/api/v1/admin/settings/changes?section=property");
+            changes!.Should().Contain(c => c.Action == "settings.property.update");
+        }
+        finally
+        {
+            // Restore the shared property so this mutation doesn't bleed into other
+            // TwoTenantApiCollection tests (order-independence).
+            await client.PutAsJsonAsync(Detail(id), ToUpdateBody(p));
+        }
     }
 
     [Fact]
@@ -72,16 +81,23 @@ public sealed class PropertyActivationRoundTripTests(TwoTenantApiFixture fixture
 
         var p = (await client.GetFromJsonAsync<PropertyDto>(Detail(id)))!;
 
-        // Read-surface: the gate is exposed for the UI (fixture tenant is PendingOnboarding).
-        p.CanActivate.Should().BeFalse();
-        p.ActivationBlockedReason.Should().NotBeNullOrWhiteSpace();
+        try
+        {
+            // Read-surface: the gate is exposed for the UI (fixture tenant is PendingOnboarding).
+            p.CanActivate.Should().BeFalse();
+            p.ActivationBlockedReason.Should().NotBeNullOrWhiteSpace();
 
-        // Ensure inactive, then attempt to publish → the false→true transition is blocked.
-        await client.PutAsJsonAsync(Detail(id), ToUpdateBody(p, isActive: false));
-        var publish = await client.PutAsJsonAsync(Detail(id), ToUpdateBody(p, isActive: true));
+            // Ensure inactive, then attempt to publish → the false→true transition is blocked.
+            await client.PutAsJsonAsync(Detail(id), ToUpdateBody(p, isActive: false));
+            var publish = await client.PutAsJsonAsync(Detail(id), ToUpdateBody(p, isActive: true));
 
-        publish.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity,
-            "a property cannot go live while its tenant isn't Stripe-ready (property.tenant_not_payment_ready).");
+            publish.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity,
+                "a property cannot go live while its tenant isn't Stripe-ready (property.tenant_not_payment_ready).");
+        }
+        finally
+        {
+            await client.PutAsJsonAsync(Detail(id), ToUpdateBody(p)); // restore shared property state
+        }
     }
 
     [Fact]
