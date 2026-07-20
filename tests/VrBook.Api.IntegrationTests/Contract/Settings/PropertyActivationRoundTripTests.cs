@@ -50,7 +50,7 @@ public sealed class PropertyActivationRoundTripTests(TwoTenantApiFixture fixture
         var client = fixture.CreateClientAs("OwnerA");
         var id = fixture.TenantAPropertyId;
 
-        var p = (await client.GetFromJsonAsync<PropertyDto>(Detail(id)))!;
+        var p = (await client.GetFromJsonAsync<PropertyDto>(Detail(id), SettingsTestJson.Options))!;
         var newTitle = $"Edited {Guid.NewGuid():N}".Substring(0, 20);
 
         try
@@ -58,7 +58,7 @@ public sealed class PropertyActivationRoundTripTests(TwoTenantApiFixture fixture
             var put = await client.PutAsJsonAsync(Detail(id), ToUpdateBody(p, title: newTitle, isActive: false));
             put.StatusCode.Should().Be(HttpStatusCode.OK);
 
-            var got = (await client.GetFromJsonAsync<PropertyDto>(Detail(id)))!;
+            var got = (await client.GetFromJsonAsync<PropertyDto>(Detail(id), SettingsTestJson.Options))!;
             got.Title.Should().Be(newTitle);
 
             var changes = await client.GetFromJsonAsync<List<SettingsChangeDto>>(
@@ -79,7 +79,7 @@ public sealed class PropertyActivationRoundTripTests(TwoTenantApiFixture fixture
         var client = fixture.CreateClientAs("OwnerA");
         var id = fixture.TenantAPropertyId;
 
-        var p = (await client.GetFromJsonAsync<PropertyDto>(Detail(id)))!;
+        var p = (await client.GetFromJsonAsync<PropertyDto>(Detail(id), SettingsTestJson.Options))!;
 
         try
         {
@@ -105,7 +105,7 @@ public sealed class PropertyActivationRoundTripTests(TwoTenantApiFixture fixture
     {
         var ownerA = fixture.CreateClientAs("OwnerA");
         var id = fixture.TenantAPropertyId;
-        var p = (await ownerA.GetFromJsonAsync<PropertyDto>(Detail(id)))!;
+        var p = (await ownerA.GetFromJsonAsync<PropertyDto>(Detail(id), SettingsTestJson.Options))!;
 
         var ownerB = fixture.CreateClientAs("OwnerB");
         var resp = await ownerB.PutAsJsonAsync(Detail(id), ToUpdateBody(p, title: "hijack"));

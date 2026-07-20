@@ -63,12 +63,12 @@ public sealed class SettingsRoundTripTests(TwoTenantApiFixture fixture)
         var put = await client.PutAsJsonAsync(
             $"/api/v1/admin/settings/cancellation/{propertyId}", new { model = "RefundableUpgrade" });
         put.StatusCode.Should().Be(HttpStatusCode.OK);
-        var dto = await put.Content.ReadFromJsonAsync<PropertyCancellationSettingsDto>();
+        var dto = await put.Content.ReadFromJsonAsync<PropertyCancellationSettingsDto>(SettingsTestJson.Options);
         dto!.Model.Should().Be(CancellationModel.RefundableUpgrade);
 
         // GET reflects the write
         var got = await client.GetFromJsonAsync<PropertyCancellationSettingsDto>(
-            $"/api/v1/admin/settings/cancellation/{propertyId}");
+            $"/api/v1/admin/settings/cancellation/{propertyId}", SettingsTestJson.Options);
         got!.Model.Should().Be(CancellationModel.RefundableUpgrade);
         got.ResolvedTiers.Should().NotBeNull("the platform tiers are echoed for the guest preview");
 

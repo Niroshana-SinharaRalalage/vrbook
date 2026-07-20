@@ -29,7 +29,7 @@ public sealed class FeedCadenceRoundTripTests(TwoTenantApiFixture fixture)
                 pollIntervalMinutes = 30,
             });
         create.StatusCode.Should().Be(HttpStatusCode.Created);
-        var feed = await create.Content.ReadFromJsonAsync<ChannelFeedDto>();
+        var feed = await create.Content.ReadFromJsonAsync<ChannelFeedDto>(SettingsTestJson.Options);
         return feed!.Id;
     }
 
@@ -42,12 +42,12 @@ public sealed class FeedCadenceRoundTripTests(TwoTenantApiFixture fixture)
         var put = await client.PutAsJsonAsync(
             $"/api/v1/admin/settings/availability/feeds/{feedId}/cadence", new { pollIntervalMinutes = 45 });
         put.StatusCode.Should().Be(HttpStatusCode.OK);
-        var updated = await put.Content.ReadFromJsonAsync<ChannelFeedDto>();
+        var updated = await put.Content.ReadFromJsonAsync<ChannelFeedDto>(SettingsTestJson.Options);
         updated!.PollIntervalMinutes.Should().Be(45);
 
         // GET reflects the write
         var feeds = await client.GetFromJsonAsync<List<ChannelFeedDto>>(
-            "/api/v1/admin/settings/availability/feeds");
+            "/api/v1/admin/settings/availability/feeds", SettingsTestJson.Options);
         feeds!.Should().Contain(f => f.Id == feedId && f.PollIntervalMinutes == 45);
 
         // VRB-211 — the audit row is surfaced by the /changes projection
