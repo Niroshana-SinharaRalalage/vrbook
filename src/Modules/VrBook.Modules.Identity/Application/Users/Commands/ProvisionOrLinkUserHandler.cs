@@ -66,7 +66,7 @@ internal sealed class ProvisionOrLinkUserHandler(
             var user = await db.Users
                 .AsTracking()
                 .FirstAsync(u => u.Id == identity.UserId, cancellationToken);
-            user.RefreshFromLogin(cmd.DisplayName, cmd.EmailVerified);
+            user.RefreshFromLogin(cmd.EmailVerified);
             await uow.SaveChangesAsync(cancellationToken);
             return user.Id;
         }
@@ -85,7 +85,7 @@ internal sealed class ProvisionOrLinkUserHandler(
             await RefuseIfAdminSocialLinkAsync(existingUser, cmd, cancellationToken);
 
             var linkedId = await LinkIdentityToUserAsync(
-                existingUser, cmd.Provider, cmd.ExternalId, cmd.DisplayName, cmd.EmailVerified, now, cancellationToken);
+                existingUser, cmd.Provider, cmd.ExternalId, cmd.EmailVerified, now, cancellationToken);
             return linkedId;
         }
 
@@ -117,7 +117,7 @@ internal sealed class ProvisionOrLinkUserHandler(
             // on the race-recovery path.
             await RefuseIfAdminSocialLinkAsync(raced, cmd, cancellationToken);
             return await LinkIdentityToUserAsync(
-                raced, cmd.Provider, cmd.ExternalId, cmd.DisplayName, cmd.EmailVerified, now, cancellationToken);
+                raced, cmd.Provider, cmd.ExternalId, cmd.EmailVerified, now, cancellationToken);
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex, UserIdentitiesUniqueConstraint))
         {
@@ -193,14 +193,13 @@ internal sealed class ProvisionOrLinkUserHandler(
         User existingUser,
         string provider,
         string externalId,
-        string displayName,
         bool emailVerified,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         var newIdentity = UserIdentity.Create(existingUser.Id, provider, externalId, now);
         await db.UserIdentities.AddAsync(newIdentity, cancellationToken);
-        existingUser.RefreshFromLogin(displayName, emailVerified);
+        existingUser.RefreshFromLogin(emailVerified);
         try
         {
             await uow.SaveChangesAsync(cancellationToken);

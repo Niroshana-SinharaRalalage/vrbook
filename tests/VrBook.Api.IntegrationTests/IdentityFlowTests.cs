@@ -110,16 +110,31 @@ public sealed class IdentityFlowTests(IdentityApiFixture fixture)
     }
 
     [Fact]
-    public async Task GET_admin_users_with_DevAuth_owner_returns_200()
+    public async Task GET_admin_users_with_DevAuth_platform_admin_returns_200()
     {
         await fixture.ResetAsync();
-        var client = fixture.CreateClientWith(authenticated: true);
-        await client.GetAsync("/api/v1/me"); // provision one user
+        var client = fixture.CreateClientWith(authenticated: true, platformAdmin: true);
+        await client.GetAsync("/api/v1/me"); // provision the platform-admin user
 
         var response = await client.GetFromJsonAsync<OffsetPagedResult<UserDto>>("/api/v1/admin/users");
         response.Should().NotBeNull();
         response!.Total.Should().BeGreaterThanOrEqualTo(1);
         response.Items.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task GET_admin_users_with_DevAuth_owner_returns_403()
+    {
+        // The admin surface is PlatformAdmin-only. Post-OPS.M.15/21 reshape a tenant owner is
+        // NOT a platform admin and must be refused — asserts the real authorization boundary,
+        // not just relocating the 200-path. (Owner persona carries no PlatformAdmin role claim.)
+        await fixture.ResetAsync();
+        var client = fixture.CreateClientWith(authenticated: true);
+        await client.GetAsync("/api/v1/me"); // provision the owner user
+
+        var response = await client.GetAsync("/api/v1/admin/users");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
@@ -138,6 +153,10 @@ public sealed class IdentityFlowTests(IdentityApiFixture fixture)
             .ToListAsync();
 
         entries.Should().NotBeEmpty();
-        entries[0].ActorRole.Should().Be("admin");
+        // OPS.M.15/21 role reshape — AuditLogBehavior.ResolveRole emits the actual principal
+        // role (platform_admin | tenant_admin | authenticated), never the legacy "admin". The
+        // Owner persona here carries no platform-admin claim and no seeded tenant_admin
+        // membership in this flow → "authenticated".
+        entries[0].ActorRole.Should().Be("authenticated");
     }
 }

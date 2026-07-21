@@ -27,6 +27,9 @@ public sealed class IdentityApiFixture : WebApplicationFactory<Program>, IAsyncL
     /// <summary>Stable Owner OID reused by tests that assert on it.</summary>
     public const string OwnerOid = "test-owner-aaaa";
 
+    /// <summary>Stable platform-admin OID for the PlatformAdmin persona (Family-2 #3).</summary>
+    public const string PlatformAdminOid = "test-platadmin-bbbb";
+
     private static readonly IReadOnlyDictionary<string, TestPersona> DefaultPersonas =
         new Dictionary<string, TestPersona>
         {
@@ -37,6 +40,15 @@ public sealed class IdentityApiFixture : WebApplicationFactory<Program>, IAsyncL
                 Oid: OwnerOid,
                 Email: "owner@vrbook.test",
                 DisplayName: "Test Owner"),
+            // VRB-103 triage (Family-2 #3) — a distinct persona whose token carries the
+            // PlatformAdmin role claim (→ ICurrentUser.IsPlatformAdmin via HasRole), for the
+            // platform-admin surface tests. Kept separate so the shared Owner persona stays a
+            // tenant owner (MeContractTests / IdentityFlowTests assert Owner.IsPlatformAdmin==false).
+            ["PlatformAdmin"] = new(
+                Oid: PlatformAdminOid,
+                Email: "platform-admin@vrbook.test",
+                DisplayName: "Test Platform Admin",
+                Roles: new[] { "PlatformAdmin" }),
         };
 
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
@@ -116,14 +128,15 @@ public sealed class IdentityApiFixture : WebApplicationFactory<Program>, IAsyncL
     /// pipeline sees no bearer and challenges with 401 for authenticated
     /// routes.</para>
     /// </summary>
-    public HttpClient CreateClientWith(bool authenticated)
+    public HttpClient CreateClientWith(bool authenticated, bool platformAdmin = false)
     {
         var client = CreateClient();
         if (authenticated)
         {
             client.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("Bearer", "test");
-            client.DefaultRequestHeaders.Add(TestAuthHandler.PersonaHeader, "Owner");
+            client.DefaultRequestHeaders.Add(
+                TestAuthHandler.PersonaHeader, platformAdmin ? "PlatformAdmin" : "Owner");
         }
         return client;
     }

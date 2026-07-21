@@ -140,13 +140,12 @@ public sealed class User : AggregateRoot
         Phone = phone;
     }
 
-    public void RefreshFromLogin(string displayName, bool emailVerified)
+    public void RefreshFromLogin(bool emailVerified)
     {
-        if (!string.IsNullOrWhiteSpace(displayName))
-        {
-            DisplayName = displayName.Trim();
-        }
-
+        // VRB-103 triage (Family-2 #1) — DisplayName is user-owned via UpdateProfile
+        // and MUST NOT be re-synced from the IdP token on every login, or a profile
+        // edit is clobbered on the next request. Name is set once at Provision; only
+        // email-verification + last-login are refreshed here.
         if (emailVerified && !EmailVerified)
         {
             EmailVerified = true;
