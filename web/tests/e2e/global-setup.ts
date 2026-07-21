@@ -40,13 +40,57 @@ const ensureAuthDir = (): void => {
   fs.mkdirSync(AUTH_DIR, { recursive: true });
 };
 
+// Hosted-page copy Entra CIAM shows when it REJECTS the credentials (wrong
+// password, account-state block, or user-flow policy stop). Kept text-driven so
+// it survives markup drift; the message is deliberately generic across the
+// "couldn't sign you in" / "account or password is incorrect" variants.
+const CIAM_REJECTION = /(couldn'?t sign you in|can'?t sign you in|account or password is incorrect|didn'?t recognize|doesn'?t exist|isn'?t in our records|that account doesn'?t exist)/i;
+
+/**
+ * Fail fast — with a secret-free, persona-named message — when CIAM rejects the
+ * sign-in, instead of letting the run limp on to an opaque MSAL/tenant-context
+ * timeout 30-45s later (the `:waitForMsalSession` / `:establishOwnerTenantContext`
+ * polls). Races the hosted-page rejection banner against the sign-in ADVANCING
+ * (the password step detaching); throws only if the rejection wins, so it adds no
+ * latency to the happy path. A rejection here is an account/config problem, NOT a
+ * harness selector drift — the message says so to route triage correctly.
+ */
+const assertCiamAccepted = async (page: Page, label: string): Promise<void> => {
+  const rejection = page
+    .getByText(CIAM_REJECTION)
+    .or(page.locator('#idTd_Error, #errorText'))
+    .first();
+  const passwordStep = page.locator('input[type="password"], input[name="passwd"]').first();
+  try {
+    await Promise.race([
+      passwordStep.waitFor({ state: 'detached', timeout: 15_000 }),
+      rejection.waitFor({ state: 'visible', timeout: 15_000 }),
+    ]);
+  } catch {
+    // Neither settled in the window — hand off to the downstream MSAL/tenant polls
+    // rather than risk a false negative here.
+    return;
+  }
+  if (await rejection.isVisible().catch(() => false)) {
+    const detail = (await rejection.textContent().catch(() => null))
+      ?.trim()
+      .replace(/\s+/g, ' ')
+      .slice(0, 200);
+    throw new Error(
+      `CIAM rejected sign-in for ${label}${detail ? `: "${detail}"` : ''}. ` +
+        'The persona password/account state or the admin user-flow policy blocked it — ' +
+        'fix the account/KV password, NOT the harness selectors.',
+    );
+  }
+};
+
 /**
  * Drive the Entra External ID (CIAM) hosted sign-in page. Selectors mirror the
  * AAD/B2C combined-flow markup (`loginfmt` / `passwd` / `idSIButton9`); kept
  * resilient with role/label fallbacks. First live run validates these against
  * the actual staging CIAM user flow (operator walk, OPS.2.8 §7 checklist).
  */
-const completeEntraSignIn = async (page: Page, email: string, password: string): Promise<void> => {
+const completeEntraSignIn = async (page: Page, email: string, password: string, label: string): Promise<void> => {
   // Entra External ID (CIAM) hosted sign-in uses a newer UI than classic
   // AAD/B2C (a labelled "Email address" textbox + "Next", then a password step),
   // so locators are role/placeholder-first for CIAM with the legacy
@@ -74,6 +118,10 @@ const completeEntraSignIn = async (page: Page, email: string, password: string):
     .or(page.locator('#idSIButton9, input[type="submit"], button[type="submit"]'))
     .first()
     .click();
+
+  // Fail fast + loud if CIAM rejected the credentials, before the run wanders off
+  // to an opaque MSAL/tenant-context timeout that hides WHY it failed.
+  await assertCiamAccepted(page, label);
 
   // Optional "Stay signed in?" (KMSI) interstitial. Answer "No" — the captured
   // session is enough for the run and we avoid a long-lived persistent cookie.
@@ -147,7 +195,7 @@ const authenticate = async (page: Page, persona: Persona): Promise<void> => {
   ensureAuthDir();
 
   await page.goto(`/auth/signin?flow=${persona.flow}&returnTo=/`);
-  await completeEntraSignIn(page, persona.email, password);
+  await completeEntraSignIn(page, persona.email, password, persona.key);
 
   // Redirect chain lands back on the app origin (via /auth/callback).
   await page.waitForURL((url) => url.pathname.startsWith('/') && !url.pathname.startsWith('/auth/signin'), {
