@@ -26,6 +26,19 @@ public sealed class PropertyActivationRoundTripTests(TwoTenantApiFixture fixture
 
     private static string Update(Guid id) => $"/api/v1/properties/{id}";
 
+    // TEMP diagnostic — the detail GET 500s only in CI; the fixture runs Development so the
+    // ProblemDetails body carries the exception + stack. Surface it in the assertion message.
+    private static async Task<PropertyDto> GetDetailAsync(HttpClient c, Guid id)
+    {
+        var resp = await c.GetAsync(Detail(id));
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            throw new Xunit.Sdk.XunitException($"GET {Detail(id)} -> {(int)resp.StatusCode}\n{body}");
+        }
+        return (await resp.Content.ReadFromJsonAsync<PropertyDto>(SettingsTestJson.Options))!;
+    }
+
     // Map a fetched PropertyDto back to the UpdatePropertyRequest shape (same Address type
     // round-trips), overriding only title/isActive.
     private static object ToUpdateBody(PropertyDto p, string? title = null, bool? isActive = null) => new
@@ -55,7 +68,7 @@ public sealed class PropertyActivationRoundTripTests(TwoTenantApiFixture fixture
         var client = fixture.CreateClientAs("OwnerA");
         var id = fixture.TenantAPropertyId;
 
-        var p = (await client.GetFromJsonAsync<PropertyDto>(Detail(id), SettingsTestJson.Options))!;
+        var p = await GetDetailAsync(client, id);
         var newTitle = $"Edited {Guid.NewGuid():N}".Substring(0, 20);
 
         try
@@ -84,7 +97,7 @@ public sealed class PropertyActivationRoundTripTests(TwoTenantApiFixture fixture
         var client = fixture.CreateClientAs("OwnerA");
         var id = fixture.TenantAPropertyId;
 
-        var p = (await client.GetFromJsonAsync<PropertyDto>(Detail(id), SettingsTestJson.Options))!;
+        var p = await GetDetailAsync(client, id);
 
         try
         {
@@ -110,7 +123,7 @@ public sealed class PropertyActivationRoundTripTests(TwoTenantApiFixture fixture
     {
         var ownerA = fixture.CreateClientAs("OwnerA");
         var id = fixture.TenantAPropertyId;
-        var p = (await ownerA.GetFromJsonAsync<PropertyDto>(Detail(id), SettingsTestJson.Options))!;
+        var p = await GetDetailAsync(ownerA, id);
 
         var ownerB = fixture.CreateClientAs("OwnerB");
         var resp = await ownerB.PutAsJsonAsync(Update(id), ToUpdateBody(p, title: "hijack"));
