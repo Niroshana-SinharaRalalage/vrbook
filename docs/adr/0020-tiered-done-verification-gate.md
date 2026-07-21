@@ -21,7 +21,7 @@ Step 6 ("authenticated staging verification") is **tiered by risk**, not uniform
 
 **Corollaries:**
 1. **VRB-300 contract/integration suite flips informational → BLOCKING** (`ci.yml`, `cd-staging-api.yml`). This is its own overdue DoD and is what legitimately substitutes for live authed checks on authorization-negative + round-trip correctness (Testcontainers exercises real middleware + RLS). Live staging remains irreplaceable only for **environment wiring** (real Stripe/Entra/KV/migrations) and **real-money/new-auth positive paths** — i.e. Tiers S/A.
-2. **Persona provisioning (OPS.2.8) is deferred** (owner 2026-07-19). Until done, Tier S/A stories keep their authed check pending (persona or a one-off manual money-path check); Tiers B/C/D/E flow normally. Already-DONE real-money stories (VRB-105/104) carry a tracked "authed money-path back-verify deferred to persona" note — not re-opened.
+2. **Persona provisioning (OPS.2.8) is deferred** (owner 2026-07-19). Until done, Tier S/A stories keep their authed check pending (interactive-Playwright-captured persona token or a one-off manual money-path check — **never ROPC**, see Rejected); Tiers B/C/D/E flow normally. Already-DONE real-money stories (VRB-105/104) carry a tracked "authed money-path back-verify deferred to persona" note — not re-opened.
 3. **No false-DONEs where money, auth, or data-integrity live; no DONE frozen on owner availability anywhere else.**
 
 ## Consequences
@@ -34,3 +34,4 @@ Step 6 ("authenticated staging verification") is **tiered by risk**, not uniform
 - **client_credentials / app-only token** — authenticates an app, not a role-bearing admin; can't exercise HasTenantRole/RLS.
 - **Signed test-only token issuer on staging** — reintroduces the DevAuth backdoor retired in OPS.M.14; synthetic principals stay in-process (Testcontainers) only.
 - **Owner-supplied browser token as standing policy** — the bottleneck being removed; kept only as a documented emergency fallback.
+- **ROPC / `acquireTokenByUsernamePassword`** (rejected 2026-07-20, architect consult) — bypasses the CIAM user flow, so its tokens carry neither the `tfp`/`acr` admin-flow marker nor the flow's application-claims `email` mapping, and cannot satisfy the OPS.M.22 admin-preseed gate (ADR-0017). Making it "work" requires forging `tfp` via a claims policy, which fabricates the exact admin-flow signal the gate verifies. The only supported headless admin-token path is the interactive `AdminSignUpSignIn` capture (ADR-0019 §2). See `docs/runbooks/ops-2.8-e2e-personas.md`.
