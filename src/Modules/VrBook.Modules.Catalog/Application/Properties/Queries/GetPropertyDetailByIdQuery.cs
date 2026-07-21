@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using VrBook.Contracts.Dtos;
 using VrBook.Contracts.Interfaces;
 using VrBook.Domain.Common;
@@ -22,6 +23,7 @@ internal sealed class GetPropertyDetailByIdHandler(
     IAmenityRepository amenities,
     IPropertyImageUrlBuilder urls,
     ITenantStripeReadinessLookup tenantReadiness,
+    ILogger<GetPropertyDetailByIdHandler> logger,
     CatalogDbContext db) : IRequestHandler<GetPropertyDetailByIdQuery, PropertyDto>
 {
     public async Task<PropertyDto> Handle(GetPropertyDetailByIdQuery request, CancellationToken cancellationToken)
@@ -41,11 +43,24 @@ internal sealed class GetPropertyDetailByIdHandler(
         var dto = p.ToDto(amenityDtos, urls.ToUrl);
 
         // VRB-212 — project the tenant's Stripe readiness so the settings UI can enable/
-        // explain the publish toggle (the enforcement itself lives in UpdatePropertyHandler).
-        var readiness = await tenantReadiness.GetAsync(p.TenantId, cancellationToken);
-        var block = readiness is null
-            ? new ActivationBlock("property.tenant_not_payment_ready", "Tenant payment readiness is unknown.")
-            : Property.CheckActivation(readiness.Status, readiness.ChargesEnabled, readiness.PayoutsEnabled, p.Images.Count);
+        // explain the publish toggle. This is best-effort UI enrichment: the binding gate is
+        // enforced fail-closed in UpdatePropertyHandler, so a lookup failure here must NOT 500
+        // the core detail read — degrade fail-safe to CanActivate=false ("readiness unknown").
+        ActivationBlock? block;
+        try
+        {
+            var readiness = await tenantReadiness.GetAsync(p.TenantId, cancellationToken);
+            block = readiness is null
+                ? new ActivationBlock("property.tenant_not_payment_ready", "Tenant payment readiness is unknown.")
+                : Property.CheckActivation(readiness.Status, readiness.ChargesEnabled, readiness.PayoutsEnabled, p.Images.Count);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Activation-readiness projection failed for property {PropertyId} (tenant {TenantId}); " +
+                "degrading to CanActivate=false.", p.Id, p.TenantId);
+            block = new ActivationBlock("property.tenant_not_payment_ready", "Tenant payment readiness is unknown.");
+        }
 
         return dto with { CanActivate = block is null, ActivationBlockedReason = block?.Message };
     }
