@@ -29,9 +29,9 @@ public sealed class RlsBypassCallSiteAllowlistTests
     {
         // Identity-side cross-tenant reads
         "VrBook.Modules.Identity.Infrastructure.TenantStripeContextLookup",
-        // VRB-212 — cross-tenant tenant-readiness read for the property-activation gate;
-        // mirrors TenantStripeContextLookup (Catalog calls it for the property's tenant).
-        "VrBook.Modules.Identity.Infrastructure.TenantStripeReadinessLookup",
+        // NB: TenantStripeReadinessLookup (VRB-212) is intentionally NOT here — it reads the
+        // RLS-carved-out identity.tenants via the ambient IdentityDbContext (no bypass scope),
+        // to avoid a second pooled connection on the hot GET-detail / publish-gate path.
         "VrBook.Modules.Identity.Application.Tenants.Queries.ListPlatformTenantsHandler",
         "VrBook.Modules.Identity.Application.Tenants.Queries.GetPlatformTenantHandler",
         // Sync worker bootstrap — injected at top-level Program.cs via

@@ -46,6 +46,12 @@ public sealed class SettingsRoundTripTests(TwoTenantApiFixture fixture)
         var changes = await client.GetFromJsonAsync<List<SettingsChangeDto>>(
             "/api/v1/admin/settings/changes?section=platform");
         changes!.Should().Contain(c => c.Action == "settings.platform.set-tiers");
+
+        // Restore the seed defaults so this shared-collection mutation doesn't bleed into
+        // other tests that read the tiers (order-independence; the version stays monotonic).
+        await client.PutAsJsonAsync(
+            "/api/v1/admin/platform/settings/cancellation-tiers",
+            new { firstTierDays = 7, secondTierDays = 2, middleTierRefundPct = 50, finalCutoffHours = 48, upgradePricePct = 8 });
     }
 
     [Fact]
@@ -57,12 +63,12 @@ public sealed class SettingsRoundTripTests(TwoTenantApiFixture fixture)
         var put = await client.PutAsJsonAsync(
             $"/api/v1/admin/settings/cancellation/{propertyId}", new { model = "RefundableUpgrade" });
         put.StatusCode.Should().Be(HttpStatusCode.OK);
-        var dto = await put.Content.ReadFromJsonAsync<PropertyCancellationSettingsDto>();
+        var dto = await put.Content.ReadFromJsonAsync<PropertyCancellationSettingsDto>(SettingsTestJson.Options);
         dto!.Model.Should().Be(CancellationModel.RefundableUpgrade);
 
         // GET reflects the write
         var got = await client.GetFromJsonAsync<PropertyCancellationSettingsDto>(
-            $"/api/v1/admin/settings/cancellation/{propertyId}");
+            $"/api/v1/admin/settings/cancellation/{propertyId}", SettingsTestJson.Options);
         got!.Model.Should().Be(CancellationModel.RefundableUpgrade);
         got.ResolvedTiers.Should().NotBeNull("the platform tiers are echoed for the guest preview");
 
